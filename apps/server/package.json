@@ -1,0 +1,16 @@
+{
+  "name": "@chromashift/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@colyseus/core": "^0.18.25",
+    "@colyseus/schema": "^5.0.43",
+    "@colyseus/ws-transport": "^0.18.4",
+    "firebase-admin": "^14.5.0"
+  }
+}

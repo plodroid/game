@@ -1,0 +1,40 @@
+{
+  "name": "chromashift",
+  "private": true,
+  "type": "module",
+  "description": "CHROMASHIFT — a 3D team paint arena shooter for the browser.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @chromashift/client",
+    "dev:server": "npm run dev -w @chromashift/server",
+    "build": "npm run build -w @chromashift/client",
+    "preview": "npm run preview -w @chromashift/client",
+    "start:server": "npm run start -w @chromashift/server",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc -p packages/shared && tsc -p apps/client && tsc -p apps/server",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "icons": "node scripts/make-icons.mjs"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.6",
+    "eslint": "^10.14.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.1.0"
+  }
+}
