@@ -1119,9 +1119,11 @@ select {
 
 /* ---------- Results ---------- */
 .results {
-  align-items: center;
-  text-align: center;
-  background: rgba(11, 12, 21, 0.55);
+  align-items: flex-start;
+}
+
+.results__body {
+  width: min(780px, 100%);
 }
 
 .verdict {
@@ -1134,8 +1136,8 @@ select {
 }
 
 .coverage {
-  width: min(720px, 100%);
-  margin: 22px auto 8px;
+  width: 100%;
+  margin: 22px 0 8px;
 }
 
 .coverage__bar {
@@ -1171,9 +1173,9 @@ select {
 }
 
 .table {
-  width: min(820px, 100%);
+  width: 100%;
   border-collapse: collapse;
-  margin: 16px auto;
+  margin: 16px 0;
   font-size: 0.9rem;
   text-align: left;
 }

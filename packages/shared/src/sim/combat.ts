@@ -9,7 +9,7 @@ import {
 } from '../config/specials';
 import { straightTime, WEAPONS, type WeaponDef, type WeaponId } from '../config/weapons';
 import { hash2, mulberry32 } from '../rng';
-import { copy, dirFromAngles, distXZ, forwardXZ, lerp, rightXZ, set, v3, type Vec3 } from '../vec';
+import { copy, dirFromAngles, forwardXZ, lerp, rightXZ, set, v3, type Vec3 } from '../vec';
 import { PAINT_KIND } from './events';
 import type { Launcher } from './movement';
 import { BTN, type Input, type SimPlayer } from './player';

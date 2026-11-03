@@ -132,7 +132,7 @@ export class BotBrain {
     const wantsDodge = p.hp < this.lastHp - 15 && this.rnd() < s.dodge;
     this.lastHp = p.hp;
 
-    this.followPath(sim, p, dt);
+    this.followPath(sim, p);
 
     let wantYaw = this.yaw, wantPitch = 0, fire = false;
     const moving = wish.x !== 0 || wish.z !== 0;
@@ -152,7 +152,10 @@ export class BotBrain {
         wish.x = tx * approach - tz * this.strafe * s.strafe;
         wish.z = tz * approach + tx * this.strafe * s.strafe;
         const l = Math.hypot(wish.x, wish.z);
-        if (l > 0) (wish.x /= l), (wish.z /= l);
+        if (l > 0) {
+          wish.x /= l;
+          wish.z /= l;
+        }
       }
       if (s.strafe > 0.8 && p.grounded && this.rnd() < 0.008) inp.buttons |= BTN.JUMP;
       // Never strafe off a ledge: try the other way, else hold position.
@@ -161,7 +164,10 @@ export class BotBrain {
         wish.x = tx * approach - tz * this.strafe * s.strafe;
         wish.z = tz * approach + tx * this.strafe * s.strafe;
         const l = Math.hypot(wish.x, wish.z);
-        if (l > 0) (wish.x /= l), (wish.z /= l);
+        if (l > 0) {
+          wish.x /= l;
+          wish.z /= l;
+        }
         if (!this.groundAhead(sim, p)) wish.x = wish.z = 0;
       }
     }
@@ -442,7 +448,7 @@ export class BotBrain {
     return Math.hypot(this.goal.x - p.pos.x, this.goal.z - p.pos.z);
   }
 
-  private followPath(sim: Simulation, p: SimPlayer, dt: number) {
+  private followPath(sim: Simulation, p: SimPlayer) {
     wish.x = wish.z = 0;
     this.airEdge = false;
     const nav = sim.nav;

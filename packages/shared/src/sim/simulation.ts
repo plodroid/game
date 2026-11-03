@@ -285,7 +285,11 @@ export class Simulation {
       stepMovement(this.world, p, p.collider, inp, dt, frozen, this.launchers);
       if (p.pos.y < this.map.killY) {
         let last = -1, lastT = this.time - 6;
-        for (const [aid, t] of p.damagedBy) if (t > lastT) (last = aid), (lastT = t);
+        for (const [aid, t] of p.damagedBy)
+          if (t > lastT) {
+            last = aid;
+            lastT = t;
+          }
         this.kill(p, last, 'fall');
       }
     }

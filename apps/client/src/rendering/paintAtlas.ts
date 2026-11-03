@@ -110,6 +110,8 @@ export class PaintAtlas {
       minFilter: mips ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter,
       magFilter: THREE.LinearFilter,
     });
+    // Floors are mostly seen at grazing angles; anisotropy keeps paint edges crisp there.
+    if (mips) this.target.texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
     this.camera = new THREE.OrthographicCamera(0, this.width, this.height, 0, -1, 1);
 
     const plane = new THREE.PlaneGeometry(2, 2);

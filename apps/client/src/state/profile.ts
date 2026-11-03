@@ -131,7 +131,11 @@ export const useProfile = create<ProfileStore>()(
 
 export function favouriteWeapon(s: Stats): WeaponId | null {
   let best: WeaponId | null = null, n = 0;
-  for (const [w, c] of Object.entries(s.weaponGames)) if (c > n) (n = c), (best = w as WeaponId);
+  for (const [w, c] of Object.entries(s.weaponGames))
+    if (c > n) {
+      n = c;
+      best = w as WeaponId;
+    }
   return best;
 }
 

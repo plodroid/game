@@ -4,14 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts"
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
+    "start": "tsx --env-file-if-exists=../../.env src/index.ts"
   },
   "dependencies": {
     "@colyseus/core": "^0.18.25",
     "@colyseus/schema": "^5.0.43",
     "@colyseus/ws-transport": "^0.18.4",
-    "firebase-admin": "^14.5.0"
+    "firebase-admin": "^14.5.0",
+    "tsx": "^4.23.15"
   },
   "devDependencies": {
     "@colyseus/sdk": "^0.18.9"

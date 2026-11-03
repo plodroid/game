@@ -1,0 +1,118 @@
+rules_version = '2';
+
+// CHROMASHIFT Firestore rules.
+// - Passwords never touch Firestore (Firebase Authentication owns them).
+// - Players can only read/write their own private data.
+// - Usernames are unique, case-insensitive and claimed exactly once.
+// - Verified match results (stats/*) are written only by trusted game servers
+//   through the Admin SDK, which bypasses these rules. Clients can never write them.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+    function validUsername(n) {
+      return n is string && n.size() >= 3 && n.size() <= 16
+        && n.matches('^[A-Za-z0-9]([A-Za-z0-9_.-]*[A-Za-z0-9])?$');
+    }
+    function validDisplayName(n) {
+      return n is string && n.size() >= 1 && n.size() <= 24;
+    }
+    function count(n) {
+      return (n is int || n is float) && n >= 0 && n < 100000000;
+    }
+    function validStats(s) {
+      return s is map
+        && s.keys().hasOnly(['games', 'wins', 'losses', 'draws', 'kills', 'deaths', 'assists', 'paint', 'bestPaint', 'weaponGames'])
+        && count(s.games) && count(s.wins) && count(s.losses) && count(s.kills) && count(s.paint)
+        && s.wins + s.losses <= s.games
+        && s.weaponGames is map && s.weaponGames.size() <= 8;
+    }
+    function validCosmetics(c) {
+      return c is map && c.keys().hasOnly(['hair', 'headgear', 'outfit', 'accent', 'skin', 'emote'])
+        && c.hair is string && c.hair.size() <= 16
+        && c.headgear is string && c.headgear.size() <= 16
+        && c.outfit is string && c.outfit.size() <= 16
+        && c.accent is string && c.accent.size() <= 16
+        && c.skin is int && c.skin >= 0 && c.skin < 16
+        && c.emote is string && c.emote.size() <= 16;
+    }
+    function validUser(d) {
+      return d.keys().hasOnly(['username', 'usernameKey', 'displayName', 'createdAt', 'updatedAt', 'xp', 'stats', 'weapon', 'special', 'cosmetics', 'settings'])
+        && validUsername(d.username)
+        && d.usernameKey == d.username.lower()
+        && validDisplayName(d.displayName)
+        && count(d.xp)
+        && validStats(d.stats)
+        && d.weapon is string && d.weapon.size() <= 16
+        && d.special is string && d.special.size() <= 16
+        && validCosmetics(d.cosmetics)
+        && (!('settings' in d) || d.settings is map);
+    }
+
+    // Username registry. Public `get` lets the sign-up form check availability.
+    // The registry stores only the uid and display form of the name — never emails.
+    match /usernames/{key} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && validUsername(request.resource.data.name)
+        && key == request.resource.data.name.lower()
+        // One username per account: only while creating the account's profile.
+        && !exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.usernameKey == key;
+      allow update: if false;
+      allow delete: if isOwner(resource.data.uid);
+    }
+
+    // Private profile, settings and offline progression. Owner only.
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && validUser(request.resource.data)
+        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.usernameKey)).data.uid == uid;
+      allow update: if isOwner(uid)
+        && validUser(request.resource.data)
+        // The username can't be changed by editing the profile.
+        && request.resource.data.username == resource.data.username
+        && request.resource.data.usernameKey == resource.data.usernameKey
+        && request.resource.data.createdAt == resource.data.createdAt
+        // Offline XP is client-reported; cap how fast it can grow per write.
+        && request.resource.data.xp <= resource.data.xp + 50000;
+      allow delete: if false;
+    }
+
+    // Public player card (no email, no private settings).
+    match /profiles/{uid} {
+      allow read: if signedIn();
+      allow create: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['username', 'displayName', 'level', 'cosmetics', 'updatedAt'])
+        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username.lower())).data.uid == uid
+        && validDisplayName(request.resource.data.displayName)
+        && request.resource.data.level is int && request.resource.data.level >= 1 && request.resource.data.level <= 99
+        && validCosmetics(request.resource.data.cosmetics);
+      allow update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['username', 'displayName', 'level', 'cosmetics', 'updatedAt'])
+        && request.resource.data.username == resource.data.username
+        && validDisplayName(request.resource.data.displayName)
+        && request.resource.data.level is int && request.resource.data.level >= 1 && request.resource.data.level <= 99
+        && validCosmetics(request.resource.data.cosmetics);
+      allow delete: if false;
+    }
+
+    // Server-verified online record. Read by the owner; written only via the Admin SDK.
+    match /stats/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

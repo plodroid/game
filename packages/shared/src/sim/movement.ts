@@ -2,7 +2,7 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import { FEET_OFFSET, GRAVITY, PLAYER_RADIUS } from '../constants';
 import { DISRUPT_SLOW, SURGE_SPEED } from '../config/specials';
 import { WEAPONS } from '../config/weapons';
-import { clamp, copy, forwardXZ, normalize, rightXZ, set, UP, v3, type Vec3 } from '../vec';
+import { clamp, copy, forwardXZ, normalize, rightXZ, set, UP, v3 } from '../vec';
 import type { GameWorld } from '../world/world';
 import { BTN, type Input, type PlayerState } from './player';
 

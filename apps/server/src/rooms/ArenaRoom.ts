@@ -203,7 +203,10 @@ export class ArenaRoom extends Room {
 
   private emptierTeam(): Team {
     let a = 0, b = 0;
-    for (const m of this.members.values()) m.team === 0 ? a++ : b++;
+    for (const m of this.members.values()) {
+      if (m.team === 0) a++;
+      else b++;
+    }
     return a <= b ? 0 : 1;
   }
 
