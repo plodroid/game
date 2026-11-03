@@ -59,7 +59,7 @@ export const FLOAT: MapDef = {
       metal: 0x8a93a6,
       trim: 0x5a6276,
       glass: 0x9fd8ff,
-      base: 0x6b7388,
+      base: 0x8f97ab,
       crate: 0xc79f6b,
       island: 0x8cc26f,
       invisible: 0,

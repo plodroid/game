@@ -1,0 +1,545 @@
+/* In-match HUD. Kept to the screen edges so the arena stays clear. */
+.hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  font-family: var(--font-ui);
+  color: var(--text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.hud__scale {
+  position: absolute;
+  inset: 0;
+  transform: scale(var(--hud-scale));
+  transform-origin: center;
+}
+
+.hud-top {
+  position: absolute;
+  top: calc(14px + var(--safe-t));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.score {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-weight: 750;
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+  min-width: 92px;
+}
+
+.score--b {
+  justify-content: flex-end;
+}
+
+.shape {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.timer {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 2rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  min-width: 96px;
+  text-align: center;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: rgba(10, 11, 20, 0.55);
+}
+
+.timer--hot {
+  color: #ffd2d4;
+}
+
+.meter {
+  position: absolute;
+  top: calc(64px + var(--safe-t));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(360px, 60vw);
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  display: flex;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.meter__a {
+  background: var(--team-a);
+  height: 100%;
+}
+
+.meter__b {
+  background: var(--team-b);
+  height: 100%;
+  margin-left: auto;
+}
+
+.zones {
+  position: absolute;
+  top: calc(78px + var(--safe-t));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+}
+
+.zone-pip {
+  width: 26px;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.feed {
+  position: absolute;
+  top: calc(16px + var(--safe-t));
+  left: calc(16px + var(--safe-l));
+  display: grid;
+  gap: 4px;
+  font-size: 0.82rem;
+  max-width: 34vw;
+}
+
+.feed__row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(10, 11, 20, 0.55);
+  animation: fade 200ms ease both;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.feed__cause {
+  color: var(--faint);
+  font-size: 0.74rem;
+}
+
+.status {
+  position: absolute;
+  top: calc(16px + var(--safe-t));
+  right: calc(16px + var(--safe-r));
+  display: flex;
+  gap: 12px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  align-items: center;
+}
+
+.crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+}
+
+.crosshair__dot {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  left: -2px;
+  top: -2px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
+.crosshair__ring {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  left: -13px;
+  top: -13px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.crosshair__cross {
+  position: absolute;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.hitmark {
+  position: absolute;
+  left: -14px;
+  top: -14px;
+  width: 28px;
+  height: 28px;
+  opacity: 0;
+}
+
+.hitmark.is-on {
+  animation: hitflash 220ms ease-out;
+}
+
+.hitmark.is-ko {
+  animation: koflash 420ms ease-out;
+}
+
+@keyframes hitflash {
+  0% {
+    opacity: 1;
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes koflash {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+.gauge {
+  position: absolute;
+  top: -42px;
+  width: 84px;
+  height: 84px;
+  transition: opacity 200ms ease;
+}
+
+.gauge--ink {
+  left: -42px;
+}
+
+.gauge circle {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.lowink {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 54px);
+  transform: translateX(-50%);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(10, 11, 20, 0.65);
+}
+
+.hurt {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+}
+
+.hurt__arc {
+  position: absolute;
+  left: -110px;
+  top: -110px;
+  width: 220px;
+  height: 220px;
+  animation: hurtfade 900ms ease-out forwards;
+}
+
+@keyframes hurtfade {
+  to {
+    opacity: 0;
+  }
+}
+
+.loadout {
+  position: absolute;
+  left: calc(20px + var(--safe-l));
+  bottom: calc(20px + var(--safe-b));
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.special {
+  position: relative;
+  width: 62px;
+  height: 62px;
+}
+
+.special svg {
+  position: absolute;
+  inset: 0;
+}
+
+.special__key {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1rem;
+}
+
+.special.is-ready {
+  animation: ready 1.2s ease-in-out infinite;
+}
+
+@keyframes ready {
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+.loadout__name {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.loadout__sub {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.hpbar {
+  width: 130px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.16);
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.hpbar__fill {
+  height: 100%;
+  background: #fff;
+  transform-origin: left;
+  transition: transform 120ms linear;
+}
+
+.center-text {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.countdown {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(4rem, 16vh, 9rem);
+  line-height: 1;
+  animation: count 900ms var(--ease-out) both;
+}
+
+@keyframes count {
+  from {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+  70% {
+    opacity: 1;
+  }
+}
+
+.notice {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(1.6rem, 5vh, 2.8rem);
+  letter-spacing: -0.01em;
+  animation: enter 240ms var(--ease-out) both;
+}
+
+.notice--good {
+  color: #fff;
+}
+
+.notice--bad {
+  color: #ffd2d4;
+}
+
+.respawn {
+  font-size: 1rem;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.caption {
+  position: absolute;
+  left: 50%;
+  bottom: calc(96px + var(--safe-b));
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.72);
+  font-size: 0.95rem;
+}
+
+.cue {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+}
+
+.cue__mark {
+  position: absolute;
+  left: -6px;
+  top: calc(-1 * min(38vh, 300px));
+  width: 12px;
+  height: 22px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.85);
+  animation: hurtfade 1.2s ease-out forwards;
+}
+
+.board {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(760px, calc(100vw - 32px));
+  background: rgba(14, 15, 28, 0.94);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.board .table {
+  margin: 0;
+  width: 100%;
+}
+
+.prompt {
+  position: absolute;
+  left: 50%;
+  top: 62%;
+  transform: translateX(-50%);
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: rgba(10, 11, 20, 0.8);
+  font-weight: 600;
+  font-size: 0.9rem;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.pause {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 9, 16, 0.7);
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+  z-index: 30;
+}
+
+.pause__card {
+  width: min(380px, calc(100vw - 32px));
+  display: grid;
+  gap: 10px;
+}
+
+.pause__title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 2rem;
+  margin: 0 0 8px;
+}
+
+/* Touch controls */
+.touch {
+  position: fixed;
+  inset: 0;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.stick {
+  position: absolute;
+  left: calc(28px + var(--safe-l));
+  bottom: calc(28px + var(--safe-b));
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.stick__knob {
+  position: absolute;
+  left: 41px;
+  top: 41px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.tbtn {
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.25);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: #fff;
+}
+
+.tbtn.is-down {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.tbtn--fire {
+  width: 84px;
+  height: 84px;
+  right: calc(36px + var(--safe-r));
+  bottom: calc(44px + var(--safe-b));
+}
+
+.tbtn--jump { right: calc(136px + var(--safe-r)); bottom: calc(26px + var(--safe-b)); }
+.tbtn--dive { right: calc(132px + var(--safe-r)); bottom: calc(106px + var(--safe-b)); }
+.tbtn--special { right: calc(52px + var(--safe-r)); bottom: calc(148px + var(--safe-b)); }
+.tbtn--dodge { right: calc(210px + var(--safe-r)); bottom: calc(52px + var(--safe-b)); }
+.tbtn--menu { right: calc(16px + var(--safe-r)); top: calc(60px + var(--safe-t)); width: 44px; height: 44px; }
+
+@media (max-width: 760px) {
+  .feed {
+    display: none;
+  }
+  .timer {
+    font-size: 1.5rem;
+    min-width: 76px;
+  }
+  .score {
+    min-width: 64px;
+    font-size: 0.95rem;
+  }
+}

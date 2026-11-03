@@ -6,6 +6,8 @@ import { blockAxes, dot, v3, type Vec3 } from '../vec';
 export interface Surface {
   id: number;
   block: number;
+  /** Index into blockFaces() of its block. */
+  face: number;
   origin: Vec3;
   u: Vec3;
   v: Vec3;
@@ -31,14 +33,43 @@ export interface Surface {
 export const ATLAS_COLS = 256;
 const HASH_CELL = 4;
 
-// [normal axis, sign, u axis, u sign, v axis, v sign]; bottoms (-Y) are never painted.
+// [normal axis, sign, u axis, u sign, v axis, v sign]. The last (-Y) face is render-only, never painted.
 const FACE_DEFS = [
   [1, 1, 0, 1, 2, -1],
   [0, 1, 2, -1, 1, 1],
   [0, -1, 2, 1, 1, 1],
   [2, 1, 0, 1, 1, 1],
   [2, -1, 0, -1, 1, 1],
+  [1, -1, 0, 1, 2, 1],
 ] as const;
+export const PAINTABLE_FACES = 5;
+
+export interface FaceFrame {
+  origin: Vec3;
+  u: Vec3;
+  v: Vec3;
+  n: Vec3;
+  uLen: number;
+  vLen: number;
+}
+
+/** The six faces of a block as rectangles: P(u, v) = origin + u·U + v·V, with U × V = N. */
+export function blockFaces(b: Block): FaceFrame[] {
+  const A = blockAxes(b.yaw, b.pitch);
+  return FACE_DEFS.map(([a, s, ua, us, va, vs]) => {
+    const nA = A[a], uA = A[ua], vA = A[va];
+    const n = v3(nA.x * s, nA.y * s, nA.z * s);
+    const u = v3(uA.x * us, uA.y * us, uA.z * us);
+    const v = v3(vA.x * vs, vA.y * vs, vA.z * vs);
+    const ha = halfOf(b, a), hu = halfOf(b, ua), hv = halfOf(b, va);
+    const origin = v3(
+      b.c.x + n.x * ha - u.x * hu - v.x * hv,
+      b.c.y + n.y * ha - u.y * hu - v.y * hv,
+      b.c.z + n.z * ha - u.z * hu - v.z * hv,
+    );
+    return { origin, u, v, n, uLen: hu * 2, vLen: hv * 2 };
+  });
+}
 
 const halfOf = (b: Block, i: number) => (i === 0 ? b.h.x : i === 1 ? b.h.y : b.h.z);
 
@@ -89,19 +120,9 @@ export class PaintGrid {
     const blockedList: number[] = [];
     map.blocks.forEach((b, bi) => {
       if (!b.paint || !b.visible) return;
-      const A = axesOf[bi];
-      for (const [a, s, ua, us, va, vs] of FACE_DEFS) {
-        const nA = A[a], uA = A[ua], vA = A[va];
-        const n = v3(nA.x * s, nA.y * s, nA.z * s);
-        const u = v3(uA.x * us, uA.y * us, uA.z * us);
-        const v = v3(vA.x * vs, vA.y * vs, vA.z * vs);
-        const ha = halfOf(b, a), hu = halfOf(b, ua), hv = halfOf(b, va);
-        const origin = v3(
-          b.c.x + n.x * ha - u.x * hu - v.x * hv,
-          b.c.y + n.y * ha - u.y * hu - v.y * hv,
-          b.c.z + n.z * ha - u.z * hu - v.z * hv,
-        );
-        const uLen = hu * 2, vLen = hv * 2;
+      const faces = blockFaces(b);
+      for (let fi = 0; fi < PAINTABLE_FACES; fi++) {
+        const { origin, u, v, n, uLen, vLen } = faces[fi];
         const cols = Math.max(1, Math.round(uLen / PAINT_CELL));
         const rows = Math.max(1, Math.round(vLen / PAINT_CELL));
         if (cols + 2 > ATLAS_COLS) throw new Error(`Surface too wide for paint atlas on map ${map.id}`);
@@ -129,7 +150,7 @@ export class PaintGrid {
         const max = v3(Math.max(...corners.map((c) => c.x)), Math.max(...corners.map((c) => c.y)), Math.max(...corners.map((c) => c.z)));
         const id = this.surfaces.length;
         this.surfaces.push({
-          id, block: bi, origin, u, v, n, uLen, vLen, cols, rows, cu, cv,
+          id, block: bi, face: fi, origin, u, v, n, uLen, vLen, cols, rows, cu, cv,
           cellArea: cu * cv, offset, scoring: n.y > 0.6, ax: 0, ay: 0, min, max,
         });
         for (const k of blocked) blockedList.push(offset + k);

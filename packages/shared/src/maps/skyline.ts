@@ -69,7 +69,7 @@ export const SKYLINE: MapDef = {
       metal: 0x7d8799,
       trim: 0x3d4459,
       glass: 0x9fd8ff,
-      base: 0x585f75,
+      base: 0x8a90a6,
       crate: 0xc9a77a,
       island: 0x7fb069,
       invisible: 0,

@@ -57,6 +57,8 @@ export interface LobbyState {
   quick: boolean;
   settings: LobbySettings;
   players: LobbyPlayer[];
+  /** Quick Play: seconds until the match auto-starts. */
+  startsIn?: number;
 }
 
 export interface JoinOptions {
@@ -98,6 +100,8 @@ export interface Snapshot {
   p: number[][];
   e: number[][];
   fx: number[][];
+  /** Scoreboard rows [id, kills, deaths, assists, paint], sent about once a second. */
+  st?: number[][];
 }
 
 export const PHASES: Phase[] = ['intro', 'playing', 'ending', 'ended'];

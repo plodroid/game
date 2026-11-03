@@ -5,7 +5,7 @@ import type { MapDef } from './types';
 const m = new MapBuilder()
   .box(0, 0, 40, 60, -1, 0, { mat: 'floor', mirror: false })
   .box(0, 0, 6, 6, 0, 4, { mat: 'metal', mirror: false })
-  .box(0, 0, 40.5, 60.5, 11, 11.6, { mat: 'trim', paint: false, mirror: false })
+  .box(0, 0, 40.5, 60.5, 11, 11.4, { mat: 'glass', mirror: false })
   // Outer walls (paintable — climb them in paint form)
   .box(-20.25, 0, 0.5, 60, 0, 11, { mat: 'wall' })
   .box(0, -30.25, 41, 0.5, 0, 11, { mat: 'wall' })
@@ -51,20 +51,20 @@ export const CORE: MapDef = {
     skyHorizon: 0x1b2347,
     skyBottom: 0x070812,
     fog: 0x161b33,
-    sunColor: 0xdfe6ff,
-    sunIntensity: 1.7,
+    sunColor: 0xe8eeff,
+    sunIntensity: 2.3,
     sunDir: [0.3, 0.9, 0.25],
-    ambient: 0x6a76b8,
-    ground: 0x1c2038,
+    ambient: 0x9aa6e0,
+    ground: 0x3a4166,
     indoor: true,
     materials: {
-      floor: 0xc4c9d6,
-      wall: 0x9aa3b8,
-      metal: 0x6c7690,
-      trim: 0x2b3148,
-      glass: 0x9fd8ff,
-      base: 0x464e6a,
-      crate: 0xb7c1d9,
+      floor: 0xd3d8e4,
+      wall: 0xb4bccf,
+      metal: 0x8590aa,
+      trim: 0x3b4260,
+      glass: 0xbfe6ff,
+      base: 0x6a7392,
+      crate: 0xc4cde3,
       island: 0x7fb069,
       invisible: 0,
     },
