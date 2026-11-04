@@ -10,6 +10,7 @@ import {
   muzzle,
   packInput,
   PHASES,
+  separatePair,
   straightTime,
   stepMovement,
   TICK_RATE,
@@ -275,6 +276,8 @@ export class OnlineSource implements MatchSource {
         this.predictFire(i, frozen);
         L.firing = !!(i.buttons & BTN.FIRE) && !frozen;
         stepMovement(this.world, L, this.collider, i, DT, frozen, this.launchers);
+        // The host keeps bodies apart too; doing it here as well keeps bumping into people smooth.
+        for (const r of this.remotes.values()) separatePair(this.world, L, this.collider, r.view.state, null);
       }
       this.stepCosmetics(DT);
       this.acc -= DT;

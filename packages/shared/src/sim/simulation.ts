@@ -10,7 +10,7 @@ import { GameWorld, initPhysics } from '../world/world';
 import { collectLaunchers, stepProjectiles, updateCombat, updateEffects, type Effect, type Projectile } from './combat';
 import { PAINT_KIND, type SimEvent } from './events';
 import { initialModeState, RULES, type ModeRules, type ModeState } from './modes';
-import { stepMovement, type Launcher } from './movement';
+import { separatePair, stepMovement, type Launcher } from './movement';
 import { createPlayerState, emptyInput, type Input, type PlayerInfo, type SimPlayer } from './player';
 
 export interface MatchConfig {
@@ -293,6 +293,8 @@ export class Simulation {
         this.kill(p, last, 'fall');
       }
     }
+    const ps = this.players;
+    for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) separatePair(this.world, ps[i], ps[i].collider, ps[j], ps[j].collider);
     if (!frozen) {
       stepProjectiles(this, dt);
       updateEffects(this, dt);

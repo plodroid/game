@@ -1,5 +1,5 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
-import { FEET_OFFSET, GRAVITY, PLAYER_RADIUS } from '../constants';
+import { FEET_OFFSET, GRAVITY, PLAYER_HALF_HEIGHT, PLAYER_RADIUS } from '../constants';
 import { DISRUPT_SLOW, SURGE_SPEED } from '../config/specials';
 import { WEAPONS } from '../config/weapons';
 import { clamp, copy, forwardXZ, normalize, rightXZ, set, UP, v3 } from '../vec';
@@ -48,6 +48,43 @@ export interface Launcher {
 }
 
 const feet = v3(), fwd = v3(), right = v3(), wish = v3(), wallN = v3(), delta = v3(), moved = v3();
+const push = v3(), pushed = v3();
+
+/** Closest two players' centres get: a little under two radii, so brushing past still works. */
+export const PLAYER_GAP = PLAYER_RADIUS * 1.8;
+
+function nudge(w: GameWorld, p: PlayerState, col: RAPIER.Collider, x: number, z: number) {
+  set(push, x, 0, z);
+  w.moveCapsule(col, p.pos, push, pushed);
+  p.pos.x += pushed.x;
+  p.pos.z += pushed.z;
+}
+
+/**
+ * Bodies don't stand inside each other. Overlapping players are eased apart through the same
+ * collision as movement, so never into walls. Whoever moves more takes more of the correction,
+ * so someone standing still isn't shoved off a ledge. With `colB` null only `a` moves (client
+ * prediction against other players' interpolated positions).
+ */
+export function separatePair(w: GameWorld, a: PlayerState, colA: RAPIER.Collider, b: PlayerState, colB: RAPIER.Collider | null) {
+  if (!a.alive || !b.alive || a.climbing || b.climbing) return;
+  if (Math.abs(a.pos.y - b.pos.y) > PLAYER_HALF_HEIGHT * 2) return;
+  let dx = a.pos.x - b.pos.x, dz = a.pos.z - b.pos.z;
+  let d = Math.hypot(dx, dz);
+  if (d >= PLAYER_GAP) return;
+  if (d < 1e-4) {
+    // Exactly on top of each other: split along a fixed axis so every peer agrees.
+    dx = a.id < b.id ? 1 : -1;
+    dz = 0;
+    d = 1;
+  }
+  const overlap = PLAYER_GAP - Math.min(d, PLAYER_GAP);
+  const va = Math.hypot(a.vel.x, a.vel.z), vb = Math.hypot(b.vel.x, b.vel.z);
+  const shareA = colB ? clamp(va / (va + vb + 1e-3), 0.2, 0.8) : 1;
+  const nx = dx / d, nz = dz / d;
+  nudge(w, a, colA, nx * overlap * shareA, nz * overlap * shareA);
+  if (colB) nudge(w, b, colB, -nx * overlap * (1 - shareA), -nz * overlap * (1 - shareA));
+}
 
 export function stepMovement(
   w: GameWorld,
