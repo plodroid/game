@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { DEFAULT_PORT, normalizeRoomCode, ROOM_CODE_LENGTH } from '@chromashift/shared';
+import { DEFAULT_PORT, MAPS, MAX_PLAYERS, MODES, normalizeRoomCode, ROOM_CODE_LENGTH, type MapId, type ModeId } from '@chromashift/shared';
+import { useAccount } from '../../auth/account';
+import { firebaseConfigured } from '../../env';
+import { setPublic, usePublicGames } from '../../multiplayer/listing';
 import {
   createRoom,
   forgetRecent,
   hostFromMenu,
+  hostGame,
   joinByCode,
   joinGame,
   mixedContentBlocked,
@@ -141,10 +145,12 @@ export default function Online() {
           </p>
         )}
 
+        {firebaseConfigured && <PublicGames busy={busy || !online} run={run} />}
+
         {net.recent.length > 0 && (
           <section className="panel">
             <h2 className="panel__title">Recent games</h2>
-            <div>
+            <div className="list">
               {net.recent.map((g) => (
                 <Recent
                   key={`${g.code}${g.server ?? ''}`}
@@ -172,6 +178,68 @@ export default function Online() {
         </section>
       </div>
     </main>
+  );
+}
+
+/** Games their hosts chose to list. Anyone can browse; signed-in players can list their own. */
+function PublicGames({ busy, run }: { busy: boolean; run: (fn: () => Promise<unknown>) => Promise<void> }) {
+  const { games, error } = usePublicGames(true);
+  const signedIn = useAccount((a) => a.status === 'signedIn');
+  const go = useUi((s) => s.go);
+  return (
+    <section className="panel" aria-labelledby="public-games">
+      <h2 className="panel__title" id="public-games">
+        Public games
+      </h2>
+      {error ? (
+        <p className="muted small" style={{ margin: 0 }}>
+          {error}
+        </p>
+      ) : games === null ? (
+        <p className="muted small" style={{ margin: 0 }}>
+          Looking for open games…
+        </p>
+      ) : games.length === 0 ? (
+        <p className="muted small" style={{ margin: 0 }}>
+          No open games right now. Host one and it shows up here for everyone.
+        </p>
+      ) : (
+        <div className="list">
+          {games.map((g) => (
+            <div key={g.uid} className="slot">
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="slot__name">{g.name}’s game</div>
+                <div className="slot__meta num">
+                  {MODES[g.mode as ModeId]?.name ?? g.mode} · {MAPS[g.map as MapId]?.name ?? g.map} · {g.players}/{MAX_PLAYERS} players ·{' '}
+                  {g.phase === 'lobby' ? 'in the lobby' : 'match on, join mid-game'}
+                </div>
+              </div>
+              <Button disabled={busy} onClick={() => void run(() => joinGame(g.code))}>
+                Join
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="row" style={{ marginTop: 14 }}>
+        {signedIn ? (
+          <Button
+            variant="primary"
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                await hostGame();
+                await setPublic(true);
+              })
+            }
+          >
+            Host a public game
+          </Button>
+        ) : (
+          <Button onClick={() => go('auth')}>Sign in to host a public game</Button>
+        )}
+      </div>
+    </section>
   );
 }
 

@@ -113,6 +113,8 @@ Every keyboard and mouse binding can be changed in Settings → Controls. Touch 
 
 **Join:** Online → enter the code, or open the host's invite link. Games you've joined are listed under Recent games.
 
+**Public games:** signed-in hosts can switch on **Public game** in their lobby, and the game appears under Online → Public games for anyone to join, guests included.
+
 That's all: nothing to install, no accounts needed, no router settings. Browsers connect directly over WebRTC after a free public broker introduces them. On very strict networks (some schools, offices and mobile data) a direct link can fail. A phone hotspot or another host usually works, and an optional TURN relay can be configured for those players.
 
 **Dedicated server (optional):** for an always-on server, verified online stats or LAN play without internet, run the Node.js server (`npm run start:server`) and use Online → Dedicated servers.

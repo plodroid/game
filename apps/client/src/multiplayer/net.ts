@@ -103,7 +103,13 @@ export const netHooks: {
   onMatch: ((room: NetRoom, start: MatchStart) => void) | null;
   onLeftMatch: (() => void) | null;
   idToken: (() => Promise<string | undefined>) | null;
-} = { onMatch: null, onLeftMatch: null, idToken: null };
+  /** Every lobby change of the game this tab hosts (null once it closes); used by public listing. */
+  hostLobby: ((state: LobbyState | null) => void) | null;
+} = { onMatch: null, onLeftMatch: null, idToken: null, hostLobby: null };
+
+let hostLobbyState: LobbyState | null = null;
+/** The latest lobby of the game this tab hosts, or null. */
+export const currentHostLobby = () => hostLobbyState;
 
 /** An invite link (?join=CODE, optionally &server=…) waiting for the Online screen. */
 let invite: { code: string; server?: string } | null = null;
@@ -267,7 +273,15 @@ export const quickPlay = (endpoint: string) =>
 
 /** Hosts a game in this tab. Friends join with the code; nothing to install or configure. */
 export const hostGame = (settings?: Partial<LobbySettings>) =>
-  enter('host', async () => (await import('./p2p')).host(peerHello(), settings), p2pExplain);
+  enter(
+    'host',
+    async () =>
+      (await import('./p2p')).host(peerHello(), settings, (state) => {
+        hostLobbyState = state;
+        netHooks.hostLobby?.(state);
+      }),
+    p2pExplain,
+  );
 
 /** Hosting from a menu: shows progress, then the lobby, or the Online screen with the reason it failed. */
 export async function hostFromMenu() {

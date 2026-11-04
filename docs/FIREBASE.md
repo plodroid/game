@@ -42,6 +42,7 @@ What the rules enforce:
 | `users/{uid}` (private: settings, offline progress, loadout) | owner | owner, with validated fields; username and created date immutable; XP growth capped per write |
 | `profiles/{uid}` (public card: username, display name, level, look) | signed-in players | owner, validated |
 | `stats/{uid}` (verified online record) | owner | nobody from a client. Only the game server through the Admin SDK |
+| `rooms/{uid}` (public game listing: code, host's display name, map, mode, player count, phase) | anyone | the signed-in host, one listing per account, every field validated, timestamp set by the server |
 
 Passwords never reach Firestore; Firebase Authentication stores them. Emails are not copied into any document.
 
@@ -56,7 +57,11 @@ The game server can verify signed-in players and record **verified** online resu
 
 ## Quotas and failures
 
-The Spark plan has daily limits (reads, writes, storage). CHROMASHIFT is frugal: one read at sign-in, debounced writes after changes, and the Firestore offline cache. If the service is unreachable or a quota is exhausted:
+The Spark plan has daily limits (reads, writes, storage). CHROMASHIFT is frugal: one read at sign-in, debounced writes after changes, and the Firestore offline cache.
+
+Public games are the busiest part. A listed game writes about once a minute (more while players come and go), so the free 20,000 writes a day cover roughly 150 hours of listed games a day. Browsers only watch the list while the Online screen is open, and each watcher reads a listing again when it changes. If the quota runs out, the list stops updating until the next day; codes and invite links keep working, because they don't use Firestore.
+
+If the service is unreachable or a quota is exhausted:
 
 - the game keeps working: offline play, settings and progress are saved locally;
 - the Profile screen shows "saved on this device, will sync when possible";

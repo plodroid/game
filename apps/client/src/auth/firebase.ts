@@ -17,14 +17,22 @@ import {
   type User,
 } from 'firebase/auth';
 import {
+  collection,
+  deleteDoc,
   doc,
   getDoc,
   initializeFirestore,
+  limit,
+  onSnapshot,
+  orderBy,
   persistentLocalCache,
   persistentMultipleTabManager,
+  query,
   runTransaction,
   serverTimestamp,
   setDoc,
+  Timestamp,
+  where,
   type Firestore,
 } from 'firebase/firestore';
 import { levelInfo, sanitizeCosmetics, usernameKey, validateDisplayName, validateUsername, type Cosmetics } from '@chromashift/shared';
@@ -270,3 +278,47 @@ useSettings.subscribe((s) => {
   if (user && useProfile.getState().uid) scheduleSync(6000);
 });
 addEventListener('online', () => scheduleSync(1000));
+
+/* ---------- Public games ---------- */
+
+/** A browser-hosted game its host chose to list. The document id is the host's account id. */
+export interface PublicGame {
+  uid: string;
+  code: string;
+  name: string;
+  map: string;
+  mode: string;
+  players: number;
+  phase: string;
+  protocol: number;
+  /** Server time of the last refresh, in ms; listings that stop refreshing are ignored. */
+  updatedAt: number;
+}
+
+/** Lists (or refreshes) the signed-in host's game. One listing per account. */
+export async function publishGame(g: Omit<PublicGame, 'uid' | 'updatedAt'>) {
+  if (!user) throw Object.assign(new Error('signed-out'), { code: 'signed-out' });
+  await setDoc(doc(db, 'rooms', user.uid), { ...g, updatedAt: serverTimestamp() });
+}
+
+export async function unpublishGame() {
+  if (user) await deleteDoc(doc(db, 'rooms', user.uid));
+}
+
+export const myUid = () => user?.uid ?? null;
+
+/** Live list of games refreshed within `freshMs`, newest first. Returns the unsubscribe. */
+export function watchGames(freshMs: number, onGames: (games: PublicGame[]) => void, onError: (e: unknown) => void) {
+  const q = query(collection(db, 'rooms'), where('updatedAt', '>', Timestamp.fromMillis(Date.now() - freshMs)), orderBy('updatedAt', 'desc'), limit(40));
+  return onSnapshot(
+    q,
+    (snap) =>
+      onGames(
+        snap.docs.map((d) => {
+          const x = d.data();
+          return { ...(x as Omit<PublicGame, 'uid' | 'updatedAt'>), uid: d.id, updatedAt: tsToMs(x.updatedAt) ?? Date.now() };
+        }),
+      ),
+    onError,
+  );
+}

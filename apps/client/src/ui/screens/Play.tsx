@@ -25,7 +25,7 @@ export function Play() {
     { title: 'Host a game', desc: 'Friends join with your code. Runs in your browser, nothing to install.', run: () => void hostFromMenu() },
     {
       title: 'Join a game',
-      desc: 'Enter a friend’s code, or rejoin a recent game.',
+      desc: 'Enter a friend’s code, or pick an open public game.',
       run: () => {
         onlineIntent.mode = 'join';
         go('online');

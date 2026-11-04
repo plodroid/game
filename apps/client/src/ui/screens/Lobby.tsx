@@ -15,6 +15,9 @@ import {
   type LobbySettings,
   type ModeId,
 } from '@chromashift/shared';
+import { useAccount } from '../../auth/account';
+import { firebaseConfigured } from '../../env';
+import { setPublic, useListing } from '../../multiplayer/listing';
 import { HOST_CODE_KEY, leaveRoom, send, useNet } from '../../multiplayer/net';
 import { teamNames } from '../../rendering/palette';
 import { useProfile } from '../../state/profile';
@@ -23,6 +26,34 @@ import { Avatar } from '../Avatar';
 import { Icon, TeamShape } from '../icons';
 import { Button, Header, Segmented, Setting, Toggle, useCopy } from '../kit';
 import { DIFF_LABEL } from './Play';
+
+/** The host lists their game under Online → Public games, so strangers can find and join it. */
+function PublicSwitch() {
+  const listing = useListing();
+  const signedIn = useAccount((a) => a.status === 'signedIn');
+  const go = useUi((s) => s.go);
+  return (
+    <section className="panel">
+      <Setting
+        name="Public game"
+        hint={
+          listing.live
+            ? 'Listed under Online → Public games. Anyone can find and join it.'
+            : signedIn
+              ? 'List it under Online → Public games so anyone can find and join it.'
+              : 'Sign in to list your game where anyone can find it. Your game keeps running meanwhile.'
+        }
+      >
+        {signedIn ? <Toggle label="Public game" checked={listing.wanted} onChange={(on) => void setPublic(on)} /> : <Button onClick={() => go('auth')}>Sign in</Button>}
+      </Setting>
+      {listing.error && (
+        <p className="field__error" role="alert" style={{ margin: '6px 0 0' }}>
+          {listing.error}
+        </p>
+      )}
+    </section>
+  );
+}
 
 function savedHostCode() {
   try {
@@ -147,6 +178,7 @@ export default function Lobby() {
             <Button onClick={() => copyLink(invite)}>{copiedLink ? <Icon.check /> : <Icon.copy />} Copy invite link</Button>
           </div>
         </section>
+        {kind === 'host' && firebaseConfigured && <PublicSwitch />}
 
         <div className="teams">
           {[0, 1].map((t) => {

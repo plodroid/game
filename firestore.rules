@@ -111,6 +111,26 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Public games: a browser-hosted game its host chose to list. Anyone may browse them;
+    // a signed-in player may list one game at a time, under their own id, and remove it.
+    // Holds only what the game list shows: no email, no account data.
+    function validRoom(d) {
+      return d.keys().hasOnly(['code', 'name', 'map', 'mode', 'players', 'phase', 'protocol', 'updatedAt'])
+        && d.code is string && d.code.matches('^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{5}$')
+        && validDisplayName(d.name)
+        && d.map in ['skyline', 'core', 'float']
+        && d.mode in ['turf', 'zones', 'knockout']
+        && d.players is int && d.players >= 1 && d.players <= 8
+        && d.phase in ['lobby', 'match', 'results']
+        && d.protocol is int && d.protocol >= 1 && d.protocol <= 1000
+        && d.updatedAt == request.time;
+    }
+    match /rooms/{uid} {
+      allow read: if true;
+      allow create, update: if isOwner(uid) && validRoom(request.resource.data);
+      allow delete: if isOwner(uid);
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

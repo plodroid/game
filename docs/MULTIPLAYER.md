@@ -17,6 +17,15 @@ There are two ways to play together. Most people only need the first.
 
 The host's code stays the same every time they host from the same browser, so friends can keep using it like a server address. Games you've joined appear under **Online → Recent games**.
 
+### Public games
+
+To play with strangers, a signed-in host switches on **Public game** in their lobby (or uses **Online → Host a public game**). The game then appears under **Online → Public games** for everyone, guests included, with the host's display name, map, mode, player count and whether a match is running. One click joins it; a match in progress can be joined too, taking a bot's place.
+
+- Listings live in Firestore (`rooms/{uid}`, one per account) and refresh about once a minute. A listing that stops refreshing (closed tab, lost connection) drops out of everyone's list within about 2½ minutes. Switching **Public game** off or closing the game removes it at once.
+- Only signed-in players can list games. That keeps spam down; anyone can browse and join.
+- A listing shows the host's display name and game code; it never holds an email or account data. The listing's document id is the host's account id.
+- The list needs accounts to be configured ([docs/FIREBASE.md](FIREBASE.md)); without Firebase the section is hidden and codes still work.
+
 ### How it works
 
 - The host's tab runs the same authoritative `RoomHost` as the dedicated server: the full simulation, bots, input validation and rate limits. Guests only send inputs, exactly as with a dedicated server, and get the same prediction, interpolation and reconnection. Nothing in the match logic differs.

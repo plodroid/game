@@ -1191,6 +1191,16 @@ select {
   font-size: 0.82rem;
 }
 
+/* Rows in a panel: card stock showing through 2px gaps separates them. */
+.list {
+  display: grid;
+  gap: 2px;
+}
+
+.panel .slot {
+  background: var(--paper);
+}
+
 .slot--empty {
   color: var(--ink-3);
   font-size: 0.9rem;
