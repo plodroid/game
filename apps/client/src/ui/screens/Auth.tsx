@@ -34,7 +34,7 @@ export default function Auth() {
 
   if (!firebaseConfigured)
     return (
-      <main className="screen">
+      <main className="screen" data-pig="magenta">
         <Header title="Accounts" />
         <div className="col panel">
           <p style={{ marginTop: 0 }}>This build of CHROMASHIFT doesn’t have accounts configured.</p>
@@ -74,7 +74,7 @@ export default function Auth() {
   };
 
   return (
-    <main className="screen">
+    <main className="screen" data-pig="magenta">
       <Header title={titles[mode][0]} sub={titles[mode][1]} />
       <form
         className="col panel"
@@ -88,8 +88,8 @@ export default function Auth() {
             <Button block size="lg" disabled={acc.busy} onClick={() => void act((m) => m.signInGoogle())}>
               <Icon.google /> Continue with Google
             </Button>
-            <div className="row" style={{ margin: '16px 0', color: 'var(--faint)', fontSize: '0.8rem' }}>
-              <span style={{ flex: 1, height: 1, background: 'var(--line)' }} /> or with email <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+            <div className="row muted small" style={{ margin: '18px 0 10px' }}>
+              Or with email
             </div>
           </>
         )}
@@ -144,7 +144,7 @@ export default function Auth() {
           )}
         </div>
         <p className="muted small" style={{ marginBottom: 0 }}>
-          Passwords are handled by Firebase Authentication — CHROMASHIFT never stores them. Your email stays private.
+          Passwords are handled by Firebase Authentication. CHROMASHIFT never stores them. Your email stays private.
         </p>
       </form>
     </main>

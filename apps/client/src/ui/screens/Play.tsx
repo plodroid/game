@@ -10,7 +10,7 @@ import {
   type ModeId,
 } from '@chromashift/shared';
 import { startOffline } from '../../game/session';
-import { hostFromMenu } from '../../multiplayer/net';
+import { hostFromMenu, ownHostCode } from '../../multiplayer/net';
 import { useUi } from '../../state/ui';
 import { Icon } from '../icons';
 import { Button, Header, Segmented, Setting } from '../kit';
@@ -20,10 +20,10 @@ export const onlineIntent: { mode: 'join' | null } = { mode: null };
 
 export function Play() {
   const go = useUi((s) => s.go);
+  const [code] = useState(ownHostCode);
   const items = [
-    { icon: <Icon.users />, title: 'Host a game', desc: 'Friends join with your code. Runs in your browser, nothing to install.', run: () => void hostFromMenu() },
+    { title: 'Host a game', desc: 'Friends join with your code. Runs in your browser, nothing to install.', run: () => void hostFromMenu() },
     {
-      icon: <Icon.key />,
       title: 'Join a game',
       desc: 'Enter a friend’s code, or rejoin a recent game.',
       run: () => {
@@ -32,20 +32,18 @@ export function Play() {
       },
     },
     {
-      icon: <Icon.target />,
       title: 'Practice Against Bots',
       desc: 'You and three bots against four. Works offline.',
       run: () => void startOffline({ map: MAP_IDS[Math.floor(Math.random() * MAP_IDS.length)], mode: 'turf', duration: 180, difficulty: 'normal', allies: 3, rivals: 4 }),
     },
-    { icon: <Icon.sliders />, title: 'Custom Match', desc: 'Pick the map, mode, length and every bot slot.', run: () => go('custom') },
+    { title: 'Custom Match', desc: 'Pick the map, mode, length and every bot slot.', run: () => go('custom') },
   ];
   return (
-    <main className="screen">
+    <main className="screen" data-pig="magenta">
       <Header title="Play" sub="Every mode supports bots, so a full match never needs eight people." />
       <div className="col options stagger">
         {items.map((it) => (
           <button key={it.title} className="option" onClick={it.run}>
-            <span className="option__icon">{it.icon}</span>
             <span>
               <span className="option__title" style={{ display: 'block' }}>
                 {it.title}
@@ -58,6 +56,13 @@ export function Play() {
           </button>
         ))}
       </div>
+      {code && (
+        <section className="col code-note" aria-label="Your game code">
+          <span className="code-note__label">Your game code</span>
+          <span className="code num">{code}</span>
+          <span className="code-note__text">It stays the same every time you host from this browser, so friends can keep it like a server address. They type it under Online, then Join.</span>
+        </section>
+      )}
     </main>
   );
 }
@@ -71,7 +76,7 @@ export function Custom() {
   const [rivals, setRivals] = useState(4);
   const practice = mode === 'practice';
   return (
-    <main className="screen">
+    <main className="screen" data-pig="magenta">
       <Header title="Custom Match" sub="Offline against bots. Nothing here needs an internet connection." />
       <div className="col--wide stagger">
         <section className="panel">
@@ -94,7 +99,7 @@ export function Custom() {
               <Segmented value={duration} onChange={setDuration} label="Length" options={DURATION_OPTIONS.map((d) => ({ value: d, label: `${d / 60} min` }))} />
             </Setting>
           )}
-          <Setting name="Bot difficulty" hint="Changes reaction time, aim, awareness and teamwork — never the rules.">
+          <Setting name="Bot difficulty" hint="Changes reaction time, aim, awareness and teamwork, never the rules.">
             <Segmented value={difficulty} onChange={setDifficulty} label="Bot difficulty" options={BOT_DIFFICULTIES.map((d) => ({ value: d, label: DIFF_LABEL[d] }))} />
           </Setting>
           {!practice && (

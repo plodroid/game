@@ -22,10 +22,10 @@ export default function Settings() {
   const paused = useUi((s) => s.paused);
   const back = useUi((s) => s.back);
   return (
-    <main className={`screen ${paused ? 'screen--solid' : ''}`}>
+    <main className={`screen ${paused ? 'screen--solid' : ''}`} data-pig="graphite">
       <Header
         title="Settings"
-        sub="Saved automatically on this device — and to your account when signed in."
+        sub="Saved automatically on this device, and to your account when signed in."
         onBack={back}
         end={
           <Button variant="ghost" onClick={() => reset(tab)}>
@@ -78,7 +78,7 @@ function Graphics() {
 
   return (
     <>
-      <Setting name="Preset" hint={g.preset === 'custom' ? 'Custom — you changed individual options.' : 'Very Low is tuned for old GPUs such as the GT 740.'}>
+      <Setting name="Preset" hint={g.preset === 'custom' ? 'Custom: you changed individual options.' : 'Very Low is tuned for old GPUs such as the GT 740.'}>
         <Segmented value={g.preset === 'custom' ? ('' as Preset) : g.preset} onChange={(p) => apply(p as Exclude<Preset, 'custom'>)} label="Preset" options={presets.map((p) => ({ value: p, label: PRESET_LABEL[p] }))} />
       </Setting>
       <Setting name="Hardware check" hint="Measures this device and recommends a preset. Never changes anything by itself.">
@@ -140,7 +140,7 @@ function Graphics() {
       <Setting name="Bloom">
         <Toggle label="Bloom" checked={g.bloom} onChange={(v) => set({ bloom: v })} />
       </Setting>
-      <Setting name="Ambient occlusion" hint="Screen-space AO. Expensive — High-end GPUs only.">
+      <Setting name="Ambient occlusion" hint="Screen-space AO. Expensive, for high-end GPUs only.">
         <Toggle label="Ambient occlusion" checked={g.ambientOcclusion} onChange={(v) => set({ ambientOcclusion: v })} />
       </Setting>
       <Setting name="Reflections" hint={`Sky reflections on glossy surfaces. ${NEXT}`}>
@@ -225,8 +225,11 @@ function Controls() {
       <Setting name="Touch controls" hint="Auto shows them on touch screens.">
         <Segmented value={c.touchControls} onChange={(v) => set('controls', { touchControls: v })} label="Touch controls" options={[{ value: 'auto', label: 'Auto' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }]} />
       </Setting>
-      <p className="eyebrow" style={{ marginTop: 18 }}>
-        Key bindings — click a slot, then press a key or mouse button (Esc cancels)
+      <h3 className="panel__title" style={{ marginTop: 22 }}>
+        Key bindings
+      </h3>
+      <p className="muted small" style={{ margin: '-6px 0 6px' }}>
+        Click a slot, then press a key or mouse button. Esc cancels.
       </p>
       {ACTIONS.map(([a, label]) => (
         <Setting key={a} name={label}>

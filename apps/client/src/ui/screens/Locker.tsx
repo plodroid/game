@@ -16,6 +16,7 @@ import {
   type CosmeticOption,
   type Cosmetics,
 } from '@chromashift/shared';
+import { portrait } from '../../characters/portrait';
 import { menu } from '../../game/session';
 import { useProfile } from '../../state/profile';
 import { Button, Header } from '../kit';
@@ -39,6 +40,26 @@ export default function Locker() {
   const p = useProfile();
   const level = levelInfo(p.xp).level;
   const setCos = (patch: Partial<Cosmetics>) => p.patch({ cosmetics: { ...p.cosmetics, ...patch } });
+
+  /** Items shown as themselves: your character wearing each one, or the paint itself. */
+  const items = (opts: CosmeticOption[], key: keyof Cosmetics, look: (id: string) => { img?: string | null; color?: string }) => (
+    <div className="items">
+      {opts.map((o) => {
+        const open = isUnlocked(o, level);
+        const { img, color } = look(o.id);
+        return (
+          <button key={o.id} className="item" aria-pressed={p.cosmetics[key] === o.id} disabled={!open} onClick={() => setCos({ [key]: o.id })}>
+            {img ? <img src={img} alt="" draggable={false} /> : <span className="item__blank" style={{ background: color }} />}
+            <span className="item__name">
+              {o.name}
+              {!open && <span className="item__lock">Unlocks at level {o.level}</span>}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+  const wearing = (key: keyof Cosmetics, frame: 'head' | 'bust' = 'head') => (id: string) => ({ img: portrait({ ...p.cosmetics, [key]: id }, 0, frame) });
 
   const list = (opts: CosmeticOption[], key: keyof Cosmetics, color?: (id: string) => string) => (
     <div className="swatches">
@@ -66,7 +87,7 @@ export default function Locker() {
   );
 
   return (
-    <main className="screen">
+    <main className="screen" data-pig="cobalt">
       <Header title="Locker" sub="Changes show on your character and save automatically." />
       <div className="col">
         <div className="tabs" role="tablist">
@@ -109,7 +130,7 @@ export default function Locker() {
           {cat === 'special' && (
             <div className="options">
               {SPECIAL_IDS.map((id) => (
-                <button key={id} className="option" style={{ gridTemplateColumns: '1fr' }} onClick={() => p.patch({ special: id })}>
+                <button key={id} className="option" style={{ gridTemplateColumns: '1fr' }} aria-pressed={p.special === id} onClick={() => p.patch({ special: id })}>
                   <span>
                     <span className="option__title" style={{ display: 'block' }}>
                       {SPECIALS[id].name} {p.special === id && <span className="badge badge--ok">Equipped</span>}
@@ -122,10 +143,10 @@ export default function Locker() {
               ))}
             </div>
           )}
-          {cat === 'hair' && list(HAIR, 'hair')}
-          {cat === 'headgear' && list(HEADGEAR, 'headgear')}
-          {cat === 'outfit' && list(OUTFITS, 'outfit')}
-          {cat === 'accent' && list(ACCENTS, 'accent', (id) => hex(ACCENT_COLORS[id]))}
+          {cat === 'hair' && items(HAIR, 'hair', wearing('hair'))}
+          {cat === 'headgear' && items(HEADGEAR, 'headgear', wearing('headgear'))}
+          {cat === 'outfit' && items(OUTFITS, 'outfit', wearing('outfit', 'bust'))}
+          {cat === 'accent' && items(ACCENTS, 'accent', (id) => ({ color: hex(ACCENT_COLORS[id]) }))}
           {cat === 'emote' && (
             <>
               {list(EMOTES, 'emote')}
@@ -135,17 +156,17 @@ export default function Locker() {
             </>
           )}
           {cat === 'skin' && (
-            <div className="swatches">
+            <div className="items">
               {SKIN_TONES.map((c, i) => (
-                <button key={c} className="swatch" aria-pressed={p.cosmetics.skin === i} aria-label={`Skin tone ${i + 1}`} onClick={() => setCos({ skin: i })}>
-                  <span className="swatch__color" style={{ background: hex(c), width: 24, height: 24 }} />
+                <button key={c} className="item" aria-pressed={p.cosmetics.skin === i} aria-label={`Skin tone ${i + 1}`} onClick={() => setCos({ skin: i })}>
+                  <img src={portrait({ ...p.cosmetics, skin: i }, 0) ?? undefined} alt="" draggable={false} style={{ background: hex(c) }} />
                 </button>
               ))}
             </div>
           )}
         </section>
         <p className="muted small" style={{ marginTop: 12 }}>
-          Your team colour is set by the match. Locked items unlock as you level up — see Progression.
+          Your team colour is set by the match. Locked items unlock as you level up; see Progression.
         </p>
       </div>
     </main>

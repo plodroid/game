@@ -152,7 +152,7 @@ function Reconnecting() {
     <div className="overlay" style={{ background: 'rgba(8,9,16,0.45)', zIndex: 50 }}>
       <div className="loading">
         <div className="spinner" />
-        Connection lost — reconnecting…
+        Connection lost. Reconnecting…
       </div>
     </div>
   );

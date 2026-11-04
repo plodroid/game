@@ -97,7 +97,7 @@ export function Hud() {
         </div>
 
         {h.alive && <Crosshair hitAt={h.hitAt} koAt={h.koAt} ink={h.ink} hp={h.hp} />}
-        {h.alive && h.ink < 12 && playing && <div className="lowink">{h.diving ? 'Refilling…' : `Low pigment — hold ${keyLabel(bindings.dive[0])} on your colour`}</div>}
+        {h.alive && h.ink < 12 && playing && <div className="lowink">{h.diving ? 'Refilling…' : `Low pigment. Hold ${keyLabel(bindings.dive[0])} on your colour`}</div>}
 
         {g.damageIndicators &&
           h.hurt.map((d) => (
@@ -135,7 +135,7 @@ export function Hud() {
             <div className="loadout__name">{WEAPONS[h.weapon].name}</div>
             <div className="loadout__sub">
               {special.name}
-              {ready ? ' — ready' : ''}
+              {ready ? ', ready' : ''}
             </div>
             <div className="hpbar" aria-label="Health">
               <div className="hpbar__fill" style={{ transform: `scaleX(${Math.max(0, h.hp) / 100})` }} />
@@ -397,8 +397,11 @@ function TouchControls({ charge, team }: { charge: number; team: number }) {
         </>,
       )}
       {btn(32, 'tbtn--dodge', 'DODGE')}
-      <div className="tbtn tbtn--menu" onPointerDown={() => setPaused(true)}>
-        ❚❚
+      <div className="tbtn tbtn--menu" role="button" aria-label="Pause" onPointerDown={() => setPaused(true)}>
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+          <rect x="3" y="2" width="3.5" height="12" fill="currentColor" />
+          <rect x="9.5" y="2" width="3.5" height="12" fill="currentColor" />
+        </svg>
       </div>
     </div>
   );

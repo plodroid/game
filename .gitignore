@@ -14,3 +14,6 @@ Thumbs.db
 !.env.example
 *service-account*.json
 *-adminsdk-*.json
+
+# design tooling output
+.taste-skill/

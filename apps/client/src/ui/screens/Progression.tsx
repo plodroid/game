@@ -7,7 +7,7 @@ export default function Progression() {
   const l = levelInfo(xp);
   const levels = Array.from({ length: 10 }, (_, i) => i + 1).filter((n) => n === 1 || unlocksAt(n).length);
   return (
-    <main className="screen">
+    <main className="screen" data-pig="forest">
       <Header title="Progression" sub="Earn XP for paint, KOs, assists and wins. Practice doesn’t award XP." />
       <div className="col stagger">
         <section className="panel">
@@ -34,7 +34,7 @@ export default function Progression() {
                   <span className="track__lvl">Lv {n}</span>
                   <span>
                     {items.length ? items.map((u) => `${u.name} (${u.category.toLowerCase()})`).join(' · ') : 'Starter set'}
-                    {n <= l.level && <span className="muted small"> — unlocked</span>}
+                    {n <= l.level && <span className="muted small"> · unlocked</span>}
                   </span>
                 </div>
               );

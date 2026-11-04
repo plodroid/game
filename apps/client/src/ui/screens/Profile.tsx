@@ -32,7 +32,7 @@ export default function Profile() {
   };
 
   return (
-    <main className="screen">
+    <main className="screen" data-pig="gold">
       <Header title="Profile" />
       <div className="col stagger">
         <section className="panel">
@@ -141,7 +141,7 @@ export default function Profile() {
             <>
               <p className="muted small" style={{ margin: '0 0 12px' }}>
                 Signed in{acc.user?.email ? ` as ${maskEmail(acc.user.email)}` : ''} with {acc.user?.provider === 'google' ? 'Google' : 'email'}. Sync:{' '}
-                {acc.sync === 'synced' ? 'up to date' : acc.sync === 'syncing' ? 'saving…' : acc.sync === 'pending' ? 'saved on this device, will sync when possible' : acc.sync === 'error' ? 'failed — retrying' : 'idle'}
+                {acc.sync === 'synced' ? 'up to date' : acc.sync === 'syncing' ? 'saving…' : acc.sync === 'pending' ? 'saved on this device, will sync when possible' : acc.sync === 'error' ? 'failed, retrying' : 'idle'}
               </p>
               <Button variant="danger" disabled={acc.busy} onClick={() => void act((m) => m.signOut())}>
                 Sign out

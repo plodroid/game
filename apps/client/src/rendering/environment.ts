@@ -18,9 +18,15 @@ export interface Environment {
 }
 
 const skyVert = `varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w; }`;
+// A screen-printed sky: the gradient is laid down in flat bands, with a flat sun disc and halo,
+// in the same printed language as the menus.
 const skyFrag = `uniform vec3 top; uniform vec3 horizon; uniform vec3 bottom; uniform vec3 sunDir; uniform vec3 sunColor; varying vec3 vDir;
-void main(){ float y = vDir.y; vec3 c = y > 0.0 ? mix(horizon, top, pow(min(1.0, y * 1.4), 0.7)) : mix(horizon, bottom, pow(min(1.0, -y * 2.2), 0.6));
-  float s = max(0.0, dot(normalize(vDir), normalize(sunDir))); c += sunColor * (pow(s, 600.0) * 3.0 + pow(s, 12.0) * 0.25);
+float band(float k, float n){ float x = k * n; return min(1.0, (floor(x) + smoothstep(0.92, 1.0, fract(x))) / (n - 1.0)); }
+void main(){ float y = vDir.y;
+  vec3 c = y > 0.0 ? mix(horizon, top, band(pow(min(1.0, y * 1.4), 0.7), 6.0)) : mix(horizon, bottom, band(pow(min(1.0, -y * 2.2), 0.6), 3.0));
+  float s = max(0.0, dot(normalize(vDir), normalize(sunDir)));
+  c = mix(c, c + sunColor * 0.16, smoothstep(0.975, 0.977, s));
+  c = mix(c, sunColor * 1.6, smoothstep(0.9988, 0.999, s));
   gl_FragColor = vec4(c, 1.0); }`;
 
 export function buildEnvironment(scene: THREE.Scene, renderer: THREE.WebGLRenderer, map: MapDef, o: EnvOptions): Environment {

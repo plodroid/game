@@ -13,10 +13,11 @@ let stage: { scene: THREE.Scene; camera: THREE.PerspectiveCamera; target: THREE.
  * Head-and-shoulders portrait of the actual character model, rendered offscreen on the
  * game's own WebGL context and cached as a data URL. Used for avatars and lobby previews.
  */
-export function portrait(c: Cosmetics, team: 0 | 1): string | null {
+/** Head and shoulders, or down to the waist ('bust') to show an outfit. */
+export function portrait(c: Cosmetics, team: 0 | 1, frame: 'head' | 'bust' = 'head'): string | null {
   const r = engine.renderer;
   if (!r) return null;
-  const key = `${team}:${c.hair}:${c.headgear}:${c.outfit}:${c.accent}:${c.skin}`;
+  const key = `${frame}:${team}:${c.hair}:${c.headgear}:${c.outfit}:${c.accent}:${c.skin}`;
   const hit = cache.get(key);
   if (hit) return hit;
 
@@ -40,6 +41,13 @@ export function portrait(c: Cosmetics, team: 0 | 1): string | null {
   rig.head.rotation.set(0.04, 0.12, 0);
   stage.scene.add(rig.root);
 
+  if (frame === 'bust') {
+    stage.camera.position.set(0.35, 1.42, -2.25);
+    stage.camera.lookAt(0, 1.3, 0);
+  } else {
+    stage.camera.position.set(0.2, 1.68, -1.3);
+    stage.camera.lookAt(0, 1.6, 0);
+  }
   const prev = r.getRenderTarget();
   const prevColor = r.getClearColor(new THREE.Color());
   const prevAlpha = r.getClearAlpha();

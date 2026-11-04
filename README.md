@@ -166,4 +166,4 @@ Measured on an **NVIDIA GeForce GT 740** (the low end this project targets), ful
 
 ## Credits and licensing
 
-Everything in CHROMASHIFT was made for this project: code, characters, maps, textures, music and sound, generated procedurally. Fonts: Inter and Bricolage Grotesque (SIL Open Font License) via Fontsource. Third-party libraries keep their own licences (three.js MIT, Rapier Apache-2.0, React MIT, Colyseus MIT, Firebase Apache-2.0).
+Everything in CHROMASHIFT was made for this project: code, characters, maps, textures, music and sound, generated procedurally. Font: Archivo (SIL Open Font License) via Fontsource. Third-party libraries keep their own licences (three.js MIT, Rapier Apache-2.0, React MIT, Colyseus MIT, Firebase Apache-2.0).

@@ -749,7 +749,7 @@ function nameTag(name: string, color: THREE.Color, friendly: boolean): THREE.Spr
   c.width = 256;
   c.height = 64;
   const ctx = c.getContext('2d')!;
-  ctx.font = '600 26px "Inter Variable", system-ui, sans-serif';
+  ctx.font = '700 26px "Archivo Variable", system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineWidth = 6;

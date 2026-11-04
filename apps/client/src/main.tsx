@@ -1,5 +1,5 @@
-import '@fontsource-variable/inter';
-import '@fontsource-variable/bricolage-grotesque';
+// Archivo with its width axis: condensed for names and titles, regular for reading.
+import '@fontsource-variable/archivo/standard.css';
 import './styles/global.css';
 import './styles/hud.css';
 import { createRoot } from 'react-dom/client';

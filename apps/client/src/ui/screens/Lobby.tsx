@@ -46,7 +46,7 @@ export default function Lobby() {
 
   if (!lobby)
     return (
-      <main className="screen">
+      <main className="screen" data-pig="teal">
         <Header title="Lobby" onBack={() => (leaveRoom(), go('online'))} />
         <div className="loading">
           <div className="spinner" />
@@ -98,7 +98,7 @@ export default function Lobby() {
       </div>
     ) : (
       <div key={`empty${i}`} className="slot slot--empty">
-        {st.botFill ? `Open — a ${DIFF_LABEL[st.botDifficulty].toLowerCase()} bot will fill this slot` : 'Open slot'}
+        {st.botFill ? `Open, a ${DIFF_LABEL[st.botDifficulty].toLowerCase()} bot fills this slot` : 'Open slot'}
         {me && !host && me.team !== team && (
           <Button variant="ghost" style={{ marginLeft: 'auto' }} onClick={() => send(MSG.TEAM, { id: me.id, team })}>
             Join
@@ -108,13 +108,13 @@ export default function Lobby() {
     );
 
   return (
-    <main className="screen screen--solid">
+    <main className="screen" data-pig="teal">
       <Header
         title={lobby.quick ? 'Quick Play' : kind === 'server' ? 'Private room' : kind === 'host' ? 'Your game' : `${hostName ?? 'Friend'}’s game`}
         sub={
           lobby.quick
             ? lobby.startsIn != null
-              ? `Match starts in ${lobby.startsIn}s — bots fill empty slots.`
+              ? `Match starts in ${lobby.startsIn}s. Bots fill empty slots.`
               : 'Starting…'
             : kind === 'host'
               ? 'Your browser is hosting. Keep this tab open; it can stay in the background.'
@@ -132,7 +132,7 @@ export default function Lobby() {
       <div className="col--wide stagger" style={{ display: 'grid', gap: 14 }}>
         <section className="panel row" style={{ justifyContent: 'space-between' }}>
           <div>
-            <p className="eyebrow" style={{ margin: 0 }}>
+            <p className="field__label" style={{ margin: '0 0 6px' }}>
               {kind === 'server' ? 'Room code' : 'Game code'}
             </p>
             <div className="code num">{lobby.code}</div>
@@ -152,7 +152,7 @@ export default function Lobby() {
           {[0, 1].map((t) => {
             const list = lobby.players.filter((p) => p.team === t);
             return (
-              <section key={t} className="team">
+              <section key={t} className="team" style={{ ['--tc' as string]: t ? 'var(--team-b)' : 'var(--team-a)' }}>
                 <div className="team__head">
                   <TeamShape team={t} /> {names[t]}
                   <span className="muted small" style={{ marginLeft: 'auto' }}>

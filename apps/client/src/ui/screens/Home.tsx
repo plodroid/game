@@ -9,17 +9,19 @@ import { useUi, type Screen } from '../../state/ui';
 import { Avatar } from '../Avatar';
 import { BrandMark } from '../icons';
 
-const ITEMS: { label: string; desc: string; to?: Screen; run?: () => void }[] = [
-  { label: 'Play', desc: 'Matches against bots, custom games and quick play', to: 'play' },
-  { label: 'Online', desc: 'Private rooms, room codes and LAN servers', to: 'online' },
+/** Each section of the game carries one of its paints, here and on its own screen. */
+const ITEMS: { label: string; desc: string; pig: string; to?: Screen; run?: () => void }[] = [
+  { label: 'Play', desc: 'Host a game for friends, join one, or take on bots', pig: 'magenta', to: 'play' },
+  { label: 'Online', desc: 'Join by code, recent games and dedicated servers', pig: 'teal', to: 'online' },
   {
     label: 'Practice',
     desc: 'Free roam with training targets',
+    pig: 'gold',
     run: () => void startOffline({ map: 'skyline', mode: 'practice', duration: 0, difficulty: 'easy', allies: 0, rivals: 4 }),
   },
-  { label: 'Locker', desc: 'Look, weapon and special', to: 'locker' },
-  { label: 'Progression', desc: 'Level, XP and unlocks', to: 'progression' },
-  { label: 'Settings', desc: 'Graphics, audio, controls, accessibility', to: 'settings' },
+  { label: 'Locker', desc: 'Look, weapon and special', pig: 'cobalt', to: 'locker' },
+  { label: 'Progression', desc: 'Level, XP and unlocks', pig: 'forest', to: 'progression' },
+  { label: 'Settings', desc: 'Graphics, audio, controls, accessibility', pig: 'graphite', to: 'settings' },
 ];
 
 export function Home() {
@@ -30,26 +32,15 @@ export function Home() {
   const endpoint = useNet((s) => s.endpoint);
   const first = useRef<HTMLButtonElement>(null);
   useEffect(() => first.current?.focus({ preventScroll: true }), []);
-  const lvl = levelInfo(p.xp).level;
+  const lvl = levelInfo(p.xp);
   const name = publicName(p);
 
   return (
     <main className="screen home">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <div className="brand">
-          <BrandMark />
-          <span className="brand__word">CHROMASHIFT</span>
-        </div>
-        <button className="chip-profile" onClick={() => (audio.play('click'), go('profile'))} aria-label="Profile">
-          <Avatar cosmetics={p.cosmetics} name={name} />
-          <span>
-            <span style={{ display: 'block', fontWeight: 650, fontSize: '0.9rem' }}>{name}</span>
-            <span className="muted small num">
-              Level {lvl} · {p.uid ? 'Account' : account.status === 'disabled' ? 'Guest' : 'Guest — sign in to sync'}
-            </span>
-          </span>
-        </button>
-      </div>
+      <h1 className="brand">
+        <BrandMark />
+        <span className="brand__word">Chromashift</span>
+      </h1>
 
       <nav className="menu stagger" aria-label="Main menu">
         {ITEMS.map((it, i) => (
@@ -57,6 +48,7 @@ export function Home() {
             key={it.label}
             ref={i === 0 ? first : undefined}
             className="menu__item"
+            data-pig={it.pig}
             onMouseEnter={() => audio.play('hover')}
             onFocus={() => it.label === 'Locker' && menu()?.react('hop')}
             onClick={() => {
@@ -72,14 +64,28 @@ export function Home() {
         ))}
       </nav>
 
-      <footer className="home__foot">
-        <span>
-          <span className={`dot ${online ? 'dot--ok' : 'dot--warn'}`} />
-          {online ? 'Online' : 'Offline — bot matches still work'}
-        </span>
-        <span>{endpoint ? `Server: ${endpoint.replace(/^wss?:\/\//, '')}` : 'No multiplayer server set'}</span>
-        <span className="num">v{GAME_VERSION}</span>
-      </footer>
+      <div>
+        <button className="chip-profile" data-pig="gold" onClick={() => (audio.play('click'), go('profile'))} aria-label={`Profile: ${name}, level ${lvl.level}`}>
+          <Avatar cosmetics={p.cosmetics} name={name} />
+          <span style={{ minWidth: 0 }}>
+            <span className="chip-profile__name">{name}</span>
+            <span className="chip-profile__meta num">
+              Level {lvl.level} · {p.uid ? 'Signed in' : account.status === 'disabled' ? 'Guest' : 'Guest, sign in to sync'}
+            </span>
+            <span className="xpbar" aria-hidden style={{ display: 'block' }}>
+              <span className="xpbar__fill" style={{ display: 'block', transform: `scaleX(${lvl.progress})` }} />
+            </span>
+          </span>
+        </button>
+        <footer className="home__foot">
+          <span>
+            <span className={`dot ${online ? 'dot--ok' : 'dot--warn'}`} />
+            {online ? 'Online' : 'Offline, bot matches still work'}
+          </span>
+          {endpoint && <span>Server {endpoint.replace(/^wss?:\/\//, '')}</span>}
+          <span className="num">v{GAME_VERSION}</span>
+        </footer>
+      </div>
     </main>
   );
 }

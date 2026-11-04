@@ -86,7 +86,7 @@ export default function Online() {
   }, [run]);
 
   return (
-    <main className="screen">
+    <main className="screen" data-pig="teal">
       <Header
         title="Online"
         sub="Host a game right here in your browser, or join a friend’s with their code."
@@ -94,9 +94,6 @@ export default function Online() {
       <div className="col stagger" style={{ display: 'grid', gap: 14 }}>
         <div className="options">
           <button className="option" disabled={busy || !online} onClick={() => void hostFromMenu()}>
-            <span className="option__icon">
-              <Icon.users />
-            </span>
             <span>
               <span className="option__title" style={{ display: 'block' }}>
                 Host a game
@@ -260,7 +257,7 @@ function Dedicated({ busy, run }: { busy: boolean; run: (fn: () => Promise<unkno
           }}
         >
           <div className="grid2" style={{ gridTemplateColumns: '1fr 120px' }}>
-            <Field label="Host or IP" hint="LAN example: 192.168.1.20 · internet: play.example.com">
+            <Field label="Host or IP" hint="On a LAN, the host computer's IP, like 192.168.1.20. Over the internet, the server's wss:// address.">
               <input
                 className="input"
                 value={host}

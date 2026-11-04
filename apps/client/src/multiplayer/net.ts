@@ -2,6 +2,7 @@ import { Client, type Room } from '@colyseus/sdk';
 import { create } from 'zustand';
 import {
   DEFAULT_PORT,
+  generateRoomCode,
   MSG,
   normalizeRoomCode,
   PROTOCOL_VERSION,
@@ -59,6 +60,19 @@ const STORAGE_KEY = 'chromashift.server';
 const RECENT_KEY = 'chromashift.recent';
 /** This browser's game code, kept between hosting sessions so friends can reuse it. */
 export const HOST_CODE_KEY = 'chromashift.hostCode';
+
+/** The code friends will use when this browser hosts, created on first need. */
+export function ownHostCode(): string | null {
+  try {
+    const saved = normalizeRoomCode(localStorage.getItem(HOST_CODE_KEY) ?? '');
+    if (saved) return saved;
+    const code = generateRoomCode();
+    localStorage.setItem(HOST_CODE_KEY, code);
+    return code;
+  } catch {
+    return null;
+  }
+}
 
 function readRecent(): RecentGame[] {
   try {

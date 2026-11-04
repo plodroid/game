@@ -10,8 +10,7 @@
   },
   "dependencies": {
     "@colyseus/sdk": "^0.18.9",
-    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
-    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/archivo": "^5.3.0",
     "firebase": "^13.2.0",
     "idb-keyval": "^6.3.0",
     "peerjs": "^1.5.5",

@@ -50,20 +50,30 @@ export default function Results() {
   const sorted = [...res.players].sort((a, b) => a.team - b.team || b.paint - a.paint);
   const isHost = lobby && lobby.hostId === you;
 
+  // The verdict sits on a field of your team's paint when you win, on ink when you lose.
+  const field =
+    verdict === 'Victory' || practice
+      ? { ['--pig' as string]: me?.team === 1 ? 'var(--team-b)' : 'var(--team-a)', ['--pig-ink' as string]: 'var(--ink)' }
+      : verdict === 'Defeat'
+        ? { ['--pig' as string]: 'var(--ink)', ['--pig-ink' as string]: 'var(--paper)' }
+        : { ['--pig' as string]: 'var(--graphite)', ['--pig-ink' as string]: '#fff' };
+
   return (
     <main className="screen results">
-      <div className="results__body">
-        <p className="eyebrow">
-          {MODES[res.mode].name} · {MAPS[res.map].name} · {Math.floor(res.duration / 60)}:
-          {String(res.duration % 60).padStart(2, '0')}
-        </p>
-        <h1 className="verdict">{verdict}</h1>
-        {!practice && res.winner >= 0 && (
-          <p className="muted" style={{ margin: 0 }}>
-            {names[res.winner as 0 | 1]} team wins
+      <header className="header" style={field}>
+        <div>
+          <p className="header__sub" style={{ margin: 0 }}>
+            {MODES[res.mode].name} · {MAPS[res.map].name} · {Math.floor(res.duration / 60)}:{String(res.duration % 60).padStart(2, '0')}
           </p>
-        )}
-
+          <h1 className="verdict">{verdict}</h1>
+          {!practice && res.winner >= 0 && (
+            <p className="header__sub" style={{ margin: 0 }}>
+              {names[res.winner as 0 | 1]} team wins
+            </p>
+          )}
+        </div>
+      </header>
+      <div className="results__body">
         <div className="coverage">
           <div className="coverage__bar" aria-label="Final coverage">
             <div className="coverage__a" style={{ flexBasis: shown ? `${res.coverage[0]}%` : '0%' }} />
