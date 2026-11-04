@@ -16,7 +16,7 @@ Accounts are optional. Without this setup, everyone plays as a guest and progres
    VITE_FIREBASE_MESSAGING_SENDER_ID=...
    ```
 
-   For the GitHub Pages build, add the same names as repository **Variables** (Settings → Secrets and variables → Actions → **Variables**). The web config is public by design; security comes from the rules below.
+   For the GitHub Pages build, add the same names as repository **Variables** (Settings → Secrets and variables → Actions → **Variables**). `VITE_FIREBASE_API_KEY` may be a Secret instead; the workflow reads either. The web config is public by design; security comes from the rules below.
 
 ## 2. Authentication
 
