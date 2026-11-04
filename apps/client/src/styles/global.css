@@ -161,6 +161,8 @@ select {
   gap: 16px;
   margin-bottom: 28px;
   min-height: 44px;
+  /* An explicit min-height drops the flex auto-minimum: without this, long screens squash the header. */
+  flex-shrink: 0;
 }
 
 .header__title {
@@ -467,15 +469,22 @@ select {
   font-family: var(--font-display);
   font-weight: 750;
   background: var(--surface-3);
-  box-shadow: inset 0 0 0 2px var(--team-a);
+  border: 2px solid var(--ring, var(--team-a));
+  overflow: hidden;
   flex: none;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .avatar--lg {
   width: 72px;
   height: 72px;
   font-size: 1.8rem;
-  box-shadow: inset 0 0 0 3px var(--team-a);
+  border-width: 3px;
 }
 
 /* ---------- Cards / options ---------- */
@@ -1204,6 +1213,19 @@ select {
   border-left: 3px solid var(--row-team, transparent);
 }
 
+.table-wrap {
+  overflow-x: auto;
+  margin: 16px 0;
+}
+
+.table-wrap .table {
+  margin: 0;
+}
+
+.table__sub {
+  display: none;
+}
+
 /* ---------- Compatibility / errors ---------- */
 .blocker {
   position: fixed;
@@ -1236,6 +1258,35 @@ select {
   }
   .header__title {
     font-size: 1.5rem;
+  }
+  /* Header actions drop to their own line, aligned with the title. */
+  .header {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+  .header > div:not(.header__end) {
+    flex: 1;
+    min-width: 0;
+  }
+  .header__end {
+    flex: 1 0 100%;
+    margin-left: 0;
+    padding-left: 60px;
+  }
+  /* Results: the weapon folds under the player's name. */
+  .table--results th:nth-child(2),
+  .table--results td:nth-child(2) {
+    display: none;
+  }
+  .table__sub {
+    display: block;
+    color: var(--faint);
+    font-size: 0.75rem;
+  }
+  .table th,
+  .table td {
+    padding-left: 6px;
+    padding-right: 6px;
   }
 }
 

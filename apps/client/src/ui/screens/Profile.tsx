@@ -4,6 +4,7 @@ import { act, useAccount } from '../../auth/account';
 import { firebaseConfigured } from '../../env';
 import { favouriteWeapon, publicName, useProfile } from '../../state/profile';
 import { useUi } from '../../state/ui';
+import { Avatar } from '../Avatar';
 import { Button, Field, Header } from '../kit';
 
 const nameOf = (list: { id: string; name: string }[], id: string) => list.find((o) => o.id === id)?.name ?? id;
@@ -36,7 +37,7 @@ export default function Profile() {
       <div className="col stagger">
         <section className="panel">
           <div className="row" style={{ gap: 16 }}>
-            <span className="avatar avatar--lg">{publicName(p).slice(0, 1).toUpperCase()}</span>
+            <Avatar cosmetics={p.cosmetics} name={publicName(p)} large />
             <div style={{ minWidth: 0 }}>
               <div className="header__title" style={{ fontSize: '1.6rem' }}>
                 {publicName(p)}

@@ -6,6 +6,7 @@ import { menu, startOffline } from '../../game/session';
 import { useNet } from '../../multiplayer/net';
 import { publicName, useProfile } from '../../state/profile';
 import { useUi, type Screen } from '../../state/ui';
+import { Avatar } from '../Avatar';
 import { BrandMark } from '../icons';
 
 const ITEMS: { label: string; desc: string; to?: Screen; run?: () => void }[] = [
@@ -40,7 +41,7 @@ export function Home() {
           <span className="brand__word">CHROMASHIFT</span>
         </div>
         <button className="chip-profile" onClick={() => (audio.play('click'), go('profile'))} aria-label="Profile">
-          <span className="avatar">{name.slice(0, 1).toUpperCase()}</span>
+          <Avatar cosmetics={p.cosmetics} name={name} />
           <span>
             <span style={{ display: 'block', fontWeight: 650, fontSize: '0.9rem' }}>{name}</span>
             <span className="muted small num">

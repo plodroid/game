@@ -72,7 +72,10 @@ export class ThirdPersonCamera {
     }
     this.shake = Math.max(0, this.shake - dt * 2.5);
 
-    const fov = 72 + (o.fast ? 7 : 0);
+    // Portrait screens widen the vertical FOV so at least ~58° stays visible across (capped at 100°).
+    const a = cam.aspect;
+    const base = a < 1 ? Math.min(100, Math.max(72, (360 / Math.PI) * Math.atan(Math.tan((29 * Math.PI) / 180) / a))) : 72;
+    const fov = base + (o.fast ? 7 : 0);
     this.fov += (fov - this.fov) * (1 - Math.exp(-6 * dt));
     if (Math.abs(cam.fov - this.fov) > 0.01) {
       cam.fov = this.fov;

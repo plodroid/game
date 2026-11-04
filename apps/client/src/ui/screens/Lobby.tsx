@@ -19,6 +19,7 @@ import { leaveRoom, send, useNet } from '../../multiplayer/net';
 import { teamNames } from '../../rendering/palette';
 import { useProfile } from '../../state/profile';
 import { useUi } from '../../state/ui';
+import { Avatar } from '../Avatar';
 import { Icon, TeamShape } from '../icons';
 import { Button, Header, Segmented, Setting, Toggle, useCopy } from '../kit';
 import { DIFF_LABEL } from './Play';
@@ -62,9 +63,7 @@ export default function Lobby() {
   const slot = (p: LobbyPlayer | undefined, i: number, team: number) =>
     p ? (
       <div key={p.id} className="slot">
-        <span className="avatar" style={{ boxShadow: `inset 0 0 0 2px var(--team-${team ? 'b' : 'a'})` }}>
-          {p.bot ? <Icon.bot /> : p.name.slice(0, 1).toUpperCase()}
-        </span>
+        <Avatar cosmetics={p.cosmetics} team={team} name={p.name} bot={p.bot} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <div className="slot__name">
             {p.name} {p.id === net.you && <span className="muted small">(you)</span>}

@@ -137,9 +137,9 @@ export class OnlineSource implements MatchSource {
       const e = unpackEvent(raw);
       if (!e) continue;
       if (e.t === 'paint') this.world.grid.paintSphere(e, e.r, e.team);
+      // Our own shots and empty clicks were already shown when we pressed fire.
+      if ((e.t === 'fire' || e.t === 'empty') && e.id === this.localId) continue;
       if (e.t === 'fire') {
-        // Our own shots were already shown when we pressed fire.
-        if (e.id === this.localId) continue;
         const r = this.remotes.get(e.id);
         if (r) this.spawnCosmetic(e.w, e, e.yaw, e.pitch, e.seed, r.view.info.team);
       }

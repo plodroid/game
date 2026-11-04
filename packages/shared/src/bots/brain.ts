@@ -146,7 +146,8 @@ export class BotBrain {
         this.strafe = this.rnd() < 0.5 ? -1 : 1;
         this.strafeT = 0.5 + this.rnd() * 0.9;
       }
-      const ideal = w.kind === 'roller' ? 0 : w.range * 0.75;
+      // Rollers hold flick range and only charge in for the roll-over when close or the target is weak.
+      const ideal = w.kind === 'roller' ? (d < 4 || tgt.hp < 45 ? 0 : 5.5) : w.range * 0.75;
       const approach = d > ideal * 1.15 + 1 ? 1 : d < ideal * 0.6 ? -0.8 : 0;
       if (d < 12 || !moving) {
         wish.x = tx * approach - tz * this.strafe * s.strafe;

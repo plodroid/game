@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { MODES, SPECIALS, WEAPONS } from '@chromashift/shared';
 import { engine } from '../../game/engine';
 import { touch } from '../../game/input';
@@ -41,7 +41,7 @@ export function Hud() {
   const playing = h.phase === 'playing';
 
   return (
-    <div className="hud" aria-hidden={paused}>
+    <div className={`hud ${showTouch ? 'hud--touch' : ''}`} aria-hidden={paused}>
       <div className="hud__scale" style={{ ['--hud-scale' as string]: g.hudScale }}>
         <div className="hud-top">
           <div className="score">
@@ -160,12 +160,12 @@ export function Hud() {
       </div>
 
       {h.showBoard && <Scoreboard />}
-      {!locked && !paused && !showTouch && h.phase !== 'ended' && (
+      {!locked && !paused && !showTouch && h.phase !== 'ending' && h.phase !== 'ended' && (
         <div className="prompt" onClick={() => engine.input.lock()}>
           Click to {h.phase === 'intro' ? 'take control' : 'resume'} · {keyLabel(bindings.pause[0])} to pause
         </div>
       )}
-      {showTouch && !paused && <TouchControls />}
+      {showTouch && !paused && <TouchControls charge={h.charge} team={h.myTeam} />}
       {paused && <PauseMenu />}
     </div>
   );
@@ -309,7 +309,8 @@ function PauseMenu() {
 }
 
 /** Virtual stick + buttons. Writes into the shared `touch` state read by the input layer. */
-function TouchControls() {
+/** On touch the special's charge ring lives on its button, where the thumb already is. */
+function TouchControls({ charge, team }: { charge: number; team: number }) {
   const knob = useRef<HTMLDivElement>(null);
   const [down, setDown] = useState(0);
   const stickId = useRef<number | null>(null);
@@ -318,7 +319,7 @@ function TouchControls() {
   const origin = useRef({ x: 0, y: 0 });
   const setPaused = useUi((s) => s.setPaused);
 
-  const btn = (bit: number, cls: string, label: string) => (
+  const btn = (bit: number, cls: string, label: ReactNode) => (
     <div
       className={`tbtn ${cls} ${down & bit ? 'is-down' : ''}`}
       onPointerDown={(e) => {
@@ -381,7 +382,16 @@ function TouchControls() {
       {btn(1, 'tbtn--fire', 'FIRE')}
       {btn(2, 'tbtn--jump', 'JUMP')}
       {btn(4, 'tbtn--dive', 'DIVE')}
-      {btn(64, 'tbtn--special', 'SPCL')}
+      {btn(
+        64,
+        `tbtn--special ${charge >= 1 ? 'is-ready' : ''}`,
+        <>
+          <svg className="tbtn__ring" viewBox="0 0 64 64" aria-hidden>
+            <circle cx="32" cy="32" r="30" pathLength={1} strokeDasharray={`${Math.min(1, charge)} 1`} stroke={team ? 'var(--team-b)' : 'var(--team-a)'} />
+          </svg>
+          SPCL
+        </>,
+      )}
       {btn(32, 'tbtn--dodge', 'DODGE')}
       <div className="tbtn tbtn--menu" onPointerDown={() => setPaused(true)}>
         ❚❚

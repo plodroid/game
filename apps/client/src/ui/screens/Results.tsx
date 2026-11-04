@@ -85,37 +85,40 @@ export default function Results() {
           )}
         </div>
 
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Player</th>
-              <th>Weapon</th>
-              <th>Paint (m²)</th>
-              <th>KO</th>
-              <th>Assist</th>
-              <th>Splatted</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((p) => (
-              <tr
-                key={p.id}
-                className={p.id === r.you ? 'is-you' : ''}
-                style={{ ['--row-team' as string]: p.team === 0 ? 'var(--team-a)' : 'var(--team-b)' }}
-              >
-                <td>
-                  {p.name}
-                  {p.bot && <span className="muted small"> · bot</span>}
-                </td>
-                <td>{WEAPONS[p.weapon].name}</td>
-                <td>{p.paint}</td>
-                <td>{p.kills}</td>
-                <td>{p.assists}</td>
-                <td>{p.deaths}</td>
+        <div className="table-wrap">
+          <table className="table table--results">
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Weapon</th>
+                <th>Paint (m²)</th>
+                <th>KO</th>
+                <th>Assist</th>
+                <th>Splatted</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sorted.map((p) => (
+                <tr
+                  key={p.id}
+                  className={p.id === r.you ? 'is-you' : ''}
+                  style={{ ['--row-team' as string]: p.team === 0 ? 'var(--team-a)' : 'var(--team-b)' }}
+                >
+                  <td>
+                    {p.name}
+                    {p.bot && <span className="muted small"> · bot</span>}
+                    <span className="table__sub">{WEAPONS[p.weapon].name}</span>
+                  </td>
+                  <td>{WEAPONS[p.weapon].name}</td>
+                  <td>{p.paint}</td>
+                  <td>{p.kills}</td>
+                  <td>{p.assists}</td>
+                  <td>{p.deaths}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         {!practice && (
           <div style={{ margin: '4px 0 18px' }}>

@@ -3,8 +3,10 @@ import {
   dirFromAngles,
   FEET_OFFSET,
   forwardXZ,
+  INTRO_TIME,
   MAX_INK,
   muzzle,
+  OUTRO_TIME,
   PAINT_KIND,
   pitchOf,
   rightXZ,
@@ -77,6 +79,8 @@ export class MatchView implements View {
   private notice: { id: number; text: string; tone: 'neutral' | 'good' | 'bad'; t: number } | null = null;
   private caption: { text: string; t: number } | null = null;
   private input: FrameInput;
+  /** Scratch camera for intro/outro shots (a camera so lookAt aims -Z like the real one). */
+  private shot = new THREE.PerspectiveCamera();
 
   constructor(
     readonly source: MatchSource,
@@ -298,6 +302,7 @@ export class MatchView implements View {
       fast: !reduced && !!me && (me.state.swimming || me.state.surgeT > 0),
       shake: reduced ? 0 : settings.gameplay.cameraShake,
     });
+    if (!reduced && me) this.cinematic(me);
     const c = this.cam.camera;
     audio.setListener(c.position, this.cam.yaw);
     if (me && !this.ended) this.localAudio(dt, me);
@@ -316,6 +321,42 @@ export class MatchView implements View {
       this.pushHud(me);
     }
     if (playing && src.config.duration > 0) audio.setIntensity(src.timeLeft() < 30 ? 1 : 0);
+  }
+
+  /**
+   * Intro: an establishing shot above the arena that eases down to your shoulder by "GO".
+   * Outro: a slow pull-back while "TIME!" shows. Overlays the gameplay camera each frame.
+   */
+  private cinematic(me: ViewPlayer) {
+    const src = this.source;
+    const ph = src.phase();
+    const cam = this.cam.camera;
+    const smooth = (x: number) => x * x * (3 - 2 * x);
+    if (ph === 'intro') {
+      const e = smooth(1 - Math.min(1, Math.max(0, (src.phaseT() - 0.5) / (INTRO_TIME - 0.5))));
+      const ex = src.world.map.extent;
+      const y = me.state.yaw;
+      // Behind the player (forward is -sin/-cos of yaw), high up, looking over the arena;
+      // pulled in short of walls and roofs so enclosed maps keep the shot inside.
+      const o = { x: me.pos.x, y: me.pos.y + 1, z: me.pos.z };
+      const dx = Math.sin(y) * 13, dy = 14, dz = Math.cos(y) * 13;
+      const len = Math.hypot(dx, dy, dz);
+      const hit = src.world.raycast(o, { x: dx / len, y: dy / len, z: dz / len }, len);
+      const k = hit ? Math.max(0, hit.dist - 0.6) / len : 1;
+      this.shot.position.set(o.x + dx * k, o.y + dy * k, o.z + dz * k);
+      this.shot.lookAt((ex.minX + ex.maxX) / 2, 0, (ex.minZ + ex.maxZ) / 2);
+      cam.position.lerpVectors(this.shot.position, cam.position, e);
+      cam.quaternion.slerpQuaternions(this.shot.quaternion, cam.quaternion, e);
+    } else if (ph === 'ending' || ph === 'ended') {
+      const k = smooth(ph === 'ended' ? 1 : Math.min(1, 1 - src.phaseT() / OUTRO_TIME));
+      this.shot.position.copy(cam.position);
+      this.shot.quaternion.copy(cam.quaternion);
+      this.shot.translateZ(k * 4);
+      this.shot.position.y += k * 2.5;
+      this.shot.lookAt(me.pos.x, me.pos.y, me.pos.z);
+      cam.position.copy(this.shot.position);
+      cam.quaternion.slerp(this.shot.quaternion, k);
+    }
   }
 
   private localAudio(dt: number, me: ViewPlayer) {
@@ -438,6 +479,7 @@ export class MatchView implements View {
         break;
       }
       case 'empty':
+        this.chars.get(e.id)?.anim.empty();
         if (e.id === local) {
           audio.play('empty', { gain: 0.8 });
           useHud.setState({ lowInkAt: performance.now() });

@@ -490,8 +490,8 @@
 
 .stick__knob {
   position: absolute;
-  left: 41px;
-  top: 41px;
+  left: 39px;
+  top: 39px;
   width: 50px;
   height: 50px;
   border-radius: 50%;
@@ -529,6 +529,46 @@
 .tbtn--special { right: calc(52px + var(--safe-r)); bottom: calc(148px + var(--safe-b)); }
 .tbtn--dodge { right: calc(210px + var(--safe-r)); bottom: calc(52px + var(--safe-b)); }
 .tbtn--menu { right: calc(16px + var(--safe-r)); top: calc(60px + var(--safe-t)); width: 44px; height: 44px; }
+
+.tbtn__ring {
+  position: absolute;
+  inset: -2px;
+  width: calc(100% + 4px);
+  height: calc(100% + 4px);
+  transform: rotate(-90deg);
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.tbtn--special.is-ready {
+  border-color: transparent;
+  animation: ready 1.2s ease-in-out infinite;
+}
+
+/* The stick owns the bottom-left; health and pigment are on the crosshair, charge on SPCL. */
+.hud--touch .loadout {
+  display: none;
+}
+
+/* Phones held upright: a tighter arc around FIRE that clears the stick. */
+@media (max-width: 540px) {
+  .stick { left: calc(16px + var(--safe-l)); bottom: calc(24px + var(--safe-b)); width: 112px; height: 112px; }
+  .stick__knob { left: 32px; top: 32px; width: 44px; height: 44px; }
+  .tbtn { width: 54px; height: 54px; font-size: 0.66rem; }
+  .tbtn--fire { width: 72px; height: 72px; right: calc(18px + var(--safe-r)); bottom: calc(36px + var(--safe-b)); }
+  .tbtn--jump { right: calc(115px + var(--safe-r)); bottom: calc(45px + var(--safe-b)); }
+  .tbtn--dive { right: calc(84px + var(--safe-r)); bottom: calc(112px + var(--safe-b)); }
+  .tbtn--special { right: calc(19px + var(--safe-r)); bottom: calc(133px + var(--safe-b)); }
+  .tbtn--dodge { right: calc(172px + var(--safe-r)); bottom: calc(112px + var(--safe-b)); }
+  .tbtn--menu { width: 44px; height: 44px; }
+  .hud--touch .caption { bottom: calc(200px + var(--safe-b)); }
+}
+
+:root[data-motion='reduced'] .special.is-ready,
+:root[data-motion='reduced'] .tbtn--special.is-ready {
+  animation: none;
+}
 
 @media (max-width: 760px) {
   .feed {

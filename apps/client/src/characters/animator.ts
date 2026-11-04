@@ -40,6 +40,7 @@ export class Animator {
   private phase = 0;
   private recoil = 0;
   private hitT = 9;
+  private emptyT = 9;
   private shift = 0;
   private bodyY = 0;
   private spin = 0;
@@ -61,6 +62,10 @@ export class Animator {
   hit() {
     this.hitT = 0;
   }
+  /** Out of pigment: a quick shake of the weapon. */
+  empty() {
+    this.emptyT = 0;
+  }
   spawned() {
     this.spawnT = 0;
   }
@@ -69,6 +74,7 @@ export class Animator {
     const r = this.rig, t = this.t;
     this.time += dt;
     this.hitT += dt;
+    this.emptyT += dt;
     this.spawnT += dt;
     this.recoil = Math.max(0, this.recoil - dt * 7);
     for (const j of J) t[j][0] = t[j][1] = t[j][2] = 0;
@@ -149,6 +155,14 @@ export class Animator {
     t.head[0] += p * 0.45;
     if (!a.firing && !sprinting && k !== 'roller') {
       t.shoulderL[0] -= s * 0.15 * m;
+    }
+
+    // Out-of-pigment shake: the weapon is rattled to show it's empty.
+    if (this.emptyT < 0.45) {
+      const f = 1 - this.emptyT / 0.45;
+      t.shoulderR[2] += Math.sin(this.emptyT * 48) * 0.22 * f;
+      t.elbowR[0] += Math.sin(this.emptyT * 48 + 1) * 0.3 * f;
+      t.head[0] -= 0.12 * f;
     }
 
     // Hit flinch
