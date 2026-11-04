@@ -75,3 +75,6 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
+        with:
+          # Pages sometimes takes over the default 10 minutes to publish; wait up to 30.
+          timeout: 1800000
