@@ -3,6 +3,7 @@ import { MODES, SPECIALS, WEAPONS } from '@chromashift/shared';
 import { engine } from '../../game/engine';
 import { touch } from '../../game/input';
 import { leaveMatch } from '../../game/session';
+import { useNet } from '../../multiplayer/net';
 import { teamNames } from '../../rendering/palette';
 import { useSettings } from '../../settings/settings';
 import { useHud, useUi } from '../../state/ui';
@@ -41,8 +42,9 @@ export function Hud() {
   const playing = h.phase === 'playing';
 
   return (
-    <div className={`hud ${showTouch ? 'hud--touch' : ''}`} aria-hidden={paused}>
-      <div className="hud__scale" style={{ ['--hud-scale' as string]: g.hudScale }}>
+    <div className={`hud ${showTouch ? 'hud--touch' : ''}`}>
+      {/* Only the match readout hides behind the pause menu; the menu itself must stay reachable. */}
+      <div className="hud__scale" style={{ ['--hud-scale' as string]: g.hudScale }} aria-hidden={paused}>
         <div className="hud-top">
           <div className="score">
             <TeamShape team={0} />
@@ -271,6 +273,7 @@ function PauseMenu() {
   const setPaused = useUi((s) => s.setPaused);
   const go = useUi((s) => s.go);
   const online = useHud((s) => s.net !== 'local');
+  const hosting = useNet((s) => s.kind === 'host');
   const resume = () => {
     setPaused(false);
     engine.input.lock();
@@ -300,8 +303,9 @@ function PauseMenu() {
         <Button size="lg" block onClick={() => go('settings')}>
           Settings
         </Button>
+        {hosting && <p className="muted small">You’re hosting: leaving ends the game for everyone.</p>}
         <Button size="lg" block variant="danger" onClick={() => leaveMatch()}>
-          Leave match
+          {hosting ? 'End game' : 'Leave match'}
         </Button>
       </div>
     </div>

@@ -10,7 +10,10 @@ import { useUi } from './state/ui';
 createRoot(document.getElementById('root')!).render(<App webgl2={webgl2Available()} />);
 
 // Dev-only handle for debugging in the console; stripped from production builds.
-if (import.meta.env.DEV) void import('./game/engine').then(({ engine }) => import('./settings/settings').then(({ useSettings }) => Object.assign(window, { __cs: { engine, useUi, useSettings } })));
+if (import.meta.env.DEV)
+  void Promise.all([import('./game/engine'), import('./settings/settings'), import('./multiplayer/net')]).then(([{ engine }, { useSettings }, net]) =>
+    Object.assign(window, { __cs: { engine, useUi, useSettings, net } }),
+  );
 
 // Service worker: offline caching plus an explicit, user-confirmed update.
 if ('serviceWorker' in navigator && import.meta.env.PROD) {

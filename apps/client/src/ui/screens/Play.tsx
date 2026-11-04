@@ -10,23 +10,27 @@ import {
   type ModeId,
 } from '@chromashift/shared';
 import { startOffline } from '../../game/session';
+import { hostFromMenu } from '../../multiplayer/net';
 import { useUi } from '../../state/ui';
 import { Icon } from '../icons';
 import { Button, Header, Segmented, Setting } from '../kit';
 
 export const DIFF_LABEL: Record<BotDifficulty, string> = { easy: 'Easy', normal: 'Normal', hard: 'Hard', expert: 'Expert' };
-export const onlineIntent: { mode: 'quick' | 'create' | 'join' | null } = { mode: null };
+export const onlineIntent: { mode: 'join' | null } = { mode: null };
 
 export function Play() {
   const go = useUi((s) => s.go);
-  const online = (mode: 'quick' | 'create' | 'join') => {
-    onlineIntent.mode = mode;
-    go('online');
-  };
   const items = [
-    { icon: <Icon.bolt />, title: 'Quick Play', desc: 'Jump into an online Turf Control match. Bots fill empty slots.', run: () => online('quick') },
-    { icon: <Icon.users />, title: 'Private Room', desc: 'Create a room, share the code, play with friends.', run: () => online('create') },
-    { icon: <Icon.key />, title: 'Join Room', desc: 'Enter a room code from a friend.', run: () => online('join') },
+    { icon: <Icon.users />, title: 'Host a game', desc: 'Friends join with your code. Runs in your browser, nothing to install.', run: () => void hostFromMenu() },
+    {
+      icon: <Icon.key />,
+      title: 'Join a game',
+      desc: 'Enter a friend’s code, or rejoin a recent game.',
+      run: () => {
+        onlineIntent.mode = 'join';
+        go('online');
+      },
+    },
     {
       icon: <Icon.target />,
       title: 'Practice Against Bots',

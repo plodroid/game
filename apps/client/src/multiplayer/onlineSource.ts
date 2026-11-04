@@ -1,4 +1,3 @@
-import type { Room } from '@colyseus/sdk';
 import {
   BTN,
   createPlayerState,
@@ -36,6 +35,7 @@ import {
   type WeaponId,
 } from '@chromashift/shared';
 import type { FrameInput, MatchOutcome, MatchSource, ProjectileView, ViewPlayer } from '../game/source';
+import type { NetRoom } from './net';
 
 /** Remote players are drawn this many ticks in the past (≈100 ms) for smooth interpolation. */
 const INTERP_TICKS = 6;
@@ -89,7 +89,7 @@ export class OnlineSource implements MatchSource {
   private offs: (() => void)[] = [];
 
   constructor(
-    private room: Room,
+    private room: NetRoom,
     start: MatchStart,
   ) {
     this.config = start.config;
@@ -145,6 +145,8 @@ export class OnlineSource implements MatchSource {
       }
       this.events.push(e);
     }
+    // A hidden tab keeps receiving snapshots but stops drawing: don't replay minutes of effects on return.
+    if (this.events.length > 300) this.events.splice(0, this.events.length - 300);
     this.fx = s.fx.map(unpackEffect);
     for (const arr of s.p) {
       const id = arr[0];

@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react';
 import { accounts } from './auth/account';
 import { engine } from './game/engine';
 import { showMenu } from './game/session';
-import { detectServer, useNet } from './multiplayer/net';
+import { detectServer, setInvite, useNet } from './multiplayer/net';
 import { prefersReducedMotion, useSettings } from './settings/settings';
 import { useUi, type Screen } from './state/ui';
 import { Hud } from './ui/hud/Hud';
@@ -57,7 +57,7 @@ export function App({ webgl2 }: { webgl2: boolean }) {
     const join = params.get('join');
     if (join) {
       useNet.setState({ error: null });
-      sessionStorage.setItem('chromashift.join', join);
+      setInvite(join, params.get('server') ?? undefined);
       useUi.getState().go('online');
       history.replaceState(null, '', location.pathname);
     }

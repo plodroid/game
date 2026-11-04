@@ -961,6 +961,35 @@ select {
   font-size: 0.78rem;
 }
 
+.disclosure {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.disclosure__chev {
+  display: grid;
+  color: var(--faint);
+  transition: transform 200ms var(--ease-out);
+}
+
+.disclosure[aria-expanded='true'] .disclosure__chev {
+  transform: rotate(90deg);
+}
+
+:root[data-motion='reduced'] .disclosure__chev {
+  transition: none;
+}
+
 .slot--empty {
   color: var(--faint);
   font-size: 0.88rem;

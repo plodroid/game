@@ -1,6 +1,6 @@
 # CHROMASHIFT
 
-A colourful third-person team paint shooter that runs in the browser. Two teams of four race to cover the arena in their colour: shoot, roll and lob paint, dive into your own colour to swim and refill, climb painted walls, and splat rivals. It plays fully offline against bots, online with friends in private rooms, and on your LAN from a self-hosted server.
+A colourful third-person team paint shooter that runs in the browser. Two teams of four race to cover the arena in their colour: shoot, roll and lob paint, dive into your own colour to swim and refill, climb painted walls, and splat rivals. It plays fully offline against bots, and online with friends: anyone can host a game from their browser and friends join with a code. No downloads, no server, no port forwarding.
 
 **Play:** https://plodroid.github.io/game/ (installable as an app)
 
@@ -16,7 +16,7 @@ A colourful third-person team paint shooter that runs in the browser. Two teams 
 - **GPU paint system**: every paint event becomes instanced splat stamps rendered into an atlas render target (one draw call per frame). Map materials read the atlas for colour, gloss and raised paint edges. Territory scoring uses an ownership grid over the real paintable area, excluding occluded and overlapping surfaces.
 - **Bots that actually play**: an auto-generated navigation graph (walk, jump, drop and launch-pad links), A* routing that avoids rival paint, painting goals, fighting with leading aim and ledge awareness, refilling, retreating, supporting teammates, team goal claims and specials. Four difficulties change reaction time, aim wobble, turn rate and strategy; bots never get extra rules or perfect aim.
 - **Three original maps**: Skyline (sunset rooftops), Core (indoor arena with glass roof), Float (islands in the clouds). Maps are mirrored, so both teams get identical routes.
-- **Multiplayer**: Colyseus server running the same simulation authoritatively. Room codes, Quick Play, host controls, bot fill, late join, reconnection, client prediction with reconciliation, snapshot interpolation, input validation and rate limiting.
+- **Multiplayer**: host a game from the browser and share a 5-character code (it stays the same each time you host) or an invite link. Browsers connect directly over WebRTC; the host's tab runs the same authoritative match code as the optional Colyseus dedicated server. Host controls, bot fill, late join, reconnection, recent games, client prediction with reconciliation, snapshot interpolation, input validation and rate limiting.
 - **Accounts** (optional, free Firebase Spark plan): Continue with Google or email and password, unique case-insensitive usernames, profiles, cloud-synced settings and progression, guest play with later linking.
 - **Settings**: Very Low to Ultra graphics presets plus every option individually, hardware check, audio buses, key rebinding, gamepad and touch controls, camera and HUD options, and accessibility (colour-blind palettes with shape markers, text size, reduced motion, subtitles, visual audio cues, high contrast).
 - **PWA**: installable, works offline against bots, asks before updating.
@@ -30,7 +30,7 @@ A colourful third-person team paint shooter that runs in the browser. Two teams 
 | Physics | Rapier 3D 0.21 (kinematic character controller, capsule collision, fixed 60 Hz step) |
 | UI | React 19 + Zustand, hand-written CSS |
 | Build | Vite 8, vite-plugin-pwa (Workbox) |
-| Multiplayer | Node.js 22 + Colyseus 0.18 over WebSockets |
+| Multiplayer | Browser-hosted games over WebRTC data channels (PeerJS for connection setup, MessagePack); optional dedicated server on Node.js 22 + Colyseus 0.18 |
 | Accounts | Firebase Authentication + Cloud Firestore (Spark plan), Firebase Admin on the server (optional) |
 | Local storage | IndexedDB (profile) and localStorage (settings) |
 | Quality | TypeScript strict, ESLint, Prettier, Vitest, Playwright |
@@ -75,7 +75,7 @@ apps/client/        Web client (Vite + React + three.js)
   src/characters/   procedural character model + animation controller
   src/weapons/      procedural weapon models
   src/audio/        synthesized sound effects, music, ambience
-  src/multiplayer/  Colyseus client, prediction / interpolation source
+  src/multiplayer/  browser hosting (WebRTC), server client, prediction / interpolation source
   src/auth/         Firebase accounts and cloud sync (lazy-loaded)
   src/settings/     settings store, presets, hardware detection
   src/ui/           screens, HUD and UI kit
@@ -109,13 +109,15 @@ Every keyboard and mouse binding can be changed in Settings → Controls. Touch 
 
 ## Multiplayer
 
-The website (GitHub Pages) is **static**: it can't run the game server. Multiplayer needs a CHROMASHIFT server running somewhere.
+**Host a game:** Play → Host a game. Your browser runs the match and shows a code. Keep the tab open (it can be in the background).
 
-- **LAN (easiest):** on one computer run `npm install`, `npm run build`, `npm run start:server`. The console prints addresses such as `http://192.168.1.20:2567/game/`. Everyone on the network opens that address and the game connects to that server automatically. You may need to allow Node.js through the firewall.
-- **Direct connect:** Online → Direct connect → host/IP and port.
-- **Internet:** see [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md) for port forwarding, NAT and firewall setup, TLS (`wss://`) via a free reverse proxy or tunnel, and the limits of hosting from home.
+**Join:** Online → enter the code, or open the host's invite link. Games you've joined are listed under Recent games.
 
-Browsers block plain `ws://` connections from an HTTPS page, except to `localhost`. So the public site at `https://plodroid.github.io/game/` can only join `wss://` servers. For a LAN server without TLS, open the game from the server's own address, as described above.
+That's all: nothing to install, no accounts needed, no router settings. Browsers connect directly over WebRTC after a free public broker introduces them. On very strict networks (some schools, offices and mobile data) a direct link can fail. A phone hotspot or another host usually works, and an optional TURN relay can be configured for those players.
+
+**Dedicated server (optional):** for an always-on server, verified online stats or LAN play without internet, run the Node.js server (`npm run start:server`) and use Online → Dedicated servers.
+
+See [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md) for how it works, its limits, the TURN option, and dedicated server setup (LAN, port forwarding, TLS, tunnels).
 
 ## Accounts
 
@@ -155,7 +157,9 @@ Measured on an **NVIDIA GeForce GT 740** (the low end this project targets), ful
 
 - **Black screen or the "can't run" message:** enable hardware acceleration in the browser, update graphics drivers, try Chrome, Edge or Firefox.
 - **Low FPS:** pick Very Low, or lower Resolution scale. Close other GPU-heavy tabs.
-- **Can't connect to a server:** check the address and port, that the server is running, and the firewall. From the HTTPS site, the server must use `wss://`. The Online screen shows the server's status.
+- **"No game is open with that code":** check the code with the host, and that their game is still open.
+- **"Couldn't connect to the host":** one of the networks blocks direct connections. Try another network (a phone hotspot often works) or let someone else host. See the TURN option in docs/MULTIPLAYER.md.
+- **Can't connect to a dedicated server:** check the address and port, that the server is running, and the firewall. From the HTTPS site, the server must use `wss://`. Online → Dedicated servers shows the server's status.
 - **"Different version" when joining:** refresh the page or accept the update prompt, or ask the host to update.
 - **Sign-in popup blocked:** allow popups, or the game falls back to a redirect. "Unauthorized domain" means the site's domain must be added in Firebase Authentication → Settings → Authorized domains.
 - **Progress not syncing:** it stays saved on your device and syncs when the account service is reachable. The Profile screen shows the sync status.

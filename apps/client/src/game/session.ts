@@ -1,4 +1,3 @@
-import type { Room } from '@colyseus/sdk';
 import {
   initPhysics,
   levelInfo,
@@ -12,7 +11,7 @@ import {
   type PlayerInfo,
 } from '@chromashift/shared';
 import { audio } from '../audio/audio';
-import { leaveRoom, netHooks, useNet } from '../multiplayer/net';
+import { leaveRoom, netHooks, useNet, type NetRoom } from '../multiplayer/net';
 import { benchmark, probeHardware, recommend } from '../settings/hardware';
 import { useSettings } from '../settings/settings';
 import { publicName, useProfile } from '../state/profile';
@@ -129,7 +128,7 @@ export async function startOffline(s: OfflineSetup) {
   }
 }
 
-export async function startOnline(room: Room, start: MatchStart) {
+export async function startOnline(room: NetRoom, start: MatchStart) {
   const { OnlineSource } = await import('../multiplayer/onlineSource');
   const ui = useUi.getState();
   await initPhysics();

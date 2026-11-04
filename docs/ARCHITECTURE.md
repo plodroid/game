@@ -1,11 +1,15 @@
 # Architecture
 
-## One simulation, two hosts
+## One simulation, every host
 
-`packages/shared` contains the complete game: maps, physics world, paint ownership, movement, weapons, projectiles, specials, modes, bots and the network protocol. It has no DOM or Node dependencies, apart from Rapier (WebAssembly), which runs in both.
+`packages/shared` contains the complete game: maps, physics world, paint ownership, movement, weapons, projectiles, specials, modes, bots, the network protocol and `RoomHost` (one lobby plus its authoritative match). It has no DOM or Node dependencies, apart from Rapier (WebAssembly), which runs in both.
 
 - **Offline**, the browser runs `Simulation` at a fixed 60 Hz and renders interpolated states (`OfflineSource`).
-- **Online**, the server runs the same `Simulation` authoritatively (`ArenaRoom`). Clients send inputs and render server snapshots (`OnlineSource`).
+- **Online**, a `RoomHost` runs the same `Simulation` authoritatively. Clients send inputs and render snapshots (`OnlineSource`). The `RoomHost` lives either:
+  - in a **player's browser** (`multiplayer/p2p.ts`): guests connect over WebRTC data channels, the host's own seat uses an in-page loopback, and a Web Worker drives the clock so hidden tabs keep ticking; or
+  - on the **dedicated server** (`ArenaRoom`), a thin Colyseus adapter for sockets, auth, reconnection and server limits.
+
+The client talks to either through the same small `NetRoom` interface.
 
 The renderer (`MatchView`) reads from a `MatchSource` interface and doesn't know which of the two it's drawing.
 
@@ -22,7 +26,8 @@ The renderer (`MatchView`) reads from a `MatchSource` interface and doesn't know
 
 ## Networking
 
-- Client → server: packed inputs `[seq, mx, mz, yaw, pitch, aimYaw, aimPitch, buttons]`, batched at about 30 Hz.
+- Client → host: packed inputs `[seq, mx, mz, yaw, pitch, aimYaw, aimPitch, buttons]`, batched at about 30 Hz. A player whose inputs stop for 400 ms (hidden tab, stalled link) stops moving and firing instead of running on.
+- Browser-hosted games send `[type, payload]` messages as MessagePack over one reliable, ordered data channel. A snapshot is encoded once and the same bytes go to every guest. Transport messages (`~hello`, `~welcome`, `~refuse`, `~ping`, `~pong`, `~bye`) handle seats, keepalive and the protocol version check.
 - Server → client at 20 Hz: a snapshot with every player's full movement state, the events since the last snapshot (paint, fire, hits, KOs, specials…), live effects, phase, timer and score. Scoreboard stats are added about once a second.
 - **Prediction.** The local player runs the same `stepMovement` on every input. When a snapshot arrives, the client resets to the server state and replays the inputs the server hasn't processed yet. Small differences are smoothed visually; large ones (respawn) snap.
 - **Interpolation.** Remote players are drawn about 100 ms (6 ticks) in the past, between buffered snapshots, with a drift-corrected clock.

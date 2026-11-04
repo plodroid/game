@@ -18,5 +18,6 @@ export * from './sim/simulation';
 export * from './bots/nav';
 export * from './bots/brain';
 export * from './net/protocol';
+export * from './net/roomHost';
 export * from './validation';
 export * from './progression';

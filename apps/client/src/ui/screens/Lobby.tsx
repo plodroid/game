@@ -15,7 +15,7 @@ import {
   type LobbySettings,
   type ModeId,
 } from '@chromashift/shared';
-import { leaveRoom, send, useNet } from '../../multiplayer/net';
+import { HOST_CODE_KEY, leaveRoom, send, useNet } from '../../multiplayer/net';
 import { teamNames } from '../../rendering/palette';
 import { useProfile } from '../../state/profile';
 import { useUi } from '../../state/ui';
@@ -23,6 +23,14 @@ import { Avatar } from '../Avatar';
 import { Icon, TeamShape } from '../icons';
 import { Button, Header, Segmented, Setting, Toggle, useCopy } from '../kit';
 import { DIFF_LABEL } from './Play';
+
+function savedHostCode() {
+  try {
+    return localStorage.getItem(HOST_CODE_KEY);
+  } catch {
+    return null;
+  }
+}
 
 export default function Lobby() {
   const net = useNet();
@@ -58,7 +66,13 @@ export default function Lobby() {
     profile.patch(patch as never);
     send(MSG.LOADOUT, { weapon: patch.weapon ?? profile.weapon, special: patch.special ?? profile.special, cosmetics: profile.cosmetics });
   };
-  const invite = `${location.origin}${location.pathname}?join=${lobby.code}`;
+  const kind = net.kind;
+  const hostName = lobby.players.find((p) => p.id === lobby.hostId)?.name;
+  // Dedicated-server rooms need the server in the link; browser-hosted games only need the code.
+  const server = kind === 'server' && !net.sameOrigin ? `&server=${encodeURIComponent(net.endpoint)}` : '';
+  const invite = `${location.origin}${location.pathname}?join=${lobby.code}${server}`;
+  const permanent = kind === 'host' && savedHostCode() === lobby.code;
+  const close = () => (leaveRoom(), go('online'));
 
   const slot = (p: LobbyPlayer | undefined, i: number, team: number) =>
     p ? (
@@ -96,12 +110,22 @@ export default function Lobby() {
   return (
     <main className="screen screen--solid">
       <Header
-        title={lobby.quick ? 'Quick Play' : 'Private room'}
-        sub={lobby.quick ? (lobby.startsIn != null ? `Match starts in ${lobby.startsIn}s — bots fill empty slots.` : 'Starting…') : host ? 'You’re the host.' : 'Waiting for the host to start.'}
-        onBack={() => (leaveRoom(), go('online'))}
+        title={lobby.quick ? 'Quick Play' : kind === 'server' ? 'Private room' : kind === 'host' ? 'Your game' : `${hostName ?? 'Friend'}’s game`}
+        sub={
+          lobby.quick
+            ? lobby.startsIn != null
+              ? `Match starts in ${lobby.startsIn}s — bots fill empty slots.`
+              : 'Starting…'
+            : kind === 'host'
+              ? 'Your browser is hosting. Keep this tab open; it can stay in the background.'
+              : host
+                ? 'You’re the host.'
+                : 'Waiting for the host to start.'
+        }
+        onBack={close}
         end={
-          <Button variant="danger" onClick={() => (leaveRoom(), go('online'))}>
-            Leave
+          <Button variant="danger" onClick={close}>
+            {kind === 'host' ? 'End game' : 'Leave'}
           </Button>
         }
       />
@@ -109,9 +133,14 @@ export default function Lobby() {
         <section className="panel row" style={{ justifyContent: 'space-between' }}>
           <div>
             <p className="eyebrow" style={{ margin: 0 }}>
-              Room code
+              {kind === 'server' ? 'Room code' : 'Game code'}
             </p>
             <div className="code num">{lobby.code}</div>
+            {kind === 'host' && (
+              <p className="muted small" style={{ margin: '8px 0 0' }}>
+                Friends enter it under Online → Join{permanent ? '. It stays the same every time you host from this browser.' : '.'}
+              </p>
+            )}
           </div>
           <div className="row">
             <Button onClick={() => copyCode(lobby.code)}>{copiedCode ? <Icon.check /> : <Icon.copy />} Copy code</Button>
