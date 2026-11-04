@@ -20,7 +20,8 @@ afterEach(() => {
 describe('RoomHost', () => {
   it('runs a match without any network, stops stalled players, and resumes seats without restarting the match', () => {
     vi.useFakeTimers();
-    const room = new RoomHost({ code: 'ABCDE' });
+    // No bots: they move unpredictably and could bump the player this test watches.
+    const room = new RoomHost({ code: 'ABCDE', settings: { botFill: false } });
     const a = seat('a'),
       b = seat('b');
     room.join(a.client, { name: 'Ann' });
