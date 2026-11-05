@@ -51,7 +51,12 @@ export class MenuView implements View {
     this.scene.background = this.paper.color;
     this.scene.fog = new THREE.Fog(STUDIO, 20, 48);
     this.setTint(useUi.getState().screen, true);
-    this.unsubScreen = useUi.subscribe((st, prev) => st.screen !== prev.screen && this.setTint(st.screen));
+    this.unsubScreen = useUi.subscribe((st, prev) => {
+      if (st.screen === prev.screen) return;
+      this.setTint(st.screen);
+      // The victory or defeat pose belongs to the results screen only.
+      if (prev.screen === 'results') this.outcome = 'none';
+    });
 
     // Studio light: a warm key, a cool fill and a rim from behind for the silhouette.
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0xc6c6c2, 1.7));

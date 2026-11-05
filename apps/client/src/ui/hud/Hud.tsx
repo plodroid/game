@@ -20,11 +20,6 @@ export function Hud() {
   const touchMode = useSettings((s) => s.controls.touchControls);
   const paused = useUi((s) => s.paused);
   const names = teamNames();
-  const [locked, setLocked] = useState(false);
-  useEffect(() => {
-    const t = setInterval(() => setLocked(engine.input.locked || engine.input.engaged), 250);
-    return () => clearInterval(t);
-  }, []);
   const coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
   const showTouch = touchMode === 'on' || (touchMode === 'auto' && coarse);
   useEffect(() => {
@@ -162,11 +157,6 @@ export function Hud() {
       </div>
 
       {h.showBoard && <Scoreboard />}
-      {!locked && !paused && !showTouch && h.phase !== 'ending' && h.phase !== 'ended' && (
-        <div className="prompt" onClick={() => engine.input.lock()}>
-          Click to {h.phase === 'intro' ? 'take control' : 'resume'} · {keyLabel(bindings.pause[0])} to pause
-        </div>
-      )}
       {showTouch && !paused && <TouchControls charge={h.charge} team={h.myTeam} />}
       {paused && <PauseMenu />}
     </div>

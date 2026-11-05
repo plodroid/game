@@ -128,6 +128,11 @@ export class MatchView implements View {
     engine.input.onPause = () => {
       if (this.source.phase() !== 'ended') useUi.getState().setPaused(true);
     };
+    // Take control straight away: keys work now, and the mouse is captured while the click
+    // that started the match still counts as a gesture (otherwise on the first key or click).
+    engine.input.wantsLock = true;
+    engine.input.engaged = true;
+    engine.input.lock();
     engine.input.onScoreboard = (open) => useHud.setState({ showBoard: open });
     audio.startMusic('match');
     audio.startAmbient(map.theme.indoor ? 'hum' : 'wind');

@@ -47,6 +47,11 @@ export class InputManager {
     if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
     const code = e.code;
     if (e.type === 'keydown') {
+      // In a match, any key takes control: keys work at once and the mouse is captured (a key press counts as a gesture).
+      if (this.wantsLock && !this.locked && !this.isBound('pause', code)) {
+        this.engaged = true;
+        this.lock();
+      }
       if (code === 'Tab' || code === 'Space' || code.startsWith('Arrow')) e.preventDefault();
       if (!this.down.has(code)) this.latched.add(code);
       this.down.add(code);

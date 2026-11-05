@@ -48,7 +48,8 @@ export interface Launcher {
 }
 
 const feet = v3(), fwd = v3(), right = v3(), wish = v3(), wallN = v3(), delta = v3(), moved = v3();
-const push = v3(), pushed = v3();
+const push = v3(), pushed = v3(), probe = v3();
+const DOWN = v3(0, -1, 0);
 
 /** Closest two players' centres get: a little under two radii, so brushing past still works. */
 export const PLAYER_GAP = PLAYER_RADIUS * 1.8;
@@ -247,9 +248,32 @@ export function stepMovement(
 
   if (!p.climbing) vel.y = Math.max(vel.y - GRAVITY * dt, -MOVE.maxFall);
 
-  set(delta, vel.x * dt, vel.y * dt, vel.z * dt);
+  // On the ground, step along the surface under the feet. The controller keeps only the part of a
+  // move that runs along a slope, so a flat step (or one pressed into the ground) would lose most
+  // of its length on ramps. Following the slope keeps full speed up and down; snap-to-ground and
+  // keep the feet on it.
+  let dy = vel.y * dt;
+  const walking = p.grounded && vel.y <= 0 && !p.climbing;
+  if (walking) {
+    const hit = w.raycast(set(probe, p.pos.x, p.pos.y - FEET_OFFSET + 0.3, p.pos.z), DOWN, 0.75);
+    dy = hit && hit.normal.y > 0.55 ? (-(hit.normal.x * vel.x + hit.normal.z * vel.z) / hit.normal.y) * dt : -0.02;
+  }
+  set(delta, vel.x * dt, dy, vel.z * dt);
   const wasGrounded = p.grounded;
-  const grounded = w.moveCapsule(col, p.pos, delta, moved);
+  let grounded = w.moveCapsule(col, p.pos, delta, moved);
+  // A walking step that catches on a lip or a seam between blocks: try it again a hand's
+  // width higher and keep whichever got further. Real walls block both.
+  if (walking && Math.hypot(moved.x, moved.z) < Math.hypot(delta.x, delta.z) * 0.8) {
+    const lowX = moved.x, lowY = moved.y, lowZ = moved.z;
+    delta.y += 0.06;
+    const liftGrounded = w.moveCapsule(col, p.pos, delta, moved);
+    if (Math.hypot(moved.x, moved.z) > Math.hypot(lowX, lowZ) + 1e-4) grounded = liftGrounded || grounded;
+    else {
+      set(moved, lowX, lowY, lowZ);
+      col.setTranslation({ x: p.pos.x + lowX, y: p.pos.y + lowY, z: p.pos.z + lowZ });
+    }
+    delta.y -= 0.06;
+  }
   p.pos.x += moved.x;
   p.pos.y += moved.y;
   p.pos.z += moved.z;
