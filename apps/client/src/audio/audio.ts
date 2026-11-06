@@ -1,4 +1,4 @@
-import type { Vec3, WeaponId } from '@chromashift/shared';
+import { WEAPONS, type Vec3, type WeaponId } from '@chromashift/shared';
 import { useSettings } from '../settings/settings';
 
 type Bus = 'music' | 'sfx' | 'weapons' | 'ui' | 'ambient';
@@ -155,7 +155,7 @@ class AudioEngine {
     const k = p * vary;
     switch (name) {
       case 'shot': {
-        const w = o.weapon ?? 'pulse';
+        const w = WEAPONS[o.weapon ?? 'pulse']?.base ?? 'pulse';
         if (w === 'arc') {
           this.tone(dest, t, 180 * k, 48, 0.22, 'sine', 0.7);
           this.hiss(dest, t, 0.25, 'lowpass', 2400, 300, 0.8, 0.5);

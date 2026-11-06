@@ -2,7 +2,7 @@
 export const USERNAME_MIN = 3;
 export const USERNAME_MAX = 16;
 export const DISPLAY_NAME_MAX = 24;
-export const PASSWORD_MIN = 8;
+export const PASSWORD_MIN = 10;
 
 const USERNAME_RE = /^[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?$/;
 const RESERVED = new Set([
@@ -37,9 +37,23 @@ export function validateDisplayName(name: string): string | null {
   return null;
 }
 
-export function validatePassword(pw: string): string | null {
+/** 0 (weak) to 4 (strong): length plus how many kinds of character it mixes. */
+export function passwordStrength(pw: string): number {
+  const kinds = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter((r) => r.test(pw)).length;
+  if (pw.length < PASSWORD_MIN) return Math.min(1, kinds);
+  return Math.min(4, (pw.length >= 14 ? 2 : 1) + Math.max(0, kinds - 2));
+}
+
+/** A strong password: long enough, mixing upper case, lower case, numbers and a symbol, and not the username. */
+export function validatePassword(pw: string, username = ''): string | null {
   if (pw.length < PASSWORD_MIN) return `Use at least ${PASSWORD_MIN} characters.`;
-  if (!/[A-Za-z]/.test(pw) || !/[0-9]/.test(pw)) return 'Mix letters and numbers.';
+  if (pw.length > 128) return 'Use at most 128 characters.';
+  if (!/[a-z]/.test(pw) || !/[A-Z]/.test(pw)) return 'Mix upper and lower case letters.';
+  if (!/[0-9]/.test(pw)) return 'Add at least one number.';
+  if (!/[^A-Za-z0-9]/.test(pw)) return 'Add at least one symbol, like ! ? # or *.';
+  const u = username.trim().toLowerCase();
+  if (u.length >= 3 && pw.toLowerCase().includes(u)) return 'Don’t put your username in your password.';
+  if (/(.)\1\1\1/.test(pw)) return 'Avoid repeating the same character.';
   return null;
 }
 

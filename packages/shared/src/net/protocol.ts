@@ -26,7 +26,27 @@ export const MSG = {
   SYNC: 'sync',
   END: 'end',
   NOTICE: 'notice',
+  /** Text chat: client → host { text, team }, host → clients ChatLine. */
+  CHAT: 'chat',
 } as const;
+
+export const CHAT_MAX = 120;
+
+export interface ChatLine {
+  id: number;
+  name: string;
+  team: number;
+  text: string;
+  /** Sent to the sender's team only. */
+  toTeam: boolean;
+}
+
+/** Cleans a chat line: printable characters only, trimmed, length-capped. */
+export function cleanChat(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  // eslint-disable-next-line no-control-regex
+  return raw.replace(/[\u0000-\u001f\u007f\u200b-\u200f\u2028-\u202e]/g, '').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX);
+}
 
 export interface LobbySettings {
   map: MapId;

@@ -1,5 +1,5 @@
 import { DT, MAX_PLAYERS, TEAM_SIZE, type Team } from '../constants';
-import { DEFAULT_COSMETICS, sanitizeCosmetics, type Cosmetics } from '../config/cosmetics';
+import { botLook, DEFAULT_COSMETICS, sanitizeCosmetics, type Cosmetics } from '../config/cosmetics';
 import { BOT_DIFFICULTIES, DURATION_OPTIONS, MODES, type ModeId } from '../config/modes';
 import { SPECIAL_IDS, type SpecialId } from '../config/specials';
 import { WEAPON_IDS, type WeaponId } from '../config/weapons';
@@ -9,12 +9,14 @@ import { Simulation, type MatchResult } from '../sim/simulation';
 import { xpForMatch } from '../progression';
 import { cleanPlayerName } from '../validation';
 import {
+  cleanChat,
   MSG,
   packEffect,
   packEvent,
   packPlayer,
   PHASES,
   unpackInput,
+  type ChatLine,
   type LobbyPlayer,
   type LobbySettings,
   type LobbyState,
@@ -59,6 +61,9 @@ interface Member {
   last: Input;
   lastSeq: number;
   lastInputAt: number;
+  /** Chat flood control: a small bucket of messages that refills over time. */
+  chatTokens: number;
+  chatAt: number;
   client: HostClient;
 }
 
@@ -168,6 +173,8 @@ export class RoomHost {
       last: emptyInput(),
       lastSeq: 0,
       lastInputAt: Date.now(),
+      chatTokens: 4,
+      chatAt: Date.now(),
       client,
     };
     this.members.set(client.id, m);
@@ -283,6 +290,17 @@ export class RoomHost {
       case MSG.TO_LOBBY:
         if (this.isHost(id) && this.phaseNow === 'results') this.toLobby();
         return;
+      case MSG.CHAT: {
+        const text = cleanChat(d.text);
+        const now = Date.now();
+        m.chatTokens = Math.min(4, m.chatTokens + (now - m.chatAt) / 1500);
+        m.chatAt = now;
+        if (!text || m.chatTokens < 1) return;
+        m.chatTokens -= 1;
+        const line: ChatLine = { id: m.pid, name: m.name, team: m.team, text, toTeam: d.team === true };
+        for (const x of this.members.values()) if (x.connected && (!line.toTeam || x.team === m.team)) x.client.send(MSG.CHAT, line);
+        return;
+      }
     }
   }
 
@@ -312,12 +330,7 @@ export class RoomHost {
             special: pick(SPECIAL_IDS),
             bot: true,
             difficulty: s.botDifficulty,
-            cosmetics: {
-              ...DEFAULT_COSMETICS,
-              hair: pick(['fin', 'spikes', 'bob']),
-              headgear: pick(['none', 'cap', 'phones']),
-              skin: Math.floor(Math.random() * 6),
-            },
+            cosmetics: botLook(this.nextPid * 7919 + Math.floor(Math.random() * 1e6)),
           });
     }
     this.sim = new Simulation(

@@ -1,8 +1,8 @@
 import { create } from 'zustand';
-import type { MatchResult, SpecialId, WeaponId } from '@chromashift/shared';
+import type { Cosmetics, MatchResult, SpecialId, WeaponId } from '@chromashift/shared';
 
 export type Screen =
-  | 'home' | 'play' | 'custom' | 'online' | 'lobby' | 'locker' | 'progression' | 'profile' | 'settings' | 'auth'
+  | 'home' | 'play' | 'custom' | 'online' | 'lobby' | 'locker' | 'progression' | 'profile' | 'settings' | 'auth' | 'social'
   | 'match' | 'results';
 
 export interface Toast {
@@ -21,6 +21,7 @@ export interface ResultsData {
   xpBefore: number;
   online: boolean;
   recorded: boolean;
+  coins: number;
 }
 
 interface UiStore {
@@ -31,7 +32,10 @@ interface UiStore {
   toasts: Toast[];
   results: ResultsData | null;
   online: boolean;
+  /** Something the locker is showing on the character before it's bought or equipped. */
+  tryOn: { cosmetics?: Partial<Cosmetics>; weapon?: WeaponId; emote?: string } | null;
   go(s: Screen): void;
+  setTryOn(t: UiStore['tryOn']): void;
   back(): void;
   setPaused(p: boolean): void;
   setLoading(l: string | null): void;
@@ -50,6 +54,8 @@ export const useUi = create<UiStore>()((set, get) => ({
   toasts: [],
   results: null,
   online: typeof navigator === 'undefined' ? true : navigator.onLine,
+  tryOn: null,
+  setTryOn: (tryOn) => set({ tryOn }),
   go: (s) => set((st) => (st.screen === s ? st : { screen: s, history: [...st.history, st.screen].slice(-12) })),
   back: () => {
     const h = get().history;
@@ -128,6 +134,8 @@ export interface HudState {
   ping: number | null;
   net: 'local' | 'good' | 'poor' | 'lost';
   lowInkAt: number;
+  /** Minimap shown large (toggled with the map key). */
+  bigMap: boolean;
 }
 
 export const useHud = create<HudState>()(() => ({
@@ -162,4 +170,5 @@ export const useHud = create<HudState>()(() => ({
   ping: null,
   net: 'local',
   lowInkAt: 0,
+  bigMap: false,
 }));

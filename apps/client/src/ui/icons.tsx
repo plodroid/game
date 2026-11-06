@@ -109,6 +109,61 @@ export const Icon = {
       <path d="M4.5 20c1.2-3.6 4-5.5 7.5-5.5s6.3 1.9 7.5 5.5" />
     </svg>
   ),
+  lock: ({ size = 14, ...p }: P) => (
+    <svg {...base(size, p)}>
+      <rect x="5" y="10.5" width="14" height="9.5" rx="2.5" />
+      <path d="M8.5 10.5V8a3.5 3.5 0 017 0v2.5" />
+    </svg>
+  ),
+  search: ({ size = 18, ...p }: P) => (
+    <svg {...base(size, p)}>
+      <circle cx="10.5" cy="10.5" r="6" />
+      <path d="M15 15l5 5" />
+    </svg>
+  ),
+  mic: ({ size = 16, ...p }: P) => (
+    <svg {...base(size, p)}>
+      <rect x="9" y="3.5" width="6" height="11" rx="3" fill="currentColor" stroke="none" />
+      <path d="M6 11.5a6 6 0 0012 0M12 17.5V21" />
+    </svg>
+  ),
+  micOff: ({ size = 16, ...p }: P) => (
+    <svg {...base(size, p)}>
+      <path d="M9 9V6.5a3 3 0 016 0V11M6 11.5a6 6 0 009.6 4.8M12 17.5V21M4 4l16 16" />
+    </svg>
+  ),
+  bell: ({ size = 20, ...p }: P) => (
+    <svg {...base(size, p)}>
+      <path d="M6 16.5V11a6 6 0 0112 0v5.5l1.5 1.5h-15zM10 20.5a2 2 0 004 0" />
+    </svg>
+  ),
+  chat: ({ size = 20, ...p }: P) => (
+    <svg {...base(size, p)}>
+      <path d="M4.5 6.5a2 2 0 012-2h11a2 2 0 012 2v8a2 2 0 01-2 2H11l-4.5 3.5v-3.5h0a2 2 0 01-2-2z" />
+    </svg>
+  ),
+  send: ({ size = 18, ...p }: P) => (
+    <svg {...base(size, p)}>
+      <path d="M4 12l16-7.5-6 16-2.5-6.5z" fill="currentColor" stroke="none" />
+    </svg>
+  ),
+  plus: ({ size = 18, ...p }: P) => (
+    <svg {...base(size, p)}>
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  ),
+  party: ({ size = 20, ...p }: P) => (
+    <svg {...base(size, p)}>
+      <circle cx="8" cy="9" r="3" />
+      <circle cx="16.5" cy="9.5" r="2.5" />
+      <path d="M3 19c.6-3.2 2.6-5 5-5s4.4 1.8 5 5M13.5 15.2c.9-.8 1.9-1.2 3-1.2 2 0 3.6 1.6 4 5" />
+    </svg>
+  ),
+  stop: ({ size = 16, ...p }: P) => (
+    <svg {...base(size, p)}>
+      <rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none" />
+    </svg>
+  ),
   google: ({ size = 18 }: P) => (
     <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden>
       <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
@@ -128,6 +183,17 @@ export function TeamShape({ team, size = 14 }: { team: number; size?: number }) 
   ) : (
     <svg className="shape" width={size} height={size} viewBox="0 0 14 14" aria-label="Team B">
       <circle cx="7" cy="7" r="5.8" fill="var(--team-b)" />
+    </svg>
+  );
+}
+
+/** A coin: a paint drop stamped on a disc. */
+export function Coin({ size = 16 }: { size?: number }) {
+  return (
+    <svg className="coin" width={size} height={size} viewBox="0 0 20 20" aria-hidden>
+      <circle cx="10" cy="10" r="9" fill="#ffc532" />
+      <circle cx="10" cy="10" r="6.6" fill="none" stroke="#c98d10" strokeWidth="1.4" />
+      <path d="M10 5.2c1.8 1.6 3 2.7 3 4.6a3 3 0 01-6 0c0-1.9 1.2-3 3-4.6z" fill="#c98d10" />
     </svg>
   );
 }

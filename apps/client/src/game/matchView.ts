@@ -28,6 +28,8 @@ import { teamColors, teamNames } from '../rendering/palette';
 import { Post } from '../rendering/post';
 import { prefersReducedMotion, useSettings, type GraphicsSettings } from '../settings/settings';
 import { useHud, useUi, type BoardRow, type FeedItem } from '../state/ui';
+import { useChat } from '../state/chat';
+import { voice, useVoice } from '../multiplayer/voice';
 import { ThirdPersonCamera } from './camera';
 import { engine, type View } from './engine';
 import { touch } from './input';
@@ -36,7 +38,7 @@ import type { FrameInput, MatchOutcome, MatchSource, ViewPlayer } from './source
 interface CharView {
   rig: Rig;
   anim: Animator;
-  tag: THREE.Sprite | null;
+  tag: Tag | null;
   yaw: number;
   wasAlive: boolean;
   wasDiving: boolean;
@@ -134,6 +136,9 @@ export class MatchView implements View {
     engine.input.engaged = true;
     engine.input.lock();
     engine.input.onScoreboard = (open) => useHud.setState({ showBoard: open });
+    engine.input.onChat = () => useChat.getState().setOpen(true);
+    engine.input.onTalk = (down) => void voice.talk(down);
+    engine.input.onMap = () => useHud.setState((h) => ({ bigMap: !h.bigMap }));
     audio.startMusic('match');
     audio.startAmbient(map.theme.indoor ? 'hum' : 'wind');
     audio.onWorldSound = (at, kind) => this.worldCue(at, kind);
@@ -202,11 +207,11 @@ export class MatchView implements View {
     this.scene.add(rig.root);
     const me = this.source.players().find((p) => p.id === this.source.localId);
     const friendly = me ? me.info.team === v.info.team : false;
-    let tag: THREE.Sprite | null = null;
+    let tag: Tag | null = null;
     if (v.id !== this.source.localId) {
       tag = nameTag(v.info.name, this.colors[v.info.team], friendly);
-      rig.root.add(tag);
-      tag.position.y = 2.15;
+      rig.root.add(tag.sprite);
+      tag.sprite.position.y = 2.28;
     }
     // Blob shadow on the cheapest preset (no shadow maps).
     if (g.shadowQuality === 0) {
@@ -403,8 +408,9 @@ export class MatchView implements View {
         }
         audio.play('shot', { at: e, weapon: e.w, gain: e.id === local ? 0.8 : 0.9 });
         if (e.id === local) {
-          if (e.w === 'arc' || e.w === 'lobber') this.cam.addShake(0.25);
-          engine.input.rumble(e.w === 'arc' ? 0.6 : 0.15, 60);
+          const kind = WEAPONS[e.w]?.kind;
+          if (kind === 'burst' || kind === 'lobber') this.cam.addShake(0.25);
+          engine.input.rumble(kind === 'burst' ? 0.6 : 0.15, 60);
         }
         break;
       }
@@ -533,6 +539,7 @@ export class MatchView implements View {
     const me = this.me();
     const seen = new Set<number>();
     const camPos = this.cam.camera.position;
+    const speaking = useVoice.getState().speaking;
     for (const v of src.players()) {
       seen.add(v.id);
       const c = this.charFor(v);
@@ -590,9 +597,13 @@ export class MatchView implements View {
         }
       }
       if (c.tag) {
+        // Teammates always show; rivals show when in sight (walls hide them) and not lurking in paint.
         const teamInd = useSettings.getState().gameplay.teamIndicators;
-        c.tag.visible = s.alive && ((!enemy && teamInd) || revealed);
-        (c.tag.material as THREE.SpriteMaterial).depthTest = !revealed && enemy;
+        const close = enemy ? this.cam.camera.position.distanceTo(root.position) < 34 : true;
+        c.tag.sprite.visible = s.alive && (enemy ? revealed || (!hidden && close) : teamInd);
+        (c.tag.sprite.material as THREE.SpriteMaterial).depthTest = !revealed && enemy;
+        const hp = Math.round(Math.max(0, s.hp) / 5) * 5, talking = !!speaking[v.id];
+        if (hp !== c.tag.hp || talking !== c.tag.talking) c.tag.draw(hp, talking);
       }
       // Hide our own model if the camera is squeezed into it.
       if (v.id === src.localId) c.rig.body.visible = c.rig.body.visible && this.cam.camera.position.distanceTo(root.position) > 1.1;
@@ -719,11 +730,32 @@ export class MatchView implements View {
     engine.renderer.shadowMap.needsUpdate = true;
   }
 
+  /** What the minimap draws: the map and who's where. Rivals only appear while they're in sight. */
+  radar() {
+    const src = this.source;
+    const me = src.players().find((p) => p.id === src.localId);
+    return {
+      map: src.world.map,
+      yaw: this.cam.yaw,
+      colors: this.colors,
+      players: src.players().map((v) => {
+        const c = this.chars.get(v.id);
+        const ally = !!me && v.info.team === me.info.team;
+        return { id: v.id, x: v.pos.x, z: v.pos.z, team: v.info.team, name: v.info.name, me: v.id === src.localId, alive: v.state.alive, seen: ally || !!c?.tag?.sprite.visible };
+      }),
+    };
+  }
+
   dispose() {
     audio.onWorldSound = null;
     audio.stopAmbient();
     engine.input.onPause = null;
     engine.input.onScoreboard = null;
+    engine.input.onChat = null;
+    engine.input.onTalk = null;
+    engine.input.onMap = null;
+    void voice.talk(false);
+    useChat.getState().setOpen(false);
     engine.input.wantsLock = false;
     engine.input.engaged = false;
     engine.input.unlock();
@@ -749,34 +781,96 @@ export class MatchView implements View {
   }
 }
 
-function nameTag(name: string, color: THREE.Color, friendly: boolean): THREE.Sprite {
+interface Tag {
+  sprite: THREE.Sprite;
+  hp: number;
+  talking: boolean;
+  draw(hp: number, talking: boolean): void;
+}
+
+/**
+ * The tag over a player: a segmented health bar in their team's paint above their name, which
+ * brightens with a microphone beside it while they talk on voice chat.
+ */
+function nameTag(name: string, color: THREE.Color, friendly: boolean): Tag {
   const c = document.createElement('canvas');
-  c.width = 256;
-  c.height = 64;
+  c.width = 320;
+  c.height = 128;
   const ctx = c.getContext('2d')!;
-  ctx.font = '700 26px "Archivo Variable", system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.lineWidth = 6;
-  ctx.strokeStyle = 'rgba(10,10,20,0.85)';
-  ctx.strokeText(name, 128, 24);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText(name, 128, 24);
-  ctx.fillStyle = `#${color.getHexString()}`;
-  ctx.beginPath();
-  if (friendly) {
-    ctx.moveTo(116, 46);
-    ctx.lineTo(140, 46);
-    ctx.lineTo(128, 60);
-  } else {
-    ctx.arc(128, 52, 8, 0, Math.PI * 2);
-  }
-  ctx.fill();
+  const paint = `#${color.getHexString()}`;
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-  s.scale.set(1.6, 0.4, 1);
-  s.renderOrder = 10;
-  return s;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  sprite.scale.set(1.75, 0.7, 1);
+  sprite.renderOrder = 10;
+  const label = name.length > 16 ? `${name.slice(0, 15)}…` : name;
+  const tag: Tag = {
+    sprite,
+    hp: -1,
+    talking: false,
+    draw(hp, talking) {
+      tag.hp = hp;
+      tag.talking = talking;
+      ctx.clearRect(0, 0, c.width, c.height);
+      // Health: ten segments, like [|||||||   ].
+      const bw = 200, bh = 18, bx = (c.width - bw) / 2, by = 10;
+      ctx.fillStyle = 'rgba(14,11,20,0.82)';
+      ctx.beginPath();
+      ctx.roundRect(bx - 4, by - 4, bw + 8, bh + 8, 9);
+      ctx.fill();
+      const lit = Math.ceil((hp / 100) * 10);
+      for (let i = 0; i < 10; i++) {
+        ctx.fillStyle = i < lit ? (hp <= 30 ? '#ff5a5f' : paint) : 'rgba(255,255,255,0.12)';
+        ctx.beginPath();
+        ctx.roundRect(bx + i * (bw / 10) + 1.5, by, bw / 10 - 3, bh, 3);
+        ctx.fill();
+      }
+      // Name, plus the mic while talking.
+      ctx.font = '800 30px "Archivo Variable", system-ui, sans-serif';
+      ctx.textBaseline = 'middle';
+      const w = ctx.measureText(label).width;
+      const mic = talking ? 30 : 0;
+      const x = (c.width - w - mic) / 2, y = 62;
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = 'rgba(10,8,16,0.9)';
+      ctx.strokeText(label, x, y);
+      if (talking) {
+        ctx.shadowColor = paint;
+        ctx.shadowBlur = 14;
+      }
+      ctx.fillStyle = talking ? '#ffffff' : 'rgba(240,236,246,0.82)';
+      ctx.fillText(label, x, y);
+      ctx.shadowBlur = 0;
+      if (talking) {
+        const mx = x + w + 18;
+        ctx.fillStyle = paint;
+        ctx.strokeStyle = 'rgba(10,8,16,0.9)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(mx - 6, y - 15, 12, 20, 6);
+        ctx.stroke();
+        ctx.fill();
+        ctx.strokeStyle = paint;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(mx, y - 2, 10, 0.15 * Math.PI, 0.85 * Math.PI);
+        ctx.moveTo(mx, y + 8);
+        ctx.lineTo(mx, y + 14);
+        ctx.stroke();
+      }
+      // Team marker: triangle for team A's shape language, dot for rivals.
+      ctx.fillStyle = paint;
+      ctx.beginPath();
+      if (friendly) {
+        ctx.moveTo(148, 92);
+        ctx.lineTo(172, 92);
+        ctx.lineTo(160, 106);
+      } else ctx.arc(160, 99, 8, 0, Math.PI * 2);
+      ctx.fill();
+      tex.needsUpdate = true;
+    },
+  };
+  tag.draw(100, false);
+  return tag;
 }
 

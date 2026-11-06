@@ -11,6 +11,8 @@ export interface AccountUser {
   provider: 'google' | 'password' | 'other';
   photoURL: string | null;
   emailVerified: boolean;
+  /** A Google account is linked as a way back in. */
+  google: boolean;
 }
 
 export interface VerifiedStats {
@@ -52,7 +54,7 @@ export function accounts(): Promise<Impl> | null {
   });
   impl.catch(() => {
     impl = null;
-    useAccount.setState({ status: 'unavailable', error: 'Account service unavailable. You can keep playing offline as a guest.' });
+    useAccount.setState({ status: 'unavailable', error: 'The account service can’t be reached. Check your connection and try again.' });
   });
   return impl;
 }
@@ -84,10 +86,14 @@ netHooks.idToken = async () => {
 export function describeAuthError(e: unknown): string {
   const code = (e as { code?: string })?.code ?? (e instanceof Error ? e.message : '');
   const map: Record<string, string> = {
-    'auth/invalid-credential': 'Email or password is incorrect.',
-    'auth/wrong-password': 'Email or password is incorrect.',
-    'auth/user-not-found': 'No account uses that email.',
-    'auth/email-already-in-use': 'An account already uses that email. Try signing in instead.',
+    'auth/invalid-credential': 'Username or password is incorrect.',
+    'auth/wrong-password': 'Username or password is incorrect.',
+    'auth/user-not-found': 'No account has that username.',
+    'auth/email-already-in-use': 'That username is taken. Try another, or sign in.',
+    'auth/credential-already-in-use': 'That Google account is already linked to another player.',
+    'auth/provider-already-linked': 'A Google account is already linked.',
+    'auth/no-such-provider': 'No Google account is linked.',
+    NO_LINKED_ACCOUNT: 'That Google account isn’t linked to a CHROMASHIFT account. Sign in with your username, then link Google from your profile.',
     'auth/weak-password': 'Choose a stronger password.',
     'auth/invalid-email': 'Enter a valid email address.',
     'auth/popup-closed-by-user': 'Sign-in window closed before finishing.',
@@ -103,5 +109,7 @@ export function describeAuthError(e: unknown): string {
     'permission-denied': 'The account service refused that change.',
   };
   for (const [k, v] of Object.entries(map)) if (code.includes(k)) return v;
+  // Validation errors from the forms are already written for players.
+  if (e instanceof Error && !(e as { code?: string }).code && /[a-z]\.$/.test(e.message)) return e.message;
   return code ? `Something went wrong (${code}).` : 'Something went wrong.';
 }

@@ -1,0 +1,38 @@
+{
+  "name": "@chromashift/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CHROMASHIFT as a desktop app: the web build in its own window.",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "pack": "npm run build -w @chromashift/client && electron-builder --dir --win"
+  },
+  "build": {
+    "appId": "game.chromashift.desktop",
+    "productName": "CHROMASHIFT",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.cjs",
+      {
+        "from": "../client/dist",
+        "to": "web",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "dir",
+      "icon": "../client/public/pwa-512x512.png"
+    },
+    "electronVersion": "45.2.3"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  },
+  "author": "CHROMASHIFT"
+}

@@ -6,7 +6,10 @@ import { leaveMatch } from '../../game/session';
 import { useNet } from '../../multiplayer/net';
 import { teamNames } from '../../rendering/palette';
 import { useSettings } from '../../settings/settings';
+import { publicName, useProfile } from '../../state/profile';
 import { useHud, useUi } from '../../state/ui';
+import { Chat } from './Chat';
+import { Minimap } from './Minimap';
 import { TeamShape } from '../icons';
 import { Button, keyLabel } from '../kit';
 
@@ -35,6 +38,8 @@ export function Hud() {
   const ready = h.charge >= 1;
   const C = 2 * Math.PI * 27;
   const playing = h.phase === 'playing';
+  const you = useNet((n) => n.you);
+  const myName = useProfile((p) => publicName(p));
 
   return (
     <div className={`hud ${showTouch ? 'hud--touch' : ''}`}>
@@ -137,6 +142,9 @@ export function Hud() {
             </div>
           </div>
         </div>
+
+        <Minimap />
+        <Chat me={{ id: you ?? 1, name: myName, team: h.myTeam }} />
 
         <div className="center-text">
           {h.phase === 'intro' && h.countdown > 0 && (

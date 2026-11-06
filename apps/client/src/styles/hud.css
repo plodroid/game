@@ -627,3 +627,119 @@
     padding: 0 10px;
   }
 }
+
+/* ---------- Minimap ---------- */
+.minimap {
+  position: absolute;
+  top: calc(56px + var(--safe-t));
+  right: calc(16px + var(--safe-r));
+  border-radius: 28px 34px 26px 32px / 32px 26px 34px 28px;
+  background: rgba(18, 15, 24, 0.72);
+  box-shadow: 0 16px 40px -14px rgba(0, 0, 0, 0.7);
+  transition:
+    width 260ms var(--ease-out),
+    height 260ms var(--ease-out);
+}
+
+/* ---------- Chat ---------- */
+.chat {
+  position: absolute;
+  left: calc(20px + var(--safe-l));
+  bottom: calc(132px + var(--safe-b));
+  width: min(380px, 60vw);
+  pointer-events: none;
+}
+
+.chat[data-open='true'] {
+  pointer-events: auto;
+}
+
+.chat__log {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 220px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.chat[data-open='true'] .chat__log {
+  overflow-y: auto;
+  padding: 8px;
+  border-radius: 16px;
+  background: rgba(18, 15, 24, 0.7);
+}
+
+.chat__line {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 3px 9px;
+  border-radius: 10px;
+  background: rgba(18, 15, 24, 0.55);
+  color: #f4efe9;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+  transition: opacity 400ms ease;
+}
+
+.chat__tag {
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.chat__box {
+  display: flex;
+  gap: 6px;
+  animation: enter 160ms var(--ease-out) both;
+}
+
+.chat__box .input {
+  flex: 1;
+  height: 42px;
+  background: rgba(14, 11, 20, 0.92);
+}
+
+.chat__to {
+  height: 42px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(14, 11, 20, 0.92);
+  color: #f4efe9;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.chat__hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: rgba(244, 239, 233, 0.7);
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.key-hint {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(18, 15, 24, 0.75);
+  color: #f4efe9;
+  font-weight: 800;
+}
+
+.voice-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+}
+
+.voice-hint[data-live='true'] {
+  color: #5fd68a;
+}

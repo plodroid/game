@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { ACCENTS, EMOTES, HAIR, HEADGEAR, levelInfo, OUTFITS, validateDisplayName, WEAPONS } from '@chromashift/shared';
+import { itemsFor, levelInfo, validateDisplayName, WEAPONS, type Slot } from '@chromashift/shared';
 import { act, useAccount } from '../../auth/account';
 import { firebaseConfigured } from '../../env';
 import { favouriteWeapon, publicName, useProfile } from '../../state/profile';
 import { useUi } from '../../state/ui';
 import { Avatar } from '../Avatar';
+import { AccountPanel } from '../AccountPanel';
 import { Button, Field, Header } from '../kit';
 
-const nameOf = (list: { id: string; name: string }[], id: string) => list.find((o) => o.id === id)?.name ?? id;
+const nameOf = (slot: Exclude<Slot, 'weapon'>, id: string) => itemsFor(slot).find((o) => o.id === id)?.name ?? id;
 
 export default function Profile() {
   const p = useProfile();
@@ -123,52 +124,17 @@ export default function Profile() {
         <section className="panel">
           <h2 className="panel__title">Equipped</h2>
           <p className="muted small" style={{ margin: 0 }}>
-            {WEAPONS[p.weapon].name} · {nameOf(HAIR, p.cosmetics.hair)} · {nameOf(HEADGEAR, p.cosmetics.headgear)} · {nameOf(OUTFITS, p.cosmetics.outfit)} ·{' '}
-            {nameOf(ACCENTS, p.cosmetics.accent)} · {nameOf(EMOTES, p.cosmetics.emote)}
+            {WEAPONS[p.weapon].name} · {nameOf('hair', p.cosmetics.hair)} · {nameOf('headgear', p.cosmetics.headgear)} · {nameOf('outfit', p.cosmetics.outfit)} ·{' '}
+            {nameOf('accent', p.cosmetics.accent)} · {nameOf('emote', p.cosmetics.emote)}
           </p>
           <div className="row" style={{ marginTop: 12 }}>
             <Button onClick={() => go('locker')}>Open locker</Button>
           </div>
         </section>
 
-        <section className="panel">
-          <h2 className="panel__title">Account</h2>
-          {!firebaseConfigured ? (
-            <p className="muted small" style={{ margin: 0 }}>
-              Accounts aren’t configured on this build, so everything is saved on this device. See the README to enable Firebase sign-in.
-            </p>
-          ) : signedIn ? (
-            <>
-              <p className="muted small" style={{ margin: '0 0 12px' }}>
-                Signed in{acc.user?.email ? ` as ${maskEmail(acc.user.email)}` : ''} with {acc.user?.provider === 'google' ? 'Google' : 'email'}. Sync:{' '}
-                {acc.sync === 'synced' ? 'up to date' : acc.sync === 'syncing' ? 'saving…' : acc.sync === 'pending' ? 'saved on this device, will sync when possible' : acc.sync === 'error' ? 'failed, retrying' : 'idle'}
-              </p>
-              <Button variant="danger" disabled={acc.busy} onClick={() => void act((m) => m.signOut())}>
-                Sign out
-              </Button>
-            </>
-          ) : acc.status === 'needsUsername' ? (
-            <Button variant="primary" onClick={() => go('auth')}>
-              Choose your username
-            </Button>
-          ) : (
-            <>
-              <p className="muted small" style={{ margin: '0 0 12px' }}>
-                Sign in to sync your level, unlocks and settings across browsers and the installed app. Your guest progress is kept when you create an account.
-              </p>
-              <Button variant="primary" onClick={() => go('auth')}>
-                Sign in or create account
-              </Button>
-              {acc.status === 'unavailable' && <p className="field__error">{acc.error}</p>}
-            </>
-          )}
-        </section>
+        {firebaseConfigured && signedIn && <AccountPanel />}
       </div>
     </main>
   );
 }
 
-function maskEmail(e: string) {
-  const [u, d] = e.split('@');
-  return `${u.slice(0, 2)}${'•'.repeat(Math.max(1, u.length - 2))}@${d}`;
-}

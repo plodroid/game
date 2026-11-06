@@ -7,6 +7,7 @@ import {
   normalizeRoomCode,
   PROTOCOL_VERSION,
   ROOM_NAME,
+  type ChatLine,
   type JoinOptions,
   type LobbySettings,
   type LobbyState,
@@ -14,8 +15,10 @@ import {
 } from '@chromashift/shared';
 import { env } from '../env';
 import { publicName, useProfile } from '../state/profile';
+import { useChat } from '../state/chat';
 import { useUi } from '../state/ui';
 import type { PeerHello } from './p2p';
+import { voice } from './voice';
 
 export type NetStatus = 'idle' | 'connecting' | 'lobby' | 'match' | 'error';
 /** server: a dedicated server · host: this tab hosts the game · peer: a game hosted in someone else's tab. */
@@ -352,6 +355,11 @@ function bind(room: NetRoom, kind: RoomKind, endpoint?: string) {
     if (first && kind !== 'host' && !l.quick) remember(l, kind === 'server' ? endpoint : undefined);
     first = false;
     useNet.setState({ lobby: l, you: l.you, status: l.phase === 'lobby' ? 'lobby' : 'match' });
+    // Everyone in the room can talk, in the lobby and in matches.
+    voice.join(l.code, l.you, l.players.filter((p) => !p.bot && p.connected && p.id !== l.you).map((p) => p.id));
+  });
+  room.onMessage(MSG.CHAT, (line: ChatLine) => {
+    if (useNet.getState().room === room) useChat.getState().push(line);
   });
   room.onMessage(MSG.MATCH, (start: MatchStart) => {
     useNet.setState({ status: 'match', you: start.you });
@@ -367,6 +375,8 @@ function bind(room: NetRoom, kind: RoomKind, endpoint?: string) {
   });
   room.onLeave((code: number) => {
     if (useNet.getState().room !== room) return;
+    voice.leave();
+    useChat.getState().clear();
     const wasMatch = useNet.getState().status === 'match';
     useNet.setState({ room: null, kind: null, lobby: null, status: 'idle', reconnecting: false });
     const toast = useUi.getState().toast;
@@ -383,6 +393,8 @@ function bind(room: NetRoom, kind: RoomKind, endpoint?: string) {
 
 export function leaveRoom() {
   const room = useNet.getState().room;
+  voice.leave();
+  useChat.getState().clear();
   useNet.setState({ room: null, kind: null, lobby: null, status: 'idle', reconnecting: false });
   void room?.leave(true);
 }

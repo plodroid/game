@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { levelInfo, MAPS, MODES, unlocksAt, WEAPONS } from '@chromashift/shared';
+import { LEVEL_COINS, levelInfo, MAPS, MODES, WEAPONS } from '@chromashift/shared';
 import { replayOffline } from '../../game/session';
 import { send, useNet } from '../../multiplayer/net';
 import { teamNames } from '../../rendering/palette';
 import { useUi } from '../../state/ui';
 import { MSG } from '@chromashift/shared';
-import { TeamShape } from '../icons';
+import { Coin, TeamShape } from '../icons';
 import { Button } from '../kit';
 
 export default function Results() {
@@ -40,27 +40,20 @@ export default function Results() {
   const before = levelInfo(r.xpBefore),
     after = levelInfo(r.xpBefore + r.xp);
   const levelled = after.level > before.level;
-  const unlocked = levelled
-    ? Array.from({ length: after.level - before.level }, (_, i) => unlocksAt(before.level + i + 1)).flat()
-    : [];
-  const nextUnlock = Array.from({ length: 8 }, (_, i) => ({
-    lvl: after.level + i + 1,
-    items: unlocksAt(after.level + i + 1),
-  })).find((x) => x.items.length);
   const sorted = [...res.players].sort((a, b) => a.team - b.team || b.paint - a.paint);
   const isHost = lobby && lobby.hostId === you;
 
   // The verdict sits on a field of your team's paint when you win, on ink when you lose.
   const field =
     verdict === 'Victory' || practice
-      ? { ['--pig' as string]: me?.team === 1 ? 'var(--team-b)' : 'var(--team-a)', ['--pig-ink' as string]: 'var(--ink)' }
+      ? { ['--pig' as string]: me?.team === 1 ? 'var(--team-b)' : 'var(--team-a)', ['--pig-ink' as string]: 'var(--on-paint)' }
       : verdict === 'Defeat'
-        ? { ['--pig' as string]: 'var(--ink)', ['--pig-ink' as string]: 'var(--paper)' }
-        : { ['--pig' as string]: 'var(--graphite)', ['--pig-ink' as string]: '#fff' };
+        ? { ['--pig' as string]: 'var(--s3)', ['--pig-ink' as string]: 'var(--tx)' }
+        : { ['--pig' as string]: 'var(--graphite)', ['--pig-ink' as string]: 'var(--on-paint)' };
 
   return (
     <main className="screen results">
-      <header className="header" style={field}>
+      <header className="header verdict-field" style={field}>
         <div>
           <p className="header__sub" style={{ margin: 0 }}>
             {MODES[res.mode].name} · {MAPS[res.map].name} · {Math.floor(res.duration / 60)}:{String(res.duration % 60).padStart(2, '0')}
@@ -146,16 +139,14 @@ export default function Results() {
                 style={{ transform: `scaleX(${shown ? after.progress : before.progress})` }}
               />
             </div>
-            {levelled && (
-              <p style={{ margin: '10px 0 0' }}>
-                Level up! {unlocked.length ? `Unlocked: ${unlocked.map((u) => u.name).join(', ')}.` : ''}
-              </p>
-            )}
-            {!levelled && nextUnlock && (
-              <p className="muted small" style={{ margin: '10px 0 0' }}>
-                Next unlock at level {nextUnlock.lvl}: {nextUnlock.items.map((u) => u.name).join(', ')}
-              </p>
-            )}
+            <p className="row" style={{ margin: '12px 0 0', gap: 8 }}>
+              <span className="coins">
+                <Coin size={18} /> <span className="num">+{r.coins.toLocaleString()}</span>
+              </span>
+              <span className="muted small">
+                {levelled ? `Level up! Includes ${LEVEL_COINS * (after.level - before.level)} bonus coins.` : 'Spend coins in the Locker. Quests pay more.'}
+              </span>
+            </p>
           </div>
         )}
 

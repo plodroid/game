@@ -29,19 +29,25 @@ service cloud.firestore {
         && s.keys().hasOnly(['games', 'wins', 'losses', 'draws', 'kills', 'deaths', 'assists', 'paint', 'bestPaint', 'weaponGames'])
         && count(s.games) && count(s.wins) && count(s.losses) && count(s.kills) && count(s.paint)
         && s.wins + s.losses <= s.games
-        && s.weaponGames is map && s.weaponGames.size() <= 8;
+        && s.weaponGames is map && s.weaponGames.size() <= 32;
+    }
+    function shortId(v) {
+      return v is string && v.size() <= 24;
     }
     function validCosmetics(c) {
-      return c is map && c.keys().hasOnly(['hair', 'headgear', 'outfit', 'accent', 'skin', 'emote'])
-        && c.hair is string && c.hair.size() <= 16
-        && c.headgear is string && c.headgear.size() <= 16
-        && c.outfit is string && c.outfit.size() <= 16
-        && c.accent is string && c.accent.size() <= 16
+      return c is map
+        && c.keys().hasOnly(['hair', 'hairColor', 'headgear', 'face', 'outfit', 'back', 'accent', 'skin', 'emote', 'title', 'banner', 'finish'])
+        && shortId(c.hair) && shortId(c.headgear) && shortId(c.outfit) && shortId(c.accent) && shortId(c.emote)
         && c.skin is int && c.skin >= 0 && c.skin < 16
-        && c.emote is string && c.emote.size() <= 16;
+        && (!('hairColor' in c) || shortId(c.hairColor))
+        && (!('face' in c) || shortId(c.face))
+        && (!('back' in c) || shortId(c.back))
+        && (!('title' in c) || shortId(c.title))
+        && (!('banner' in c) || shortId(c.banner))
+        && (!('finish' in c) || shortId(c.finish));
     }
     function validUser(d) {
-      return d.keys().hasOnly(['username', 'usernameKey', 'displayName', 'createdAt', 'updatedAt', 'xp', 'stats', 'weapon', 'special', 'cosmetics', 'settings'])
+      return d.keys().hasOnly(['username', 'usernameKey', 'displayName', 'createdAt', 'updatedAt', 'xp', 'stats', 'weapon', 'special', 'cosmetics', 'settings', 'coins', 'owned', 'quests'])
         && validUsername(d.username)
         && d.usernameKey == d.username.lower()
         && validDisplayName(d.displayName)
@@ -50,7 +56,36 @@ service cloud.firestore {
         && d.weapon is string && d.weapon.size() <= 16
         && d.special is string && d.special.size() <= 16
         && validCosmetics(d.cosmetics)
-        && (!('settings' in d) || d.settings is map);
+        && (!('settings' in d) || d.settings is map)
+        // Coins are earned and spent on this device (no server to check them on the free plan).
+        && (!('coins' in d) || count(d.coins))
+        && (!('owned' in d) || (d.owned is list && d.owned.size() <= 500))
+        && (!('quests' in d) || d.quests is map);
+    }
+    function validStatsCard(s) {
+      return s is map && s.keys().hasOnly(['games', 'wins', 'kills', 'paint'])
+        && count(s.games) && count(s.wins) && count(s.kills) && count(s.paint);
+    }
+    function validCard(d) {
+      return d.keys().hasOnly(['username', 'usernameKey', 'displayName', 'level', 'cosmetics', 'stats', 'online', 'seenAt', 'activity', 'updatedAt'])
+        && validDisplayName(d.displayName)
+        && d.level is int && d.level >= 1 && d.level <= 99
+        && validCosmetics(d.cosmetics)
+        && (!('usernameKey' in d) || d.usernameKey == d.username.lower())
+        && (!('stats' in d) || validStatsCard(d.stats))
+        && (!('online' in d) || d.online is bool)
+        && (!('activity' in d) || d.activity in ['menu', 'lobby', 'match']);
+    }
+    // Two account ids joined in order: the id of a friendship or a conversation.
+    function pairOf(id) {
+      return id.split('_');
+    }
+    function inPair(id) {
+      return signedIn() && pairOf(id).size() == 2 && request.auth.uid in pairOf(id);
+    }
+    function friends(id) {
+      return exists(/databases/$(database)/documents/friendships/$(id))
+        && get(/databases/$(database)/documents/friendships/$(id)).data.status == 'accepted';
     }
 
     // Username registry. Public `get` lets the sign-up form check availability.
@@ -87,22 +122,111 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Public player card (no email, no private settings).
+    // Public player card (no email, no private settings). Searchable by username.
     match /profiles/{uid} {
       allow read: if signedIn();
       allow create: if isOwner(uid)
-        && request.resource.data.keys().hasOnly(['username', 'displayName', 'level', 'cosmetics', 'updatedAt'])
         && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username.lower())).data.uid == uid
-        && validDisplayName(request.resource.data.displayName)
-        && request.resource.data.level is int && request.resource.data.level >= 1 && request.resource.data.level <= 99
-        && validCosmetics(request.resource.data.cosmetics);
+        && validCard(request.resource.data);
       allow update: if isOwner(uid)
-        && request.resource.data.keys().hasOnly(['username', 'displayName', 'level', 'cosmetics', 'updatedAt'])
         && request.resource.data.username == resource.data.username
-        && validDisplayName(request.resource.data.displayName)
-        && request.resource.data.level is int && request.resource.data.level >= 1 && request.resource.data.level <= 99
-        && validCosmetics(request.resource.data.cosmetics);
+        && validCard(request.resource.data);
       allow delete: if false;
+    }
+
+    // The player's own contact email and update preference. Owner only, never public.
+    match /private/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['email', 'updates', 'updatedAt'])
+        && request.resource.data.email is string && request.resource.data.email.size() <= 254
+        && request.resource.data.updates is bool;
+    }
+
+    // Friendships: one document per pair, its id the two account ids in order, joined by "_".
+    // A request is pending until the other player accepts; either player can end it.
+    match /friendships/{id} {
+      allow read: if signedIn() && request.auth.uid in resource.data.users;
+      allow create: if inPair(id)
+        && request.resource.data.keys().hasOnly(['users', 'requester', 'status', 'createdAt', 'updatedAt'])
+        && request.resource.data.users == pairOf(id)
+        && pairOf(id)[0] < pairOf(id)[1]
+        && request.resource.data.requester == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow update: if signedIn() && request.auth.uid in resource.data.users
+        && request.auth.uid != resource.data.requester
+        && resource.data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+        && request.resource.data.status == 'accepted';
+      allow delete: if signedIn() && request.auth.uid in resource.data.users;
+    }
+
+    // In-game notifications: anyone signed in may leave one for a player, signed with their own
+    // id; only that player can read, mark or clear them.
+    match /notifications/{uid}/items/{id} {
+      allow read, delete: if isOwner(uid);
+      allow update: if isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create: if signedIn() && request.auth.uid != uid
+        && request.resource.data.keys().hasOnly(['type', 'from', 'fromName', 'party', 'text', 'createdAt', 'expiresAt', 'read'])
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.type in ['friendRequest', 'friendAccepted', 'partyInvite', 'message']
+        && validDisplayName(request.resource.data.fromName)
+        && (!('text' in request.resource.data) || (request.resource.data.text is string && request.resource.data.text.size() <= 140))
+        && request.resource.data.read == false;
+    }
+
+    // Parties, keyed by the leader's id. The leader invites; an invite lasts five minutes and lets
+    // that player join; members can leave; the leader can share a game everyone follows.
+    match /parties/{leader} {
+      function invited() {
+        return request.auth.uid in resource.data.invites
+          && request.time < resource.data.invites[request.auth.uid];
+      }
+      // The leader may look before the party exists; queries list only parties you're in.
+      allow get: if isOwner(leader) || (signedIn() && (request.auth.uid in resource.data.members || request.auth.uid in resource.data.invites));
+      allow list: if signedIn() && request.auth.uid in resource.data.members;
+      allow create: if isOwner(leader)
+        && request.resource.data.keys().hasOnly(['leader', 'members', 'names', 'invites', 'game', 'updatedAt'])
+        && request.resource.data.leader == leader
+        && request.resource.data.members == [leader];
+      allow update: if signedIn() && request.resource.data.leader == resource.data.leader
+        && request.resource.data.members.size() <= 4
+        && (
+          request.auth.uid == leader
+          // Accepting an invite: add yourself, drop the invite.
+          || (invited()
+            && request.resource.data.members.hasAll(resource.data.members)
+            && request.resource.data.members.removeAll(resource.data.members).hasOnly([request.auth.uid])
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'names', 'invites', 'updatedAt']))
+          // Leaving: remove only yourself.
+          || (request.auth.uid in resource.data.members
+            && resource.data.members.removeAll(request.resource.data.members).hasOnly([request.auth.uid])
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'names', 'updatedAt']))
+        );
+      allow delete: if isOwner(leader);
+    }
+
+    // Direct messages between friends, in a conversation per pair. Voice notes are short
+    // recordings stored inline (the free plan has no file storage).
+    match /chats/{id} {
+      allow get: if inPair(id);
+      // Listing conversations is a query on "users"; it can't be checked against the id.
+      allow list: if signedIn() && request.auth.uid in resource.data.users;
+      allow write: if inPair(id) && friends(id)
+        && request.resource.data.keys().hasOnly(['users', 'last', 'updatedAt'])
+        && request.resource.data.users == pairOf(id);
+      match /messages/{mid} {
+        allow read: if inPair(id);
+        allow create: if inPair(id) && friends(id)
+          && request.resource.data.keys().hasOnly(['from', 'text', 'voice', 'duration', 'createdAt'])
+          && request.resource.data.from == request.auth.uid
+          && (
+            (request.resource.data.text is string && request.resource.data.text.size() >= 1 && request.resource.data.text.size() <= 500)
+            || (request.resource.data.voice is string && request.resource.data.voice.size() <= 400000
+              && request.resource.data.duration is number && request.resource.data.duration <= 31)
+          );
+        allow delete: if inPair(id) && resource.data.from == request.auth.uid;
+      }
     }
 
     // Server-verified online record. Read by the owner; written only via the Admin SDK.
@@ -118,7 +242,7 @@ service cloud.firestore {
       return d.keys().hasOnly(['code', 'name', 'map', 'mode', 'players', 'phase', 'protocol', 'updatedAt'])
         && d.code is string && d.code.matches('^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{5}$')
         && validDisplayName(d.name)
-        && d.map in ['skyline', 'core', 'float']
+        && d.map in ['skyline', 'core', 'float', 'docks', 'gardens', 'canyon', 'arcade']
         && d.mode in ['turf', 'zones', 'knockout']
         && d.players is int && d.players >= 1 && d.players <= 8
         && d.phase in ['lobby', 'match', 'results']

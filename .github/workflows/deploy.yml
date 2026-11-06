@@ -39,6 +39,16 @@ jobs:
       - name: Unit, simulation and multiplayer tests
         run: npm test
 
+      # The smoke tests drive the game itself, so they run on a build without accounts (no
+      # sign-in gate). The site that ships is built afterwards with the Firebase settings.
+      - name: Build client for the smoke tests (no accounts)
+        run: npm run build
+
+      - name: End-to-end smoke tests (built site under /game/)
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+
       - name: Build production client
         run: npm run build
         env:
@@ -53,11 +63,6 @@ jobs:
           VITE_TURN_URLS: ${{ vars.VITE_TURN_URLS }}
           VITE_TURN_USERNAME: ${{ vars.VITE_TURN_USERNAME }}
           VITE_TURN_CREDENTIAL: ${{ secrets.VITE_TURN_CREDENTIAL || vars.VITE_TURN_CREDENTIAL }}
-
-      - name: End-to-end smoke tests (built site under /game/)
-        run: |
-          npx playwright install --with-deps chromium
-          npm run test:e2e
 
       - uses: actions/configure-pages@v6
 

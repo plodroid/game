@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LobbyState } from '@chromashift/shared';
+import { DEFAULT_COSMETICS, type LobbyState } from '@chromashift/shared';
 
 // Firebase and the network layer are stood in for: this checks when listings are written and removed.
 const fb = { publishGame: vi.fn(async (_g: unknown) => {}), unpublishGame: vi.fn(async () => {}) };
@@ -30,7 +30,7 @@ const state = (players: number, phase: LobbyState['phase'] = 'lobby'): LobbyStat
     ready: false,
     weapon: 'pulse',
     special: 'surge',
-    cosmetics: { hair: 'fin', headgear: 'none', outfit: 'jacket', accent: 'graphite', skin: 1, emote: 'wave' },
+    cosmetics: DEFAULT_COSMETICS,
     bot: false,
     connected: true,
     verified: false,

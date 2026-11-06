@@ -2,22 +2,28 @@ import { initializeApp, type FirebaseApp } from 'firebase/app';
 import {
   browserLocalPersistence,
   browserPopupRedirectResolver,
+  connectAuthEmulator,
   createUserWithEmailAndPassword,
+  EmailAuthProvider,
+  getAdditionalUserInfo,
   getRedirectResult,
   GoogleAuthProvider,
   indexedDBLocalPersistence,
   initializeAuth,
+  linkWithPopup,
   onAuthStateChanged,
-  sendPasswordResetEmail,
+  reauthenticateWithCredential,
   signInWithEmailAndPassword,
   signInWithPopup,
-  signInWithRedirect,
   signOut as fbSignOut,
+  unlink,
+  updatePassword,
   type Auth,
   type User,
 } from 'firebase/auth';
 import {
   collection,
+  connectFirestoreEmulator,
   deleteDoc,
   doc,
   getDoc,
@@ -35,7 +41,7 @@ import {
   where,
   type Firestore,
 } from 'firebase/firestore';
-import { levelInfo, sanitizeCosmetics, usernameKey, validateDisplayName, validateUsername, type Cosmetics } from '@chromashift/shared';
+import { levelInfo, sanitizeCosmetics, STARTING_COINS, usernameKey, validateDisplayName, validateEmail, validatePassword, validateUsername, type Cosmetics } from '@chromashift/shared';
 import { env } from '../env';
 import { settingsSnapshot, useSettings, type Settings } from '../settings/settings';
 import { newProfile, useProfile, type Profile, type Stats } from '../state/profile';
@@ -45,6 +51,8 @@ let app: FirebaseApp;
 let auth: Auth;
 let db: Firestore;
 let user: User | null = null;
+/** A sign-up is creating the profile; the auth listener mustn't report it missing meanwhile. */
+let claiming = false;
 
 /** Private, owner-only document. Never contains the password or the email. */
 interface UserDoc {
@@ -58,8 +66,18 @@ interface UserDoc {
   weapon: string;
   special: string;
   cosmetics: Cosmetics;
+  coins?: number;
+  owned?: string[];
+  quests?: Profile['quests'];
   settings?: Partial<Settings>;
 }
+
+/**
+ * Accounts sign in with a username and password. Firebase Authentication needs an email-shaped
+ * identifier, so each username maps to an address on the project's own auth domain. Nothing is
+ * ever sent there; a real email, if the player gives one, is kept separately and privately.
+ */
+const loginId = (name: string) => (name.includes('@') ? name.trim() : `${usernameKey(name)}@players.${env.firebase.authDomain ?? 'chromashift.firebaseapp.com'}`);
 
 export async function start() {
   app = initializeApp({ ...env.firebase });
@@ -67,7 +85,11 @@ export async function start() {
     persistence: [indexedDBLocalPersistence, browserLocalPersistence],
     popupRedirectResolver: browserPopupRedirectResolver,
   });
-  db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+  db = initializeFirestore(app, env.emulator ? {} : { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+  if (env.emulator) {
+    connectAuthEmulator(auth, `http://${location.hostname}:9099`, { disableWarnings: true });
+    connectFirestoreEmulator(db, location.hostname, 8080);
+  }
   await getRedirectResult(auth).catch(() => null);
   onAuthStateChanged(auth, (u) => void onUser(u));
 }
@@ -84,13 +106,13 @@ async function onUser(u: User | null) {
     return;
   }
   useAccount.setState({
-    user: { uid: u.uid, email: u.email, provider: providerOf(u), photoURL: u.photoURL, emailVerified: u.emailVerified },
+    user: { uid: u.uid, email: u.email, provider: providerOf(u), photoURL: u.photoURL, emailVerified: u.emailVerified, google: hasGoogle(u) },
     status: 'loading',
   });
   try {
     const snap = await getDoc(doc(db, 'users', u.uid));
     if (!snap.exists()) {
-      useAccount.setState({ status: 'needsUsername' });
+      if (!claiming) useAccount.setState({ status: 'needsUsername' });
       return;
     }
     applyCloud(u.uid, snap.data() as UserDoc);
@@ -116,6 +138,9 @@ function applyCloud(uid: string, d: UserDoc) {
     weapon: (d.weapon as Profile['weapon']) ?? local.weapon,
     special: (d.special as Profile['special']) ?? local.special,
     cosmetics: sanitizeCosmetics(d.cosmetics),
+    coins: typeof d.coins === 'number' ? Math.max(0, Math.floor(d.coins)) : local.uid === uid ? local.coins : STARTING_COINS,
+    owned: Array.isArray(d.owned) ? d.owned.filter((k) => typeof k === 'string') : local.uid === uid ? local.owned : [],
+    quests: d.quests && typeof d.quests === 'object' ? { ...newProfile().quests, ...d.quests } : local.uid === uid ? local.quests : newProfile().quests,
     dirty: false,
     updatedAt: Date.now(),
   };
@@ -138,20 +163,74 @@ export async function idToken() {
   return user?.getIdToken();
 }
 
-export async function signInGoogle() {
-  const provider = new GoogleAuthProvider();
-  provider.setCustomParameters({ prompt: 'select_account' });
-  try {
-    await signInWithPopup(auth, provider);
-  } catch (e) {
-    // Popups are blocked in some installed-app contexts; fall back to a full redirect.
-    if ((e as { code?: string }).code === 'auth/popup-blocked') await signInWithRedirect(auth, provider);
-    else throw e;
+const hasGoogle = (u: User) => u.providerData.some((p) => p.providerId === 'google.com');
+const google = () => {
+  const p = new GoogleAuthProvider();
+  p.setCustomParameters({ prompt: 'select_account' });
+  return p;
+};
+
+/** Signs in with a username (or, for older accounts, an email) and password. */
+export async function signIn(name: string, password: string) {
+  await signInWithEmailAndPassword(auth, loginId(name), password);
+}
+
+/**
+ * Recovery: signs in with a Google account that was linked to a CHROMASHIFT account. Google can't
+ * create accounts, so a Google account that isn't linked to one is turned away.
+ */
+export async function signInLinkedGoogle() {
+  const res = await signInWithPopup(auth, google());
+  if (getAdditionalUserInfo(res)?.isNewUser) {
+    await res.user.delete().catch(() => fbSignOut(auth));
+    throw Object.assign(new Error('NO_LINKED_ACCOUNT'), { code: 'NO_LINKED_ACCOUNT' });
   }
 }
 
-export async function signInEmail(email: string, password: string) {
-  await signInWithEmailAndPassword(auth, email.trim(), password);
+/** Links a Google account as a way back in, for a forgotten password. */
+export async function linkGoogle() {
+  if (!user) throw new Error('Not signed in');
+  await linkWithPopup(user, google());
+  await user.reload();
+  useAccount.setState((s) => ({ user: s.user && { ...s.user, google: true } }));
+}
+
+export async function unlinkGoogle() {
+  if (!user) throw new Error('Not signed in');
+  await unlink(user, 'google.com');
+  useAccount.setState((s) => ({ user: s.user && { ...s.user, google: false } }));
+}
+
+/**
+ * Sets a new password. With the current one when known; right after a linked-Google sign-in the
+ * session is fresh enough to set one without it.
+ */
+export async function changePassword(current: string | null, next: string) {
+  if (!user) throw new Error('Not signed in');
+  const err = validatePassword(next, useProfile.getState().username);
+  if (err) throw new Error(err);
+  if (current) await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email ?? loginId(useProfile.getState().username), current));
+  await updatePassword(user, next);
+}
+
+/** The player's own email for updates and security notices, never shown to anyone. */
+export interface PrivateInfo {
+  email: string;
+  updates: boolean;
+}
+
+export async function loadPrivate(): Promise<PrivateInfo | null> {
+  if (!user) return null;
+  const s = await getDoc(doc(db, 'private', user.uid));
+  return s.exists() ? (s.data() as PrivateInfo) : null;
+}
+
+export async function savePrivate(info: PrivateInfo) {
+  if (!user) throw new Error('Not signed in');
+  const email = info.email.trim();
+  const bad = email ? validateEmail(email) : null;
+  if (bad) throw new Error(bad);
+  await setDoc(doc(db, 'private', user.uid), { email, updates: !!info.updates && !!email, updatedAt: serverTimestamp() });
 }
 
 export async function isUsernameFree(name: string) {
@@ -159,12 +238,35 @@ export async function isUsernameFree(name: string) {
   return !s.exists();
 }
 
-export async function register(username: string, email: string, password: string) {
-  const err = validateUsername(username);
+/** Creates an account from a username and a strong password. The email is optional. */
+export async function register(username: string, password: string, email = '', updates = false) {
+  const err = validateUsername(username) ?? validatePassword(password, username) ?? (email.trim() ? validateEmail(email) : null);
   if (err) throw new Error(err);
   if (!(await isUsernameFree(username))) throw new Error('USERNAME_TAKEN');
-  const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-  await claimUsername(cred.user, username);
+  claiming = true;
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, loginId(username), password);
+    try {
+      // Firestore can send the first write before it has the new account's token; try again briefly.
+      for (let i = 0; ; i++) {
+        try {
+          await claimUsername(cred.user, username);
+          break;
+        } catch (e) {
+          if ((e as { code?: string }).code !== 'permission-denied' || i >= 3) throw e;
+          await cred.user.getIdToken(true);
+          await new Promise((r) => setTimeout(r, 300 * (i + 1)));
+        }
+      }
+    } catch (e) {
+      // Someone claimed the name in between: don't leave an account without a name behind.
+      await cred.user.delete().catch(() => undefined);
+      throw e;
+    }
+  } finally {
+    claiming = false;
+  }
+  if (email.trim()) await savePrivate({ email, updates }).catch(() => undefined);
 }
 
 /** Reserves the name and creates the profile atomically. Guest progress carries over. */
@@ -186,6 +288,9 @@ export async function claimUsername(u: User | null = user, username: string) {
     weapon: local.weapon,
     special: local.special,
     cosmetics: local.cosmetics,
+    coins: local.uid ? STARTING_COINS : local.coins,
+    owned: local.uid ? [] : local.owned,
+    quests: local.quests,
     settings: s,
   };
   await runTransaction(db, async (tx) => {
@@ -193,23 +298,22 @@ export async function claimUsername(u: User | null = user, username: string) {
     if ((await tx.get(nameRef)).exists()) throw new Error('USERNAME_TAKEN');
     tx.set(nameRef, { uid: u.uid, name: username.trim(), createdAt: serverTimestamp() });
     tx.set(doc(db, 'users', u.uid), data);
-    tx.set(doc(db, 'profiles', u.uid), publicDoc(username.trim(), username.trim(), data.xp, data.cosmetics));
+    tx.set(doc(db, 'profiles', u.uid), publicDoc(username.trim(), username.trim(), data.xp, data.cosmetics, data.stats));
   });
   applyCloud(u.uid, { ...data, createdAt: null, updatedAt: null });
   useAccount.setState({ status: 'signedIn', sync: 'synced', error: null });
 }
 
-const publicDoc = (username: string, displayName: string, xp: number, cosmetics: Cosmetics) => ({
+/** The public card other players see: no email, no settings, nothing private. */
+const publicDoc = (username: string, displayName: string, xp: number, cosmetics: Cosmetics, stats: Stats) => ({
   username,
+  usernameKey: usernameKey(username),
   displayName,
   level: levelInfo(xp).level,
   cosmetics,
+  stats: { games: stats.games, wins: stats.wins, kills: stats.kills, paint: stats.paint },
   updatedAt: serverTimestamp(),
 });
-
-export async function resetPassword(email: string) {
-  await sendPasswordResetEmail(auth, email.trim());
-}
 
 export async function signOut() {
   await flush();
@@ -247,12 +351,15 @@ export async function flush() {
         weapon: p.weapon,
         special: p.special,
         cosmetics: p.cosmetics,
+        coins: p.coins,
+        owned: p.owned,
+        quests: p.quests,
         settings: s,
         updatedAt: serverTimestamp(),
       },
       { merge: true },
     );
-    await setDoc(doc(db, 'profiles', user.uid), publicDoc(p.username, p.displayName, p.xp, p.cosmetics), { merge: true });
+    await setDoc(doc(db, 'profiles', user.uid), publicDoc(p.username, p.displayName, p.xp, p.cosmetics, p.stats), { merge: true });
     useProfile.setState({ dirty: false });
     useAccount.setState({ sync: 'synced' });
     backoff = 4000;
@@ -306,6 +413,8 @@ export async function unpublishGame() {
 }
 
 export const myUid = () => user?.uid ?? null;
+/** The database and the signed-in account, for the social layer. */
+export const session = () => ({ db, user });
 
 /** Live list of games refreshed within `freshMs`, newest first. Returns the unsubscribe. */
 export function watchGames(freshMs: number, onGames: (games: PublicGame[]) => void, onError: (e: unknown) => void) {

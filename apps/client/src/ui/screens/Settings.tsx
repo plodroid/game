@@ -5,7 +5,7 @@ import { PALETTES } from '../../rendering/palette';
 import { benchmark, probeHardware, recommend, type HardwareReport } from '../../settings/hardware';
 import { DEFAULT_BINDINGS, useSettings, type Action, type Preset } from '../../settings/settings';
 import { useUi } from '../../state/ui';
-import { Button, Header, KeyCapture, Segmented, Setting, Slider, Toggle } from '../kit';
+import { Button, Header, KeyCapture, keyLabel, Segmented, Setting, Slider, Toggle } from '../kit';
 
 type Tab = 'graphics' | 'audio' | 'controls' | 'gameplay' | 'accessibility';
 const TABS: { id: Tab; label: string }[] = [
@@ -165,14 +165,16 @@ function Graphics() {
 function Audio() {
   const a = useSettings((s) => s.audio);
   const set = useSettings((s) => s.set);
-  const rows: [keyof typeof a, string][] = [
+  const rows: [Exclude<keyof typeof a, 'voiceMode'>, string][] = [
     ['master', 'Master'],
     ['music', 'Music'],
     ['sfx', 'Sound effects'],
     ['weapons', 'Weapons'],
     ['ui', 'Interface'],
     ['ambient', 'Ambience'],
+    ['voice', 'Voice chat'],
   ];
+  const talk = useSettings((s) => s.controls.bindings.talk?.[0]);
   return (
     <>
       {rows.map(([k, l]) => (
@@ -180,6 +182,18 @@ function Audio() {
           <Slider label={l} value={a[k]} min={0} max={1} onChange={(v) => set('audio', { [k]: v })} />
         </Setting>
       ))}
+      <Setting name="Voice chat microphone" hint={`Push to talk: hold ${keyLabel(talk)} to speak. Your browser asks for the microphone the first time.`}>
+        <Segmented
+          label="Voice chat microphone"
+          value={a.voiceMode}
+          onChange={(v) => set('audio', { voiceMode: v })}
+          options={[
+            { value: 'ptt', label: 'Push to talk' },
+            { value: 'open', label: 'Open mic' },
+            { value: 'off', label: 'Off' },
+          ]}
+        />
+      </Setting>
     </>
   );
 }
@@ -197,6 +211,9 @@ const ACTIONS: [Action, string][] = [
   ['dodge', 'Dodge'],
   ['special', 'Special'],
   ['emote', 'Emote'],
+  ['chat', 'Open chat'],
+  ['talk', 'Push to talk (hold)'],
+  ['map', 'Bigger minimap'],
   ['scoreboard', 'Scoreboard (hold)'],
   ['pause', 'Pause'],
 ];

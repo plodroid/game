@@ -4,20 +4,51 @@
     {
       "name": "client",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 5173
     },
     {
       "name": "server",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev:server"],
+      "runtimeArgs": [
+        "run",
+        "dev:server"
+      ],
       "port": 2567
     },
     {
       "name": "preview",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "preview"],
+      "runtimeArgs": [
+        "run",
+        "preview"
+      ],
       "port": 4173
+    },
+    {
+      "name": "emulators",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "firebase",
+        "emulators:start",
+        "--project",
+        "demo-chromashift",
+        "--only",
+        "auth,firestore"
+      ],
+      "port": 8080
+    },
+    {
+      "name": "client-emulated",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:emulated"
+      ],
+      "port": 5174
     }
   ]
 }

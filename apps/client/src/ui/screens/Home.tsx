@@ -19,8 +19,9 @@ const ITEMS: { label: string; desc: string; pig: string; to?: Screen; run?: () =
     pig: 'gold',
     run: () => void startOffline({ map: 'skyline', mode: 'practice', duration: 0, difficulty: 'easy', allies: 0, rivals: 4 }),
   },
-  { label: 'Locker', desc: 'Look, weapon and special', pig: 'cobalt', to: 'locker' },
-  { label: 'Progression', desc: 'Level, XP and unlocks', pig: 'forest', to: 'progression' },
+  { label: 'Friends', desc: 'Parties, friends, messages and player search', pig: 'teal', to: 'social' },
+  { label: 'Locker', desc: 'Weapons, outfits and 300+ items to collect', pig: 'cobalt', to: 'locker' },
+  { label: 'Progress', desc: 'Level, coins, daily and weekly quests', pig: 'forest', to: 'progression' },
   { label: 'Settings', desc: 'Graphics, audio, controls, accessibility', pig: 'graphite', to: 'settings' },
 ];
 
@@ -31,7 +32,9 @@ export function Home() {
   const account = useAccount();
   const endpoint = useNet((s) => s.endpoint);
   const first = useRef<HTMLButtonElement>(null);
-  useEffect(() => first.current?.focus({ preventScroll: true }), []);
+  useEffect(() => {
+    first.current?.focus({ preventScroll: true });
+  }, []);
   const lvl = levelInfo(p.xp);
   const name = publicName(p);
 

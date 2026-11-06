@@ -4,7 +4,10 @@ import { persist } from 'zustand/middleware';
 export type Preset = 'veryLow' | 'low' | 'medium' | 'high' | 'ultra' | 'custom';
 export type Action =
   | 'forward' | 'back' | 'left' | 'right' | 'jump' | 'fire' | 'dive' | 'sprint' | 'slide' | 'dodge'
-  | 'special' | 'emote' | 'scoreboard' | 'pause';
+  | 'special' | 'emote' | 'scoreboard' | 'pause' | 'chat' | 'talk' | 'map';
+
+/** Voice chat: hold a key to talk, an always-open mic, or off. */
+export type VoiceMode = 'ptt' | 'open' | 'off';
 
 export interface GraphicsSettings {
   preset: Preset;
@@ -35,7 +38,7 @@ export interface GraphicsSettings {
 
 export interface Settings {
   graphics: GraphicsSettings;
-  audio: { master: number; music: number; sfx: number; weapons: number; ui: number; ambient: number };
+  audio: { master: number; music: number; sfx: number; weapons: number; ui: number; ambient: number; voice: number; voiceMode: VoiceMode };
   controls: {
     mouseSensitivity: number;
     aimSensitivity: number;
@@ -112,14 +115,17 @@ export const DEFAULT_BINDINGS: Record<Action, string[]> = {
   slide: ['KeyC'],
   dodge: ['KeyQ'],
   special: ['KeyE'],
-  emote: ['KeyT'],
+  emote: ['KeyG'],
   scoreboard: ['Tab'],
   pause: ['Escape'],
+  chat: ['KeyT', 'Enter'],
+  talk: ['KeyV'],
+  map: ['KeyM'],
 };
 
 export const DEFAULT_SETTINGS: Settings = {
   graphics: { preset: 'medium', ...PRESETS.medium, fpsCap: 60, showFps: false, adaptiveHints: true },
-  audio: { master: 0.8, music: 0.55, sfx: 0.8, weapons: 0.75, ui: 0.6, ambient: 0.5 },
+  audio: { master: 0.8, music: 0.55, sfx: 0.8, weapons: 0.75, ui: 0.6, ambient: 0.5, voice: 0.9, voiceMode: 'ptt' },
   controls: {
     mouseSensitivity: 1,
     aimSensitivity: 1,
@@ -160,6 +166,13 @@ interface SettingsStore extends Settings {
   load(s: Partial<Settings>): void;
 }
 
+/** Saved bindings over the defaults. Emote used to sit on T, which is chat now. */
+function migrateBindings(saved?: Partial<Record<Action, string[]>>): Record<Action, string[]> {
+  const out = { ...DEFAULT_BINDINGS, ...saved };
+  if (saved?.emote?.length === 1 && saved.emote[0] === 'KeyT') out.emote = DEFAULT_BINDINGS.emote;
+  return out;
+}
+
 const merge = (s: Partial<Settings>): Settings => ({
   ...DEFAULT_SETTINGS,
   ...s,
@@ -168,7 +181,7 @@ const merge = (s: Partial<Settings>): Settings => ({
   controls: {
     ...DEFAULT_SETTINGS.controls,
     ...s.controls,
-    bindings: { ...DEFAULT_BINDINGS, ...s.controls?.bindings },
+    bindings: migrateBindings(s.controls?.bindings),
   },
   gameplay: { ...DEFAULT_SETTINGS.gameplay, ...s.gameplay },
   accessibility: { ...DEFAULT_SETTINGS.accessibility, ...s.accessibility },

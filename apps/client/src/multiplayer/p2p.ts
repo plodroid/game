@@ -41,7 +41,7 @@ const LOCAL_ID = 'local';
  * networks. PeerJS's bundled TURN relays no longer exist, so a relay only comes from our own
  * optional config (VITE_TURN_*), for networks that block direct links.
  */
-const PEER_OPTIONS = {
+export const PEER_OPTIONS = {
   debug: 0,
   config: {
     iceServers: [

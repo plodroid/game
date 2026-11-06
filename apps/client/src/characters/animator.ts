@@ -1,4 +1,4 @@
-import type { WeaponKind } from '@chromashift/shared';
+import { EMOTE_TIME, type WeaponKind } from '@chromashift/shared';
 import type { Rig } from './model';
 
 export interface AnimState {
@@ -193,6 +193,78 @@ export class Animator {
       t.shoulderL[0] = 1.4 + Math.sin(this.time * 8) * 0.8;
       t.shoulderR[0] = 1.4 - Math.sin(this.time * 8) * 0.8;
       bodyY += Math.abs(Math.sin(this.time * 8)) * 0.06;
+    } else if (e === 'clap') {
+      const c = Math.abs(Math.sin(this.time * 12));
+      t.shoulderL[0] = t.shoulderR[0] = 1.3;
+      t.shoulderL[2] = 0.15 + c * 0.45;
+      t.shoulderR[2] = -0.15 - c * 0.45;
+      t.elbowL[0] = t.elbowR[0] = 0.9;
+    } else if (e === 'bow') {
+      const k = Math.sin(Math.min(1, (EMOTE_TIME - a.emoteT) / 0.5) * Math.PI * 0.5) * (a.emoteT > 0.5 ? 1 : a.emoteT / 0.5);
+      t.spine[0] = 0.75 * k;
+      t.head[0] = 0.3 * k;
+      t.shoulderR[0] = 0.9 * k;
+      t.elbowR[0] = 1.4 * k;
+      t.shoulderL[0] = -0.4 * k;
+    } else if (e === 'jump') {
+      bodyY += Math.abs(Math.sin(this.time * 7)) * 0.32;
+      t.shoulderL[2] = 0.9;
+      t.shoulderR[2] = -0.9;
+      t.kneeL[0] = t.kneeR[0] = -0.4 * Math.abs(Math.cos(this.time * 7));
+    } else if (e === 'point') {
+      t.shoulderR[0] = 1.6;
+      t.shoulderR[2] = -0.15;
+      t.elbowR[0] = 0.05;
+      t.head[1] = -0.2;
+      t.shoulderL[2] = 0.4;
+      t.elbowL[0] = 1.8;
+    } else if (e === 'salute') {
+      t.shoulderR[0] = 1.3;
+      t.shoulderR[2] = -1.2;
+      t.elbowR[0] = 2.3;
+      t.head[0] = -0.08;
+    } else if (e === 'cheer') {
+      const w = Math.sin(this.time * 10) * 0.3;
+      t.shoulderL[0] = t.shoulderR[0] = 2.9;
+      t.shoulderL[2] = 0.35 + w;
+      t.shoulderR[2] = -0.35 + w;
+      bodyY += Math.abs(Math.sin(this.time * 5)) * 0.1;
+    } else if (e === 'think') {
+      t.shoulderR[0] = 1.1;
+      t.shoulderR[2] = -0.5;
+      t.elbowR[0] = 2.4;
+      t.head[0] = -0.15;
+      t.head[2] = 0.18;
+      t.shoulderL[0] = 0.7;
+      t.elbowL[0] = 1.5;
+    } else if (e === 'sway') {
+      const w = Math.sin(this.time * 4);
+      t.hips[2] = w * 0.12;
+      t.spine[2] = -w * 0.18;
+      t.head[2] = w * 0.15;
+      t.shoulderL[2] = 0.5 + w * 0.3;
+      t.shoulderR[2] = -0.5 + w * 0.3;
+    } else if (e === 'robot') {
+      const step = Math.floor(this.time * 4) % 4;
+      t.shoulderL[0] = step % 2 ? 1.57 : 0;
+      t.shoulderR[0] = step % 2 ? 0 : 1.57;
+      t.elbowL[0] = t.elbowR[0] = 1.57;
+      t.head[1] = (step - 1.5) * 0.25;
+      t.spine[1] = step % 2 ? 0.2 : -0.2;
+    } else if (e === 'laugh') {
+      const k = Math.sin(this.time * 18) * 0.08;
+      t.spine[0] = -0.15 + k;
+      t.head[0] = -0.3 + k;
+      t.shoulderL[0] = t.shoulderR[0] = 0.5;
+      t.elbowL[0] = t.elbowR[0] = 1.6;
+      t.shoulderL[2] = 0.3;
+      t.shoulderR[2] = -0.3;
+    } else if (e === 'sit') {
+      t.hipL[0] = t.hipR[0] = 1.5;
+      t.kneeL[0] = t.kneeR[0] = -1.5;
+      t.shoulderL[0] = t.shoulderR[0] = 0.4;
+      t.elbowL[0] = t.elbowR[0] = 0.6;
+      bodyY -= 0.42;
     } else if (e === 'victory') {
       t.shoulderL[0] = t.shoulderR[0] = 2.8;
       t.shoulderL[2] = 0.3;
@@ -208,6 +280,14 @@ export class Animator {
       bodyY -= 0.05;
     }
     this.spin = e === 'spin' ? spinTarget : this.spin * (1 - damp(8, dt));
+    // Backflip: one full turn over the shoulders, launched and landed with bent knees.
+    const flip = e === 'backflip' ? Math.min(1, Math.max(0, (EMOTE_TIME - a.emoteT - 0.25) / 0.9)) : -1;
+    if (flip >= 0) {
+      bodyY += Math.sin(flip * Math.PI) * 0.7;
+      t.kneeL[0] = t.kneeR[0] = -1.2 * Math.sin(flip * Math.PI);
+      t.hipL[0] = t.hipR[0] = 1.1 * Math.sin(flip * Math.PI);
+      t.shoulderL[0] = t.shoulderR[0] = 2.6 * Math.sin(flip * Math.PI);
+    }
 
     // Ease joints towards targets.
     const f = damp(a.alive ? 16 : 4, dt);
@@ -227,8 +307,10 @@ export class Animator {
       r.body.rotation.x = -ang * a.dodgeZ;
       r.body.rotation.z = ang * a.dodgeX;
       r.body.position.y = this.bodyY - Math.sin(a.dodge * Math.PI) * 0.35;
+    } else if (flip > 0 && flip < 1) {
+      r.body.rotation.x = flip * Math.PI * 2;
     } else {
-      r.body.rotation.x *= 1 - damp(20, dt);
+      r.body.rotation.x = flip >= 1 ? 0 : r.body.rotation.x * (1 - damp(20, dt));
       r.body.rotation.z *= 1 - damp(20, dt);
     }
 

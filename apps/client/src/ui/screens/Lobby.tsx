@@ -11,6 +11,7 @@ import {
   TEAM_SIZE,
   WEAPON_IDS,
   WEAPONS,
+  type WeaponId,
   type LobbyPlayer,
   type LobbySettings,
   type ModeId,
@@ -200,7 +201,14 @@ export default function Lobby() {
         <section className="panel">
           <h2 className="panel__title">Your loadout</h2>
           <Setting name="Weapon" hint={WEAPONS[me?.weapon ?? profile.weapon].tagline}>
-            <Segmented value={me?.weapon ?? profile.weapon} onChange={(w) => setLoadout({ weapon: w })} label="Weapon" options={WEAPON_IDS.map((w) => ({ value: w, label: WEAPONS[w].name }))} />
+            {/* Only weapons you own; the Locker sells the rest. */}
+            <select className="select" value={me?.weapon ?? profile.weapon} onChange={(e) => setLoadout({ weapon: e.target.value as WeaponId })} aria-label="Weapon">
+              {WEAPON_IDS.filter((w) => profile.owns(`weapon:${w}`)).map((w) => (
+                <option key={w} value={w}>
+                  {WEAPONS[w].name}
+                </option>
+              ))}
+            </select>
           </Setting>
           <Setting name="Special" hint={SPECIALS[me?.special ?? profile.special].description}>
             <Segmented value={me?.special ?? profile.special} onChange={(s) => setLoadout({ special: s })} label="Special" options={SPECIAL_IDS.map((s) => ({ value: s, label: SPECIALS[s].name }))} />

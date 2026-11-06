@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { SPECIALS, type Effect, type Team, type Vec3, type WeaponId } from '@chromashift/shared';
+import { SPECIALS, WEAPONS, type BaseWeaponId, type Effect, type Team, type Vec3, type WeaponId } from '@chromashift/shared';
 
-const PROJ_SCALE: Record<WeaponId, number> = { pulse: 0.15, roller: 0.15, arc: 0.27, lobber: 0.22, dual: 0.12 };
+const BASE_SCALE: Record<BaseWeaponId, number> = { pulse: 0.15, roller: 0.15, arc: 0.27, lobber: 0.22, dual: 0.12 };
+const PROJ_SCALE = (w: WeaponId) => BASE_SCALE[WEAPONS[w]?.base ?? 'pulse'] * Math.sqrt(WEAPONS[w]?.look.bulk ?? 1);
 const MAX_PROJ = 512;
 
 interface Particle {
@@ -83,7 +84,7 @@ export class Effects {
       const sp = Math.hypot(p.vel.x, p.vel.y, p.vel.z) || 1;
       this.v.set(p.vel.x / sp, p.vel.y / sp, p.vel.z / sp);
       this.q.setFromUnitVectors(this.fwd, this.v);
-      const sc = PROJ_SCALE[p.weapon];
+      const sc = PROJ_SCALE(p.weapon);
       this.s.set(sc, sc, sc * Math.min(2.4, 1 + sp / 40));
       this.m.compose(this.v.set(p.pos.x, p.pos.y, p.pos.z), this.q, this.s);
       im.setMatrixAt(i, this.m);

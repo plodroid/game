@@ -1,4 +1,5 @@
 import {
+  botLook,
   initPhysics,
   levelInfo,
   Simulation,
@@ -103,14 +104,7 @@ export async function startOffline(s: OfflineSetup) {
         bot: true,
         difficulty: s.difficulty,
         dummy: practice && team === 1,
-        cosmetics: {
-          hair: ['fin', 'spikes', 'bob', 'tails', 'mohawk'][id % 5],
-          headgear: ['none', 'cap', 'phones', 'visor', 'beanie'][(id * 3) % 5],
-          outfit: ['jacket', 'hoodie', 'vest', 'suit'][id % 4],
-          accent: ['graphite', 'cream', 'cobalt', 'forest', 'gold'][(id * 7) % 5],
-          skin: id % 6,
-          emote: 'wave',
-        },
+        cosmetics: botLook(id),
       });
     for (let i = 0; i < Math.min(3, s.allies); i++) addBot(0, i);
     for (let i = 0; i < Math.min(4, practice ? 4 : s.rivals); i++) addBot(1, i);
@@ -143,7 +137,7 @@ function finish(o: MatchOutcome, you: number) {
   const ui = useUi.getState();
   const profile = useProfile.getState();
   const me = o.result.players.find((p) => p.id === you);
-  const before = { xpBefore: profile.xp, levelBefore: levelInfo(profile.xp).level };
+  const before = { xpBefore: profile.xp, levelBefore: levelInfo(profile.xp).level, coins: 0 };
   // Offline progress is local; online progress comes from the server-awarded XP.
   if (o.result.mode !== 'practice') Object.assign(before, profile.recordMatch(o.result, you, o.xp));
   const win = me && o.result.winner === me.team;

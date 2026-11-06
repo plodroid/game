@@ -41,11 +41,28 @@ export class InputManager {
   engaged = false;
   onPause: (() => void) | null = null;
   onScoreboard: ((open: boolean) => void) | null = null;
+  /** Chat key: opens the chat box (the key itself never reaches the game). */
+  onChat: (() => void) | null = null;
+  /** Push-to-talk held or released. */
+  onTalk: ((down: boolean) => void) | null = null;
+  /** Minimap size key. */
+  onMap: (() => void) | null = null;
   private el: HTMLElement | null = null;
 
   private key = (e: KeyboardEvent) => {
     if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
     const code = e.code;
+    if (this.isBound('talk', code)) {
+      if (!e.repeat) this.onTalk?.(e.type === 'keydown');
+      return;
+    }
+    if (e.type === 'keydown' && this.onChat && this.isBound('chat', code)) {
+      e.preventDefault();
+      this.down.clear();
+      this.onChat();
+      return;
+    }
+    if (e.type === 'keydown' && this.onMap && this.isBound('map', code) && !e.repeat) this.onMap();
     if (e.type === 'keydown') {
       // In a match, any key takes control: keys work at once and the mouse is captured (a key press counts as a gesture).
       if (this.wantsLock && !this.locked && !this.isBound('pause', code)) {

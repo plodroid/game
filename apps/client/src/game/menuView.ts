@@ -9,18 +9,19 @@ import { useUi, type Screen } from '../state/ui';
 import { engine, type View } from './engine';
 import { WEAPONS } from '@chromashift/shared';
 
-/** The light-grey studio paper, tinted towards the paint of the menu section on screen. */
-const STUDIO = 0xdcdcd8;
+/** A dusky studio sweep, tinted towards the paint of the menu section on screen. */
+const STUDIO = 0x3a3346;
 const PAINT: Partial<Record<Screen, number>> = {
-  play: 0xff2e88,
-  custom: 0xff2e88,
-  auth: 0xff2e88,
-  online: 0x13cbb5,
-  lobby: 0x13cbb5,
-  locker: 0x3156e0,
-  progression: 0x1f7a52,
-  profile: 0xf5b800,
-  settings: 0x33363f,
+  play: 0xff4d94,
+  custom: 0xff4d94,
+  auth: 0xff4d94,
+  online: 0x2fd3d0,
+  lobby: 0x2fd3d0,
+  locker: 0x8b72ff,
+  progression: 0x9be03c,
+  profile: 0xffc532,
+  settings: 0x9a93b4,
+  social: 0x2fd3d0,
 };
 
 /**
@@ -42,6 +43,8 @@ export class MenuView implements View {
   private unsubScreen: () => void;
   private paper: THREE.MeshStandardMaterial;
   private tint = new THREE.Color(STUDIO);
+  private rim = new THREE.DirectionalLight(0xffffff, 2.2);
+  private rimTint = new THREE.Color(0xffffff);
 
   constructor() {
     const colors = teamColors();
@@ -49,27 +52,32 @@ export class MenuView implements View {
     this.paper = new THREE.MeshStandardMaterial({ color: STUDIO, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
     this.scene.add(new THREE.Mesh(sweep(60), this.paper));
     this.scene.background = this.paper.color;
-    this.scene.fog = new THREE.Fog(STUDIO, 20, 48);
+    this.scene.fog = new THREE.Fog(STUDIO, 16, 44);
     this.setTint(useUi.getState().screen, true);
     this.unsubScreen = useUi.subscribe((st, prev) => {
+      if (st.tryOn !== prev.tryOn) {
+        this.refresh();
+        if (st.tryOn?.emote) this.emoteT = 2.4;
+      }
       if (st.screen === prev.screen) return;
+      if (prev.screen === 'locker') useUi.getState().setTryOn(null);
       this.setTint(st.screen);
       // The victory or defeat pose belongs to the results screen only.
       if (prev.screen === 'results') this.outcome = 'none';
     });
 
-    // Studio light: a warm key, a cool fill and a rim from behind for the silhouette.
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xc6c6c2, 1.7));
-    const key = new THREE.DirectionalLight(0xfffaf3, 2.2);
+    // Studio light on a dark set: a warm key on the character, a cool fill, and a rim from
+    // behind in the section's paint so the silhouette stands off the backdrop.
+    this.scene.add(new THREE.HemisphereLight(0xe8e0ff, 0x2a2433, 1.15));
+    const key = new THREE.DirectionalLight(0xfff4e8, 2.8);
     key.position.set(4, 7, 6);
-    const fill = new THREE.DirectionalLight(0xdce6ff, 0.55);
+    const fill = new THREE.DirectionalLight(0xc8d6ff, 0.7);
     fill.position.set(-6, 3, 4);
-    const rim = new THREE.DirectionalLight(0xffffff, 1.5);
-    rim.position.set(-2, 5, -8);
-    this.scene.add(key, fill, rim);
+    this.rim.position.set(-2, 5, -8);
+    this.scene.add(key, fill, this.rim);
 
     const top = new THREE.MeshStandardMaterial({ map: platformTexture(colors, true), roughness: 0.45, metalness: 0.05 });
-    const side = new THREE.MeshStandardMaterial({ color: 0x151517, roughness: 0.7 });
+    const side = new THREE.MeshStandardMaterial({ color: 0x1d1823, roughness: 0.7 });
     const platform = new THREE.Mesh(new THREE.CylinderGeometry(1.75, 1.75, 0.34, 64), [side, top, side]);
     platform.position.y = -0.17;
     this.scene.add(platform);
@@ -101,8 +109,15 @@ export class MenuView implements View {
   private setTint(screen: Screen, now = false) {
     const paint = PAINT[screen];
     this.tint.set(STUDIO);
-    if (paint !== undefined) this.tint.lerp(new THREE.Color(paint), 0.2);
-    if (now) this.paper.color.copy(this.tint);
+    this.rimTint.set(0xffffff);
+    if (paint !== undefined) {
+      this.tint.lerp(new THREE.Color(paint), 0.16);
+      this.rimTint.lerp(new THREE.Color(paint), 0.7);
+    }
+    if (now) {
+      this.paper.color.copy(this.tint);
+      this.rim.color.copy(this.rimTint);
+    }
   }
 
   private onPointer = (e: PointerEvent) => {
@@ -112,15 +127,18 @@ export class MenuView implements View {
   /** Rebuilds the character after locker changes. */
   refresh() {
     const p = useProfile.getState();
+    const t = useUi.getState().tryOn;
     const g = useSettings.getState().graphics;
+    const cosmetics = { ...p.cosmetics, ...t?.cosmetics };
+    const weapon = t?.weapon ?? p.weapon;
     if (this.rig) {
       this.rig.root.removeFromParent();
       this.rig.dispose();
     }
-    this.rig = buildCharacter({ cosmetics: p.cosmetics, team: teamColors()[0], weapon: p.weapon, detail: Math.max(1, g.modelDetail), lambert: false });
+    this.rig = buildCharacter({ cosmetics, team: teamColors()[0], weapon, detail: Math.max(1, g.modelDetail), lambert: false });
     this.rig.root.rotation.y = Math.PI + 0.35;
     this.scene.add(this.rig.root);
-    this.anim = new Animator(this.rig, WEAPONS[p.weapon].kind);
+    this.anim = new Animator(this.rig, WEAPONS[weapon].kind);
     this.anim.spawned();
   }
 
@@ -144,12 +162,13 @@ export class MenuView implements View {
     const st: AnimState = {
       alive: true, grounded: true, diving: false, swimming: false, climbing: false, firing: false, rolling: false,
       sliding: false, dodge: -1, dodgeX: 0, dodgeZ: 0, speed: 0, vy: 0, landT: 1, aimPitch: -0.15,
-      ink: 0.5 + Math.sin(this.time * 0.6) * 0.4, emote: useProfile.getState().cosmetics.emote, emoteT: this.emoteT,
+      ink: 0.5 + Math.sin(this.time * 0.6) * 0.4, emote: useUi.getState().tryOn?.emote ?? useProfile.getState().cosmetics.emote, emoteT: this.emoteT,
       outcome: this.outcome, hiddenBlob: false, wallYaw: 0,
     };
     this.anim!.update(dt, st);
     // Ease the studio paper towards the section's tint.
     this.paper.color.lerp(this.tint, reduced ? 1 : 1 - Math.exp(-5 * dt));
+    this.rim.color.lerp(this.rimTint, reduced ? 1 : 1 - Math.exp(-5 * dt));
     (this.scene.fog as THREE.Fog).color.copy(this.paper.color);
     // Wide screens put the character right of the menu sheet; tall ones above the bottom sheet.
     const aspect = innerWidth / innerHeight;
@@ -202,7 +221,7 @@ function platformTexture(colors: [THREE.Color, THREE.Color], solid: boolean) {
   c.width = c.height = 512;
   const ctx = c.getContext('2d')!;
   if (solid) {
-    ctx.fillStyle = '#efefec';
+    ctx.fillStyle = '#2b2533';
     ctx.fillRect(0, 0, 512, 512);
   }
   const splat = (x: number, y: number, r: number, col: string) => {

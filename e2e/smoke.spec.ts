@@ -7,7 +7,7 @@ test('loads under /game/ with every asset resolving', async ({ page }) => {
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('./');
   await expect(page).toHaveTitle('CHROMASHIFT');
-  for (const item of ['Play', 'Online', 'Practice', 'Locker', 'Progression', 'Settings']) {
+  for (const item of ['Play', 'Online', 'Practice', 'Friends', 'Locker', 'Progress', 'Settings']) {
     await expect(page.locator('.menu__label', { hasText: item })).toBeVisible();
   }
   await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', /\/game\/manifest\.webmanifest$/);

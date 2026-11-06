@@ -78,4 +78,4 @@ export interface MapDef {
   props: PropDef[];
 }
 
-export type MapId = 'skyline' | 'core' | 'float';
+export type MapId = 'skyline' | 'core' | 'float' | 'docks' | 'gardens' | 'canyon' | 'arcade';

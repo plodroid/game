@@ -10,14 +10,18 @@ A colourful third-person team paint shooter that runs in the browser. Two teams 
 ## Features
 
 - **Turf Control** (main mode), **Zone Control**, **Knockout** and a **Practice** range. 3-minute matches by default, adjustable from 1 to 5 minutes.
-- **Five weapons**, each with its own behaviour: Pulse Sprayer (automatic), Stripe Roller (roll and flick), Arc Blaster (detonating bursts), Prism Lobber (three-way arcing shells), Dual Stream (twin rapid fire with a fast dodge).
+- **21 weapons** across five families: sprayers, rollers, blasters, lobbers and duals. The five originals are free; 16 more (Mist Sprayer, Needle Line, Paint Dozer, Thumper, Comet Launcher, Fizz Pistols and others) have their own tuning and look, and are bought with coins.
+- **A locker of 340 items** in one gallery: 38 hairstyles, 21 hair dyes, 57 hats and headpieces, 28 face items, 24 outfits, 21 back items, 24 colours, 16 emotes, 40 titles, 30 card banners, 20 weapon finishes and the weapons. Every piece is built on the same head and body surfaces, so any combination fits. Each tile is a live portrait of your character wearing it; pick anything to try it on.
+- **Coins and quests**: matches pay coins (1 per 8 XP, plus 300 per level). Three daily and three weekly quests pay more. Everything in the locker has a coin price by rarity.
 - **Five specials**: Color Surge, Paint Nova, Shield Burst, Bounce Beacon, Disruption Pulse. You charge them by painting new territory and by KOs.
 - **Movement**: walk, sprint, slide, dodge roll, double jump, air control, coyote time and jump buffering. **Paint dive**: swim fast through your own colour, refill pigment, climb walls painted your colour. Rival paint slows and chips at you, but you can always walk out.
 - **GPU paint system**: every paint event becomes instanced splat stamps rendered into an atlas render target (one draw call per frame). Map materials read the atlas for colour, gloss and raised paint edges. Territory scoring uses an ownership grid over the real paintable area, excluding occluded and overlapping surfaces.
 - **Bots that actually play**: an auto-generated navigation graph (walk, jump, drop and launch-pad links), A* routing that avoids rival paint, painting goals, fighting with leading aim and ledge awareness, refilling, retreating, supporting teammates, team goal claims and specials. Four difficulties change reaction time, aim wobble, turn rate and strategy; bots never get extra rules or perfect aim.
-- **Three original maps**: Skyline (sunset rooftops), Core (indoor arena with glass roof), Float (islands in the clouds). Maps are mirrored, so both teams get identical routes.
+- **Seven original maps**: Skyline (sunset rooftops), Core (indoor arena), Float (islands in the clouds), Dye Docks (a harbour at dusk), Bloom Gardens (hedges and a gazebo), Prism Canyon (red-rock terraces), Neon Arcade (a rooftop arcade at night). Maps are mirrored, so both teams get identical routes.
 - **Multiplayer**: host a game from the browser and share a 5-character code (it stays the same each time you host) or an invite link. Browsers connect directly over WebRTC; the host's tab runs the same authoritative match code as the optional Colyseus dedicated server. Host controls, bot fill, late join, reconnection, recent games, client prediction with reconciliation, snapshot interpolation, input validation and rate limiting.
-- **Accounts** (optional, free Firebase Spark plan): Continue with Google or email and password, unique case-insensitive usernames, profiles, cloud-synced settings and progression, guest play with later linking.
+- **Accounts** (free Firebase Spark plan): everyone signs in with a username and a strong password. An email is optional (private, for updates). A Google account can be linked as the way back in if the password is forgotten.
+- **Social**: search players by username, view their cards, add friends, see who's online, and get in-game notifications. Parties of up to four (invites last five minutes) follow the leader into games. Messages between friends support text and voice notes.
+- **In the match**: chat (T, Tab for team chat), voice chat with push to talk (V) or an open mic, name tags with a health bar that light up with a mic while someone talks, and a minimap with player names (M to enlarge).
 - **Settings**: Very Low to Ultra graphics presets plus every option individually, hardware check, audio buses, key rebinding, gamepad and touch controls, camera and HUD options, and accessibility (colour-blind palettes with shape markers, text size, reduced motion, subtitles, visual audio cues, high contrast).
 - **PWA**: installable, works offline against bots, asks before updating.
 - **All assets are original and generated in code**: character and weapon models, textures, music and sound effects. Nothing is downloaded or licensed.
@@ -101,11 +105,14 @@ The key design decision: **one simulation, two hosts.** `packages/shared` runs t
 | Slide (while sprinting) | C | B |
 | Dodge | Q | X |
 | Special | E | RB |
-| Emote | T | Y |
+| Emote | G | Y |
+| Chat (Tab in the box: all or team) | T or Enter | |
+| Push to talk (hold) | V | |
+| Bigger minimap | M | |
 | Scoreboard (hold) | Tab | View |
 | Pause | Esc | Menu |
 
-Every keyboard and mouse binding can be changed in Settings → Controls. Touch screens get an on-screen stick and buttons. Menus work with the D-pad (A selects, B goes back).
+Every keyboard and mouse binding can be changed in Settings → Controls. Voice chat (push to talk, open mic or off) and its volume are under Settings → Audio. Touch screens get an on-screen stick and buttons. Menus work with the D-pad (A selects, B goes back).
 
 ## Multiplayer
 
@@ -123,7 +130,13 @@ See [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md) for how it works, its limits, the
 
 ## Accounts
 
-Accounts are optional; everything works as a guest. To enable Google and email sign-in, create a free Firebase project (Spark plan, no billing) and set the `VITE_FIREBASE_*` values. Full steps, including authorised domains and the security rules in [firestore.rules](firestore.rules), are in [docs/FIREBASE.md](docs/FIREBASE.md).
+With Firebase configured, every player signs in before playing, with a username and a strong password (at least 10 characters, upper and lower case, a number and a symbol). Under the hood the username maps to a sign-in identity on the project's own auth domain; nothing is ever emailed there. In the profile, players can add an optional private email for updates, link a Google account as their way back in, and change their password. Builds without Firebase settings skip the sign-in and play as guests.
+
+Create a free Firebase project (Spark plan, no billing), enable **Email/Password** and **Google** sign-in, set the `VITE_FIREBASE_*` values, and deploy [firestore.rules](firestore.rules) (`npx firebase deploy --only firestore:rules`). The rules must be deployed whenever they change, or sign-up and social features will be refused. Full steps are in [docs/FIREBASE.md](docs/FIREBASE.md).
+
+**Testing accounts locally:** the repository's `.env` points at the real project, so test sign-ups belong on the local emulators. Run `npm run emulators`, then `npm run dev:emulated`, and open http://localhost:5174/game/. That mode forces a demo project, so nothing reaches the live one. Test accounts are listed in [scripts/emulator-accounts.json](scripts/emulator-accounts.json).
+
+Coins, quests and owned items are saved on the device and synced to the account. Without a paid server-side plan they are client-reported, like offline XP.
 
 What's stored: passwords are handled only by Firebase Authentication. Firestore holds a private profile (owner-only), a public card (username, display name, level, look), the username registry, and verified online stats written only by trusted servers. Offline results are client-reported and labelled as such; online results are verified only when the server has Firebase Admin credentials.
 
@@ -132,6 +145,10 @@ What's stored: passwords are handled only by Firebase Authentication. Firestore 
 [.github/workflows/deploy.yml](.github/workflows/deploy.yml) runs on every push to `main`. It installs dependencies, typechecks, lints, runs the unit, simulation and multiplayer tests, builds the client, runs the end-to-end tests, then uploads `apps/client/dist` and deploys it with the Pages Actions flow. The repository's Pages source must be **GitHub Actions** (Settings → Pages).
 
 Optional repository **Variables** (Settings → Secrets and variables → Actions → Variables): `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_DEFAULT_SERVER_URL`. All are public values (the API key may be stored as a Secret instead; the workflow accepts either). Never put a service account in the client build.
+
+## Desktop app (Windows)
+
+`npm run desktop:pack` builds the client and packs it with Electron into `apps/desktop/release/win-unpacked/CHROMASHIFT.exe`. Run that EXE directly; nothing is installed. The app serves the game from a fixed local address (`http://localhost:47821/game/`), so sign-in, settings and saves persist between launches. It allows the microphone for voice chat, and F11 toggles fullscreen. `npm run desktop` runs it from the last client build without packing. The build isn't code-signed, so Windows SmartScreen may ask before the first run. Google sign-in pages can refuse embedded windows, so link Google from the browser version.
 
 ## Installing the app (PWA)
 

@@ -1,0 +1,7 @@
+{
+  "note": "Test accounts for the local Firebase emulators only (npm run emulators). They do not exist on the real project.",
+  "accounts": [
+    { "username": "PaintTester", "password": "Splash!Test42x" },
+    { "username": "InkBuddy", "password": "Drip#Friend77y" }
+  ]
+}

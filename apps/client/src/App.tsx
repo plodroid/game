@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react';
-import { accounts } from './auth/account';
+import { accounts, useAccount } from './auth/account';
+import { firebaseConfigured } from './env';
 import { engine } from './game/engine';
 import { showMenu } from './game/session';
 import { detectServer, setInvite, useNet } from './multiplayer/net';
@@ -10,6 +11,8 @@ import { Button } from './ui/kit';
 import { Home } from './ui/screens/Home';
 import { Custom, Play } from './ui/screens/Play';
 import { useMenuGamepad } from './ui/useMenuGamepad';
+import { SocialBar } from './ui/SocialBar';
+import { useSocial } from './state/social';
 
 const Online = lazy(() => import('./ui/screens/Online'));
 const Lobby = lazy(() => import('./ui/screens/Lobby'));
@@ -19,6 +22,8 @@ const Profile = lazy(() => import('./ui/screens/Profile'));
 const Settings = lazy(() => import('./ui/screens/Settings'));
 const Auth = lazy(() => import('./ui/screens/Auth'));
 const Results = lazy(() => import('./ui/screens/Results'));
+const Social = lazy(() => import('./ui/screens/Social'));
+const PlayerCard = lazy(() => import('./ui/PlayerCard'));
 
 const SCREENS: Record<Exclude<Screen, 'match'>, ComponentType> = {
   home: Home,
@@ -32,6 +37,7 @@ const SCREENS: Record<Exclude<Screen, 'match'>, ComponentType> = {
   settings: Settings,
   auth: Auth,
   results: Results,
+  social: Social,
 };
 
 export function App({ webgl2 }: { webgl2: boolean }) {
@@ -40,6 +46,9 @@ export function App({ webgl2 }: { webgl2: boolean }) {
   const loading = useUi((s) => s.loading);
   const [failed, setFailed] = useState<string | null>(null);
   const a11y = useSettings((s) => s.accessibility);
+  const status = useAccount((s) => s.status);
+  // Everyone signs in before playing; builds without accounts configured skip the gate.
+  const gated = firebaseConfigured && status !== 'signedIn';
   useMenuGamepad(screen !== 'match' || paused);
 
   useEffect(() => {
@@ -92,16 +101,24 @@ export function App({ webgl2 }: { webgl2: boolean }) {
     );
 
   const showSettingsOverMatch = screen === 'settings' && paused;
-  const Current = screen === 'match' ? null : SCREENS[screen];
+  const Current = gated ? (status === 'loading' ? null : Auth) : screen === 'match' ? null : SCREENS[screen];
   return (
     <>
-      {(screen === 'match' || showSettingsOverMatch) && <Hud />}
+      {!gated && (screen === 'match' || showSettingsOverMatch) && <Hud />}
       {Current && (
         <Suspense fallback={null}>
-          <div key={screen} style={{ position: 'absolute', inset: 0, zIndex: showSettingsOverMatch ? 35 : undefined }}>
+          <div key={gated ? 'gate' : screen} style={{ position: 'absolute', inset: 0, zIndex: showSettingsOverMatch ? 35 : undefined }}>
             <Current />
           </div>
         </Suspense>
+      )}
+      {gated && status === 'loading' && (
+        <div className="overlay" style={{ background: 'transparent' }}>
+          <div className="loading">
+            <div className="spinner" />
+            Signing in…
+          </div>
+        </div>
       )}
       {loading && (
         <div className="overlay">
@@ -111,6 +128,8 @@ export function App({ webgl2 }: { webgl2: boolean }) {
           </div>
         </div>
       )}
+      {!gated && screen !== 'match' && <SocialBar />}
+      <Viewing />
       <Toasts />
       <Reconnecting />
     </>
@@ -142,6 +161,17 @@ function Toasts() {
         </div>
       ))}
     </div>
+  );
+}
+
+/** Another player's card, over whatever screen is open. */
+function Viewing() {
+  const uid = useSocial((s) => s.viewing);
+  if (!uid) return null;
+  return (
+    <Suspense fallback={null}>
+      <PlayerCard uid={uid} />
+    </Suspense>
   );
 }
 
