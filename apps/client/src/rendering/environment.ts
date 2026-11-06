@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SHADOW_LAYER } from '../characters/compact';
 import type { MapDef, PropDef } from '@chromashift/shared';
 import { logoTexture, windowsTexture } from './textures';
 
@@ -76,6 +77,8 @@ export function buildEnvironment(scene: THREE.Scene, renderer: THREE.WebGLRender
     sun.shadow.bias = -0.0004;
     sun.shadow.normalBias = 0.03;
     sun.shadow.radius = o.shadowQuality >= 4 ? 3 : 1;
+    // Characters cast their shadows from merged shadow-only copies on their own layer.
+    cam.layers.enable(SHADOW_LAYER);
   }
 
   let envMap: THREE.Texture | null = null;

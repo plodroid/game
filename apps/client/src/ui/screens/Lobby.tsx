@@ -20,6 +20,7 @@ import { useAccount } from '../../auth/account';
 import { firebaseConfigured } from '../../env';
 import { setPublic, useListing } from '../../multiplayer/listing';
 import { HOST_CODE_KEY, leaveRoom, send, useNet } from '../../multiplayer/net';
+import { voice, useVoice } from '../../multiplayer/voice';
 import { teamNames } from '../../rendering/palette';
 import { useProfile } from '../../state/profile';
 import { useUi } from '../../state/ui';
@@ -66,6 +67,7 @@ function savedHostCode() {
 
 export default function Lobby() {
   const net = useNet();
+  const vc = useVoice();
   const go = useUi((s) => s.go);
   const profile = useProfile();
   const [copiedCode, copyCode] = useCopy();
@@ -108,7 +110,7 @@ export default function Lobby() {
 
   const slot = (p: LobbyPlayer | undefined, i: number, team: number) =>
     p ? (
-      <div key={p.id} className="slot">
+      <div key={p.id} className="slot" data-talking={!!vc.speaking[p.id]}>
         <Avatar cosmetics={p.cosmetics} team={team} name={p.name} bot={p.bot} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <div className="slot__name">
@@ -121,7 +123,37 @@ export default function Lobby() {
         </div>
         {p.id === lobby.hostId && <span className="badge" title="Host"><Icon.crown size={12} /></span>}
         {p.verified && <span className="badge">Verified</span>}
-        {p.bot ? <span className="badge">Bot</span> : p.ready || p.id === lobby.hostId ? <span className="badge badge--ok">Ready</span> : <span className="badge">Not ready</span>}
+        {p.bot ? (
+          <span className="badge">Bot</span>
+        ) : p.ready || p.id === lobby.hostId ? (
+          <span className="badge badge--ok">Ready</span>
+        ) : (
+          <span className="badge">Not ready</span>
+        )}
+        {!p.bot && p.id === net.you && vc.active && (
+          <Button
+            icon
+            variant="ghost"
+            aria-pressed={vc.micMuted}
+            aria-label={vc.micMuted ? 'Unmute your mic' : 'Mute your mic'}
+            title={vc.micMuted ? 'Unmute your mic' : 'Mute your mic'}
+            onClick={() => voice.setMicMuted(!vc.micMuted)}
+          >
+            {vc.micMuted ? <Icon.micOff /> : <Icon.mic />}
+          </Button>
+        )}
+        {!p.bot && p.id !== net.you && vc.peers.includes(p.id) && (
+          <Button
+            icon
+            variant="ghost"
+            aria-pressed={!!vc.muted[p.id]}
+            aria-label={vc.muted[p.id] ? `Unmute ${p.name}` : `Mute ${p.name}`}
+            title={vc.muted[p.id] ? 'Unmute' : 'Mute'}
+            onClick={() => voice.mute(p.id, !vc.muted[p.id])}
+          >
+            {vc.muted[p.id] ? <Icon.micOff /> : <Icon.mic />}
+          </Button>
+        )}
         {host && !p.bot && (
           <Button icon variant="ghost" aria-label={`Move ${p.name} to the other team`} title="Switch team" onClick={() => send(MSG.TEAM, { id: p.id, team: 1 - team })}>
             <Icon.swap />

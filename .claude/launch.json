@@ -49,6 +49,22 @@
         "dev:emulated"
       ],
       "port": 5174
+    },
+    {
+      "name": "client-ungated",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "@chromashift/client",
+        "--",
+        "--mode",
+        "ungated",
+        "--port",
+        "5175"
+      ],
+      "port": 5175
     }
   ]
 }

@@ -12,6 +12,7 @@
     "dev:server": "npm run dev -w @chromashift/server",
     "emulators": "firebase emulators:start --project demo-chromashift --only auth,firestore",
     "dev:emulated": "npm run dev -w @chromashift/client -- --mode emulator --port 5174",
+    "dev:ungated": "npm run dev -w @chromashift/client -- --mode ungated --port 5175",
     "build": "npm run build -w @chromashift/client",
     "desktop": "npm run start -w @chromashift/desktop",
     "desktop:pack": "npm run pack -w @chromashift/desktop",

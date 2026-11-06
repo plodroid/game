@@ -105,6 +105,14 @@ export default function Social() {
   useEffect(() => {
     if (s.talking) setTab('messages');
   }, [s.talking]);
+  // Being here reads the friend requests and messages, so their badges clear.
+  const toRead = s.notes
+    .filter((n) => !n.read && (n.type === 'friendRequest' || n.type === 'message'))
+    .map((n) => n.id)
+    .join(',');
+  useEffect(() => {
+    if (toRead) void social((x) => x.markAllRead(toRead.split(',')));
+  }, [toRead]);
 
   const friends = s.friendships.filter((f) => f.status === 'accepted').sort((a, b) => Number(!!s.cards[b.other]?.online) - Number(!!s.cards[a.other]?.online));
   const incoming = s.friendships.filter((f) => f.status === 'pending' && f.requester !== me);

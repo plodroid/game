@@ -6,22 +6,46 @@ import { useSettings } from '../settings/settings';
  * Voice chat: every player in a room calls every other player directly (a small mesh, at most
  * eight people), through the same free PeerJS broker and STUN servers the games use. Peer ids
  * come from the room code and player id, so nobody has to exchange anything first.
+ * In a match, voices fade with distance (proximity chat); in the lobby everyone is heard.
  */
 
 interface VoiceStore {
-  /** Player ids talking right now (including you). */
+  /** Player ids talking right now (including you, only while your voice is actually going out). */
   speaking: Record<number, boolean>;
-  /** Your microphone is live (key held, or open mic). */
+  /** Your microphone is sending (key held, or open mic) and not muted. */
   live: boolean;
   /** Joined the voice mesh for this room. */
   active: boolean;
   error: string | null;
+  /** Player ids connected on voice. */
+  peers: number[];
+  /** Players you've muted in this room. */
+  muted: Record<number, boolean>;
+  /** Your microphone switched off. */
+  micMuted: boolean;
+  /** Nobody else is heard. */
+  deafened: boolean;
 }
 
-export const useVoice = create<VoiceStore>()(() => ({ speaking: {}, live: false, active: false, error: null }));
+export const useVoice = create<VoiceStore>()(() => ({
+  speaking: {},
+  live: false,
+  active: false,
+  error: null,
+  peers: [],
+  muted: {},
+  micMuted: false,
+  deafened: false,
+}));
 
 const voiceId = (code: string, pid: number) => `chromashift-v1-vc-${code.toLowerCase()}-${pid}`;
 const THRESHOLD = 0.035;
+
+/** Proximity chat: full volume up close, fading out to silence by FAR metres. */
+const NEAR = 8,
+  FAR = 40;
+export const proximityGain = (d: number) =>
+  d <= NEAR ? 1 : d >= FAR ? 0 : ((FAR - d) / (FAR - NEAR)) ** 1.5;
 
 interface Remote {
   pid: number;
@@ -40,6 +64,8 @@ let mic: MediaStream | null = null;
 let micAnalyser: AnalyserNode | null = null;
 let held = false;
 const remotes = new Map<number, Remote>();
+/** Per-player distance gain from the match (1 everywhere in the lobby). */
+const near = new Map<number, number>();
 let raf = 0;
 
 function audioCtx() {
@@ -86,10 +112,16 @@ function watchLevels() {
   raf = requestAnimationFrame(tick);
 }
 
-function volume() {
+/** Sets every remote voice's volume: settings, mutes, deafen and distance. */
+function applyVolumes() {
   const a = useSettings.getState().audio;
-  return Math.max(0, Math.min(1, a.voice * a.master));
+  const v = useVoice.getState();
+  const base = Math.max(0, Math.min(1, a.voice * a.master));
+  for (const r of remotes.values())
+    r.el.volume = v.deafened || v.muted[r.pid] ? 0 : base * (near.get(r.pid) ?? 1);
 }
+
+const syncPeers = () => useVoice.setState({ peers: [...remotes.keys()].sort((x, y) => x - y) });
 
 function attach(pid: number, call: MediaConnection) {
   remotes.get(pid)?.call.close();
@@ -99,7 +131,6 @@ function attach(pid: number, call: MediaConnection) {
     const el = new Audio();
     el.srcObject = stream;
     el.autoplay = true;
-    el.volume = volume();
     void el.play().catch(() => undefined);
     const c = audioCtx();
     const source = c.createMediaStreamSource(stream);
@@ -107,6 +138,8 @@ function attach(pid: number, call: MediaConnection) {
     analyser.fftSize = 512;
     source.connect(analyser);
     remotes.set(pid, { pid, call, el, analyser, source });
+    applyVolumes();
+    syncPeers();
   });
   call.on('close', () => drop(pid, call));
   call.on('error', () => drop(pid, call));
@@ -119,6 +152,7 @@ function drop(pid: number, call?: MediaConnection) {
   r.source.disconnect();
   r.call.close();
   remotes.delete(pid);
+  syncPeers();
 }
 
 /** Sends the microphone (or silence) on every call. */
@@ -128,6 +162,8 @@ function sendTrack() {
   for (const r of remotes.values())
     for (const s of r.call.peerConnection?.getSenders() ?? []) if (s.track?.kind === 'audio' && s.track !== track) void s.replaceTrack(track);
 }
+
+const inApp = typeof navigator !== 'undefined' && /Electron/i.test(navigator.userAgent);
 
 async function ensureMic() {
   if (mic) return true;
@@ -139,19 +175,28 @@ async function ensureMic() {
     c.createMediaStreamSource(mic).connect(micAnalyser);
     sendTrack();
     applyMic();
+    useVoice.setState({ error: null });
     return true;
-  } catch {
-    useVoice.setState({ error: 'Microphone blocked. Allow it in your browser to talk.' });
+  } catch (e) {
+    const name = (e as { name?: string }).name;
+    useVoice.setState({
+      error:
+        name === 'NotFoundError'
+          ? 'No microphone found.'
+          : inApp
+            ? 'Microphone blocked. In Windows Settings → Privacy → Microphone, allow desktop apps.'
+            : 'Microphone blocked. Allow it for this site in your browser to talk.',
+    });
     return false;
   }
 }
 
-/** Mic track on only while talking (held key or open mic). */
+/** Mic track on only while talking (held key or open mic) and not muted. */
 function applyMic() {
   const mode = useSettings.getState().audio.voiceMode;
-  const live = !!mic && (mode === 'open' || (mode === 'ptt' && held));
+  const live = !!mic && !useVoice.getState().micMuted && (mode === 'open' || (mode === 'ptt' && held));
   mic?.getAudioTracks().forEach((t) => (t.enabled = live));
-  useVoice.setState({ live });
+  if (live !== useVoice.getState().live) useVoice.setState({ live });
 }
 
 export const voice = {
@@ -200,6 +245,34 @@ export const voice = {
     if (down && useSettings.getState().audio.voiceMode !== 'off' && !(await ensureMic())) return;
     applyMic();
   },
+  /** In a match: how loud each player is from where you are (pid → 0..1). Null in the lobby. */
+  setNear(gains: Map<number, number> | null) {
+    let changed = false;
+    if (!gains) {
+      changed = near.size > 0;
+      near.clear();
+    } else
+      for (const [pid, g] of gains) {
+        const q = Math.round(g * 20) / 20;
+        if (near.get(pid) !== q) {
+          near.set(pid, q);
+          changed = true;
+        }
+      }
+    if (changed) applyVolumes();
+  },
+  mute(pid: number, on: boolean) {
+    useVoice.setState((v) => ({ muted: { ...v.muted, [pid]: on } }));
+    applyVolumes();
+  },
+  setMicMuted(on: boolean) {
+    useVoice.setState({ micMuted: on });
+    applyMic();
+  },
+  setDeafened(on: boolean) {
+    useVoice.setState({ deafened: on });
+    applyVolumes();
+  },
   leave() {
     cancelAnimationFrame(raf);
     for (const pid of [...remotes.keys()]) drop(pid);
@@ -210,14 +283,15 @@ export const voice = {
     mic = null;
     micAnalyser = null;
     held = false;
-    useVoice.setState({ speaking: {}, live: false, active: false });
+    near.clear();
+    useVoice.setState({ speaking: {}, live: false, active: false, peers: [], muted: {} });
   },
 };
 
 // Volume and mic mode follow the settings live.
 useSettings.subscribe((s, prev) => {
   if (s.audio === prev.audio) return;
-  for (const r of remotes.values()) r.el.volume = volume();
+  applyVolumes();
   if (s.audio.voiceMode === 'open' && room) void ensureMic();
   applyMic();
 });

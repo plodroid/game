@@ -1,8 +1,20 @@
 import { useEffect } from 'react';
 import { audio } from '../audio/audio';
+import { padStyle } from '../game/input';
 import { useUi } from '../state/ui';
 
-const FOCUSABLE = 'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])';
+// A controller plugging in is greeted by its kind.
+addEventListener('gamepadconnected', (e) =>
+  useUi
+    .getState()
+    .toast({
+      text: `${padStyle(e.gamepad) === 'playstation' ? 'PlayStation controller' : 'Controller'} connected`,
+      kind: 'success',
+    }),
+);
+
+const FOCUSABLE =
+  'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
 /** D-pad / stick moves focus through the menus, A activates, B goes back. */
 export function useMenuGamepad(enabled: boolean) {
@@ -25,19 +37,26 @@ export function useMenuGamepad(enabled: boolean) {
       if (!pad) return;
       const pressed = (i: number) => !!pad.buttons[i]?.pressed;
       const edge = (i: number) => pressed(i) && !prev.has(i);
-      const ay = pad.axes[1] ?? 0;
-      const down = pressed(13) || ay > 0.6, up = pressed(12) || ay < -0.6;
-      if ((down || up) && t > repeatAt) {
-        move(down ? 1 : -1);
-        repeatAt = t + (prev.has(down ? 13 : 12) ? 140 : 260);
+      const ax = pad.axes[0] ?? 0,
+        ay = pad.axes[1] ?? 0;
+      // Down/right step forward through the menu, up/left back (grids like the locker read in rows).
+      const down = pressed(13) || ay > 0.6,
+        up = pressed(12) || ay < -0.6;
+      const right = pressed(15) || ax > 0.6,
+        left = pressed(14) || ax < -0.6;
+      const fwd = down || right,
+        bwd = up || left;
+      if ((fwd || bwd) && t > repeatAt) {
+        move(fwd ? 1 : -1);
+        repeatAt = t + (prev.has(fwd ? 13 : 12) ? 140 : 260);
       }
-      if (!down && !up) repeatAt = 0;
+      if (!fwd && !bwd) repeatAt = 0;
       if (edge(0)) (document.activeElement as HTMLElement | null)?.click();
       if (edge(1) && useUi.getState().screen !== 'home') useUi.getState().back();
       prev.clear();
       pad.buttons.forEach((b, i) => b.pressed && prev.add(i));
-      if (down) prev.add(13);
-      if (up) prev.add(12);
+      if (fwd) prev.add(13);
+      if (bwd) prev.add(12);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);

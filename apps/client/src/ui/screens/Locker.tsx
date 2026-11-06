@@ -22,9 +22,10 @@ import { bannerCss } from '../banner';
 import { Coin, Icon } from '../icons';
 import { Button, Header, Segmented } from '../kit';
 
-type Tab = Exclude<Slot, 'weapon'> | 'weapon' | 'special' | 'skin';
+type Tab = Exclude<Slot, 'weapon'> | 'weapon' | 'special' | 'skin' | 'favs';
 
-const TABS: { id: Tab; label: string; group: 'Loadout' | 'Look' | 'Show' }[] = [
+const TABS: { id: Tab; label: string; group: 'Starred' | 'Loadout' | 'Look' | 'Show' }[] = [
+  { id: 'favs', label: 'Favourites', group: 'Starred' },
   { id: 'weapon', label: 'Weapons', group: 'Loadout' },
   { id: 'finish', label: 'Finishes', group: 'Loadout' },
   { id: 'special', label: 'Specials', group: 'Loadout' },
@@ -51,6 +52,7 @@ const WEAPON_ITEMS: Item[] = WEAPON_IDS.map((id) => {
   return { key: `weapon:${id}`, slot: 'weapon', id, name: w.name, rarity, price: w.price };
 });
 export const CATALOGUE_SIZE = COSMETIC_ITEMS.length + WEAPON_ITEMS.length;
+const BY_KEY = new Map([...WEAPON_ITEMS, ...COSMETIC_ITEMS].map((it) => [it.key, it]));
 
 /* Portraits are drawn a few per frame as tiles scroll into view, so a full shelf never stalls. */
 const queue: (() => void)[] = [];
@@ -109,9 +111,26 @@ export default function Locker() {
   useEffect(() => () => setTryOn(null), [setTryOn]);
 
   const equippedId = (slot: Slot) => (slot === 'weapon' ? p.weapon : p.cosmetics[slot]);
+  // Favourites across every category, newest first.
+  const favItems = useMemo(
+    () =>
+      p.favs
+        .map((k) => BY_KEY.get(k))
+        .filter((it): it is Item => !!it)
+        .reverse(),
+    [p.favs],
+  );
+  const shelfItems = (t: Tab) =>
+    t === 'special' || t === 'skin'
+      ? []
+      : t === 'favs'
+        ? favItems
+        : t === 'weapon'
+          ? WEAPON_ITEMS
+          : itemsFor(t);
   const list = useMemo(() => {
     if (tab === 'special' || tab === 'skin') return [];
-    const all = tab === 'weapon' ? WEAPON_ITEMS : itemsFor(tab);
+    const all = tab === 'favs' ? favItems : tab === 'weapon' ? WEAPON_ITEMS : itemsFor(tab);
     const needle = q.trim().toLowerCase();
     return all.filter(
       (it) =>
@@ -119,10 +138,10 @@ export default function Locker() {
         (rarity === 'any' || it.rarity === rarity) &&
         (!needle || it.name.toLowerCase().includes(needle)),
     );
-  }, [tab, show, rarity, q, p]);
+  }, [tab, show, rarity, q, p, favItems]);
 
-  const owned = (tab === 'special' || tab === 'skin' ? [] : tab === 'weapon' ? WEAPON_ITEMS : itemsFor(tab)).filter((it) => p.owns(it.key)).length;
-  const total = tab === 'special' || tab === 'skin' ? 0 : tab === 'weapon' ? WEAPON_ITEMS.length : itemsFor(tab).length;
+  const owned = shelfItems(tab).filter((it) => p.owns(it.key)).length;
+  const total = shelfItems(tab).length;
   const allOwned = [...COSMETIC_ITEMS, ...WEAPON_ITEMS].filter((it) => p.owns(it.key)).length;
 
   const tryOn = (it: Item) => {
@@ -174,42 +193,63 @@ export default function Locker() {
     }
   };
 
-  const tile = (it: Item) => {
-    const own = p.owns(it.key);
-    const on = equippedId(it.slot) === it.id;
+  const fav = (it: Item) => {
+    p.toggleFav(it.key);
+    audio.play('click');
+  };
+  const star = (it: Item, cls = 'fav') => {
+    const on = p.favs.includes(it.key);
     return (
       <button
-        key={it.key}
-        className="item"
-        data-rarity={it.rarity}
+        className={cls}
         aria-pressed={on}
-        data-picked={picked?.key === it.key}
-        onMouseEnter={() => audio.play('hover')}
-        onClick={() => choose(it)}
-        aria-label={`${it.name}, ${RARITY_LABEL[it.rarity]}${on ? ', equipped' : own ? ', owned' : `, ${it.price} coins`}`}
+        aria-label={on ? `Remove ${it.name} from favourites` : `Add ${it.name} to favourites`}
+        title={on ? 'Favourite' : 'Add to favourites'}
+        onClick={() => fav(it)}
       >
-        {preview(it)}
-        <span className="item__name">
-          {it.name}
-          <span className="item__lock">
-            {on ? (
-              <>
-                <Icon.check size={13} /> Equipped
-              </>
-            ) : own ? (
-              'Owned'
-            ) : (
-              <>
-                <Coin size={13} /> <span className="num">{it.price.toLocaleString()}</span>
-              </>
-            )}
-          </span>
-        </span>
+        <Icon.star filled={on} size={cls === 'fav' ? 15 : 20} />
       </button>
     );
   };
 
-  const groups = ['Loadout', 'Look', 'Show'] as const;
+  const tile = (it: Item) => {
+    const own = p.owns(it.key);
+    const on = equippedId(it.slot) === it.id;
+    return (
+      <div key={it.key} className="item-cell">
+        <button
+          className="item"
+          data-rarity={it.rarity}
+          aria-pressed={on}
+          data-picked={picked?.key === it.key}
+          onMouseEnter={() => audio.play('hover')}
+          onClick={() => choose(it)}
+          aria-label={`${it.name}, ${RARITY_LABEL[it.rarity]}${on ? ', equipped' : own ? ', owned' : `, ${it.price} coins`}`}
+        >
+          {preview(it)}
+          <span className="item__name">
+            {it.name}
+            <span className="item__lock">
+              {on ? (
+                <>
+                  <Icon.check size={13} /> Equipped
+                </>
+              ) : own ? (
+                'Owned'
+              ) : (
+                <>
+                  <Coin size={13} /> <span className="num">{it.price.toLocaleString()}</span>
+                </>
+              )}
+            </span>
+          </span>
+        </button>
+        {star(it)}
+      </div>
+    );
+  };
+
+  const groups = ['Starred', 'Loadout', 'Look', 'Show'] as const;
   const pickedOwned = picked ? p.owns(picked.key) : false;
   const short = picked && !pickedOwned ? picked.price - p.coins : 0;
   const w = picked?.slot === 'weapon' ? WEAPONS[picked.id as WeaponId] : null;
@@ -243,7 +283,11 @@ export default function Locker() {
                     setTryOn(null);
                   }}
                 >
+                  {t.id === 'favs' && <Icon.star size={14} filled={p.favs.length > 0} />}
                   {t.label}
+                  {t.id === 'favs' && p.favs.length > 0 && (
+                    <span className="num tab__count">{p.favs.length}</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -311,7 +355,13 @@ export default function Locker() {
 
         {list.length > 0 && <div className="items items--gallery">{list.map(tile)}</div>}
         {tab !== 'special' && tab !== 'skin' && list.length === 0 && (
-          <p className="empty">{show === 'owned' ? 'Nothing here yet. Visit the shop filter to see what you can buy.' : 'Nothing matches those filters.'}</p>
+          <p className="empty">
+            {tab === 'favs' && p.favs.length === 0
+              ? 'No favourites yet. Tap the star on any item to keep it here.'
+              : show === 'owned'
+                ? 'Nothing here yet. Visit the shop filter to see what you can buy.'
+                : 'Nothing matches those filters.'}
+          </p>
         )}
       </div>
 
@@ -334,6 +384,7 @@ export default function Locker() {
               </span>
             )}
           </div>
+          {star(picked, 'btn btn--ghost btn--icon dock__fav')}
           {pickedOwned ? (
             <Button variant="ghost" disabled>
               <Icon.check /> {equippedId(picked.slot) === picked.id ? 'Equipped' : 'Owned'}

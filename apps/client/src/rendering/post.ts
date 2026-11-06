@@ -57,6 +57,15 @@ export class Post {
     this.fxaa?.material.uniforms.resolution.value.set(1 / (s.x * pr), 1 / (s.y * pr));
   }
 
+  /** Compiles the scene's shaders for where they'll really be drawn (the composer's buffer, or the screen). */
+  warm() {
+    const r = this.renderer,
+      prev = r.getRenderTarget();
+    r.setRenderTarget(this.composer ? this.composer.readBuffer : null);
+    r.compile(this.scene, this.camera);
+    r.setRenderTarget(prev);
+  }
+
   render(dt: number) {
     if (this.composer) this.composer.render(dt);
     else this.renderer.render(this.scene, this.camera);

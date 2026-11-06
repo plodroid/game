@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_COSMETICS } from '../config/cosmetics';
 import type { ModeId } from '../config/modes';
 import { SPECIAL_IDS } from '../config/specials';
-import { WEAPON_IDS } from '../config/weapons';
+import { WEAPON_IDS, WEAPONS } from '../config/weapons';
+import { forEachPellet } from './combat';
 import { MAP_IDS, type MapId } from '../maps';
 import { xpForMatch } from '../progression';
 import { PLAYER_GAP } from './movement';
@@ -73,6 +74,21 @@ describe('full bot matches', () => {
       sim.dispose();
     });
   }
+
+  it('fires every weapon without errors', () => {
+    for (const id of WEAPON_IDS) {
+      let n = 0,
+        side = 0;
+      forEachPellet(WEAPONS[id], 0, 0, 99, (dir) => {
+        n++;
+        side += Math.atan2(-dir.x, -dir.z);
+        expect(Number.isFinite(dir.x + dir.y + dir.z)).toBe(true);
+      });
+      expect(n).toBe(WEAPONS[id].pellets);
+      // Spreads are centred on the aim, not lopsided.
+      if (WEAPONS[id].kind === 'lobber') expect(Math.abs(side / n)).toBeLessThan(0.01);
+    }
+  });
 
   it('runs Zone Control and Knockout to completion', async () => {
     for (const mode of ['zones', 'knockout'] as ModeId[]) {

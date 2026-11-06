@@ -29,7 +29,7 @@ import { Post } from '../rendering/post';
 import { prefersReducedMotion, useSettings, type GraphicsSettings } from '../settings/settings';
 import { useHud, useUi, type BoardRow, type FeedItem } from '../state/ui';
 import { useChat } from '../state/chat';
-import { voice, useVoice } from '../multiplayer/voice';
+import { proximityGain, voice, useVoice } from '../multiplayer/voice';
 import { ThirdPersonCamera } from './camera';
 import { engine, type View } from './engine';
 import { touch } from './input';
@@ -203,7 +203,8 @@ export class MatchView implements View {
       detail: g.modelDetail,
       lambert: g.paintQuality === 0,
     });
-    rig.root.traverse((o) => ((o as THREE.Mesh).castShadow = g.shadowQuality > 0 && (o as THREE.Mesh).isMesh));
+    // The rig casts from merged shadow-only copies (see compactRig); without shadows, nothing casts.
+    if (g.shadowQuality === 0) rig.root.traverse((o) => ((o as THREE.Mesh).castShadow = false));
     this.scene.add(rig.root);
     const me = this.source.players().find((p) => p.id === this.source.localId);
     const friendly = me ? me.info.team === v.info.team : false;
@@ -599,8 +600,12 @@ export class MatchView implements View {
       if (c.tag) {
         // Teammates always show; rivals show when in sight (walls hide them) and not lurking in paint.
         const teamInd = useSettings.getState().gameplay.teamIndicators;
-        const close = enemy ? this.cam.camera.position.distanceTo(root.position) < 34 : true;
+        const dist = this.cam.camera.position.distanceTo(root.position);
+        const close = enemy ? dist < 34 : true;
         c.tag.sprite.visible = s.alive && (enemy ? revealed || (!hidden && close) : teamInd);
+        // Up close a tag would fill the screen: nearer than 7 m it shrinks to hold a steady size.
+        const k = Math.min(1, dist / 7);
+        c.tag.sprite.scale.set(1.75 * k, 0.7 * k, 1);
         (c.tag.sprite.material as THREE.SpriteMaterial).depthTest = !revealed && enemy;
         const hp = Math.round(Math.max(0, s.hp) / 5) * 5, talking = !!speaking[v.id];
         if (hp !== c.tag.hp || talking !== c.tag.talking) c.tag.draw(hp, talking);
@@ -651,6 +656,23 @@ export class MatchView implements View {
       m.color.copy(h >= 0 ? this.colors[h] : new THREE.Color(0xffffff));
       m.opacity = h >= 0 ? 0.28 : 0.12;
     }
+    // Proximity chat: each voice's volume follows how far that player is from your camera.
+    if (src.online && useVoice.getState().active) {
+      const range = useSettings.getState().audio.voiceRange;
+      const cp = this.cam.camera.position;
+      const gains = new Map<number, number>();
+      for (const p of src.players()) {
+        if (p.id === src.localId || p.info.bot) continue;
+        const mate = !!me && p.info.team === me.info.team;
+        gains.set(
+          p.id,
+          range === 'all' || (range === 'team' && mate)
+            ? 1
+            : proximityGain(Math.hypot(p.pos.x - cp.x, p.pos.y - cp.y, p.pos.z - cp.z)),
+        );
+      }
+      voice.setNear(gains);
+    }
     const board: BoardRow[] = src.players().map((p) => ({
       id: p.id,
       name: p.info.name,
@@ -695,6 +717,12 @@ export class MatchView implements View {
   render(dt: number) {
     const r = engine.renderer;
     const q = useSettings.getState().graphics.shadowQuality;
+    // First frame: compile every shader the match can use (effects and paint included), so none
+    // compiles mid-match and stalls a frame.
+    if (this.frame === 0) {
+      this.post.warm();
+      this.atlas.warm();
+    }
     this.frame++;
     // Shadow maps refresh less often on lower presets.
     if (q > 0 && this.frame % (q >= 3 ? 1 : q === 2 ? 2 : 3) === 0) r.shadowMap.needsUpdate = true;
@@ -755,6 +783,7 @@ export class MatchView implements View {
     engine.input.onTalk = null;
     engine.input.onMap = null;
     void voice.talk(false);
+    voice.setNear(null);
     useChat.getState().setOpen(false);
     engine.input.wantsLock = false;
     engine.input.engaged = false;

@@ -8,6 +8,8 @@ export type Action =
 
 /** Voice chat: hold a key to talk, an always-open mic, or off. */
 export type VoiceMode = 'ptt' | 'open' | 'off';
+/** Who you hear in a match: everyone by distance, teammates anywhere plus rivals nearby, or everyone. */
+export type VoiceRange = 'proximity' | 'team' | 'all';
 
 export interface GraphicsSettings {
   preset: Preset;
@@ -38,7 +40,17 @@ export interface GraphicsSettings {
 
 export interface Settings {
   graphics: GraphicsSettings;
-  audio: { master: number; music: number; sfx: number; weapons: number; ui: number; ambient: number; voice: number; voiceMode: VoiceMode };
+  audio: {
+    master: number;
+    music: number;
+    sfx: number;
+    weapons: number;
+    ui: number;
+    ambient: number;
+    voice: number;
+    voiceMode: VoiceMode;
+    voiceRange: VoiceRange;
+  };
   controls: {
     mouseSensitivity: number;
     aimSensitivity: number;
@@ -68,7 +80,14 @@ export interface Settings {
   };
   /** First-run hardware check already shown. */
   benchmarked: boolean;
+  /** Kind of device that saved these settings; graphics only carry over between the same kind. */
+  device?: DeviceClass;
 }
+
+export type DeviceClass = 'desktop' | 'mobile';
+/** Phones and tablets (touch-first) keep their own graphics settings apart from computers. */
+export const deviceClass = (): DeviceClass =>
+  typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches ? 'mobile' : 'desktop';
 
 type Tunables = Omit<GraphicsSettings, 'preset' | 'fpsCap' | 'showFps' | 'adaptiveHints' | 'antiAliasing'> & {
   antiAliasing: GraphicsSettings['antiAliasing'];
@@ -125,7 +144,17 @@ export const DEFAULT_BINDINGS: Record<Action, string[]> = {
 
 export const DEFAULT_SETTINGS: Settings = {
   graphics: { preset: 'medium', ...PRESETS.medium, fpsCap: 60, showFps: false, adaptiveHints: true },
-  audio: { master: 0.8, music: 0.55, sfx: 0.8, weapons: 0.75, ui: 0.6, ambient: 0.5, voice: 0.9, voiceMode: 'ptt' },
+  audio: {
+    master: 0.8,
+    music: 0.55,
+    sfx: 0.8,
+    weapons: 0.75,
+    ui: 0.6,
+    ambient: 0.5,
+    voice: 0.9,
+    voiceMode: 'ptt',
+    voiceRange: 'proximity',
+  },
   controls: {
     mouseSensitivity: 1,
     aimSensitivity: 1,
@@ -216,8 +245,24 @@ export const useSettings = create<SettingsStore>()(
           return { controls: { ...s.controls, bindings } };
         }),
       reset: (section) =>
-        set(() => (section ? { [section]: structuredClone(DEFAULT_SETTINGS[section]) } : structuredClone(DEFAULT_SETTINGS)) as Partial<Settings>),
-      load: (s) => set(() => merge({ ...get(), ...s })),
+        set(
+          () =>
+            (section
+              ? { [section]: structuredClone(DEFAULT_SETTINGS[section]) }
+              : structuredClone(DEFAULT_SETTINGS)) as Partial<Settings>,
+        ),
+      load: (s) =>
+        set(() => {
+          const cur = get();
+          // Another kind of device's graphics (a phone's, on a PC) would be wrong here: keep ours.
+          const own = s.device && s.device !== deviceClass();
+          return merge({
+            ...cur,
+            ...s,
+            graphics: own ? cur.graphics : { ...cur.graphics, ...s.graphics },
+            benchmarked: own ? cur.benchmarked : (s.benchmarked ?? cur.benchmarked),
+          });
+        }),
     }),
     {
       name: 'chromashift.settings.v1',
@@ -230,7 +275,7 @@ export const useSettings = create<SettingsStore>()(
 /** Plain snapshot of the settings (without store methods) for cloud sync. */
 export function settingsSnapshot(): Settings {
   const { graphics, audio, controls, gameplay, accessibility, benchmarked } = useSettings.getState();
-  return { graphics, audio, controls, gameplay, accessibility, benchmarked };
+  return { graphics, audio, controls, gameplay, accessibility, benchmarked, device: deviceClass() };
 }
 
 export function prefersReducedMotion(): boolean {

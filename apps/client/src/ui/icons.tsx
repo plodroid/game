@@ -92,6 +92,11 @@ export const Icon = {
       <path d="M4 17l-1-9 5 4 4-6 4 6 5-4-1 9z" />
     </svg>
   ),
+  star: ({ size = 16, filled = false, ...p }: P & { filled?: boolean }) => (
+    <svg {...base(size, p)} fill={filled ? 'currentColor' : 'none'}>
+      <path d="M12 3.6l2.6 5.2 5.8.9-4.2 4.1 1 5.7L12 16.8l-5.2 2.7 1-5.7-4.2-4.1 5.8-.9z" />
+    </svg>
+  ),
   bot: ({ size = 16, ...p }: P) => (
     <svg {...base(size, p)}>
       <rect x="5" y="8" width="14" height="10" rx="3" />

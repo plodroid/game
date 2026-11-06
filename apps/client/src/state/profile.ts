@@ -49,6 +49,8 @@ export interface Profile {
   coins: number;
   /** Item keys bought (`slot:id`, `weapon:id`); starter items are always owned. */
   owned: string[];
+  /** Locker items starred as favourites (same keys as `owned`). */
+  favs: string[];
   quests: QuestState;
   /** Local changes not yet synced to the cloud. */
   dirty: boolean;
@@ -102,6 +104,7 @@ export const newProfile = (): Profile => ({
   cosmetics: DEFAULT_COSMETICS,
   coins: STARTING_COINS,
   owned: [],
+  favs: [],
   quests: freshQuests(),
   dirty: false,
   updatedAt: Date.now(),
@@ -115,6 +118,8 @@ interface ProfileStore extends Profile {
   owns(key: string): boolean;
   /** Spends coins on an item. False if it's owned already or there aren't enough coins. */
   buy(key: string, price: number): boolean;
+  /** Stars or unstars a locker item. */
+  toggleFav(key: string): void;
   /** Pays out a finished quest once. */
   claimQuest(id: string): number;
   /** Starts the new day's or week's quests if the old ones ran out. */
@@ -169,6 +174,14 @@ export const useProfile = create<ProfileStore>()(
         setState({ coins: s.coins - price, owned: [...s.owned, key], dirty: true, updatedAt: Date.now() });
         return true;
       },
+      toggleFav: (key) => {
+        const favs = getState().favs;
+        setState({
+          favs: favs.includes(key) ? favs.filter((k) => k !== key) : [...favs, key].slice(-400),
+          dirty: true,
+          updatedAt: Date.now(),
+        });
+      },
       claimQuest: (id) => {
         const s = getState();
         const quests = rollQuests(s.quests);
@@ -189,7 +202,19 @@ export const useProfile = create<ProfileStore>()(
       name: 'chromashift.profile.v1',
       storage: idb,
       partialize: (s) => {
-        const { hydrated: _h, patch: _p, recordMatch: _r, replace: _x, reset: _z, owns: _o, buy: _b, claimQuest: _c, refreshQuests: _q, ...rest } = s;
+        const {
+          hydrated: _h,
+          patch: _p,
+          recordMatch: _r,
+          replace: _x,
+          reset: _z,
+          owns: _o,
+          buy: _b,
+          toggleFav: _f,
+          claimQuest: _c,
+          refreshQuests: _q,
+          ...rest
+        } = s;
         return rest as unknown as ProfileStore;
       },
       merge: (persisted, current) => {
@@ -207,6 +232,7 @@ export const useProfile = create<ProfileStore>()(
                 .filter(([slot]) => slot !== 'skin')
                 .map(([slot, id]) => `${slot}:${id}`)
                 .filter((k) => !FREE.has(k)),
+          favs: Array.isArray(p.favs) ? p.favs.filter((k): k is string => typeof k === 'string') : [],
           quests: rollQuests({ ...freshQuests(), ...p.quests }),
           weapon: WEAPON_IDS.includes(p.weapon as WeaponId) ? (p.weapon as WeaponId) : current.weapon,
           special: SPECIAL_IDS.includes(p.special as SpecialId) ? (p.special as SpecialId) : current.special,

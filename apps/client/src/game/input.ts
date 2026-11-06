@@ -16,8 +16,57 @@ const ACTION_BTN: Partial<Record<Action, number>> = {
 };
 
 // Standard-mapping gamepad buttons.
+/** Standard gamepad layout (Xbox, PlayStation and most others): button index per action. */
 const PAD: Partial<Record<Action, number>> = {
-  fire: 7, dive: 6, jump: 0, slide: 1, dodge: 2, special: 5, sprint: 10, emote: 3, scoreboard: 8, pause: 9,
+  fire: 7,
+  dive: 6,
+  jump: 0,
+  slide: 1,
+  dodge: 2,
+  special: 5,
+  sprint: 10,
+  emote: 3,
+  scoreboard: 8,
+  pause: 9,
+  talk: 12,
+  map: 15,
+};
+
+export type PadStyle = 'xbox' | 'playstation';
+/** Sony controllers (DualShock 4, DualSense) get PlayStation button names. */
+export const padStyle = (p: Gamepad | null | undefined): PadStyle =>
+  /054c|dualshock|dualsense|playstation|wireless controller/i.test(p?.id ?? '') ? 'playstation' : 'xbox';
+
+/** What each action's controller button is called on that kind of controller. */
+export const PAD_LABEL: Record<PadStyle, Partial<Record<Action, string>>> = {
+  xbox: {
+    fire: 'RT',
+    dive: 'LT',
+    jump: 'A',
+    slide: 'B',
+    dodge: 'X',
+    special: 'RB',
+    sprint: 'L3',
+    emote: 'Y',
+    scoreboard: 'View',
+    pause: 'Menu',
+    talk: 'D-pad up',
+    map: 'D-pad right',
+  },
+  playstation: {
+    fire: 'R2',
+    dive: 'L2',
+    jump: '✕',
+    slide: '○',
+    dodge: '□',
+    special: 'R1',
+    sprint: 'L3',
+    emote: '△',
+    scoreboard: 'Share',
+    pause: 'Options',
+    talk: 'D-pad up',
+    map: 'D-pad right',
+  },
 };
 
 const DEAD = 0.18;
@@ -142,7 +191,10 @@ export class InputManager {
     if (!this.el || this.locked || touch.active) return;
     const r = this.el.requestPointerLock?.({ unadjustedMovement: true }) as Promise<void> | undefined;
     // Some browsers reject unadjustedMovement; fall back to the plain request.
-    r?.catch?.(() => this.el?.requestPointerLock?.());
+    // A window without focus refuses both; the next click or key locks instead.
+    r?.catch?.(() =>
+      (this.el?.requestPointerLock?.() as Promise<void> | undefined)?.catch?.(() => undefined),
+    );
   }
   unlock() {
     if (document.pointerLockElement) document.exitPointerLock();
@@ -166,7 +218,10 @@ export class InputManager {
       if (on && !this.padDown.has(i)) {
         this.padLatched.add(i);
         if (i === PAD.pause) this.onPause?.();
+        if (i === PAD.map) this.onMap?.();
+        if (i === PAD.talk) this.onTalk?.(true);
       }
+      if (!on && this.padDown.has(i) && i === PAD.talk) this.onTalk?.(false);
       if (on) this.padDown.add(i);
       else this.padDown.delete(i);
     });

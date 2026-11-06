@@ -36,6 +36,7 @@ class Engine {
   private slowWindows = 0;
   private hinted = false;
   private lost = false;
+  private reported = false;
 
   init(stage: HTMLElement) {
     this.stage = stage;
@@ -123,7 +124,15 @@ class Engine {
     }
     const dt = Math.min(0.1, Math.max(0, (t - (this.last || t)) / 1000));
     this.last = t;
-    this.view.update(dt);
+    // A bug in one update must not freeze the picture: log it once and keep drawing.
+    try {
+      this.view.update(dt);
+    } catch (e) {
+      if (!this.reported) {
+        this.reported = true;
+        console.error(e);
+      }
+    }
     this.view.render(dt);
     this.frames++;
     if (!this.fpsT) this.fpsT = t;

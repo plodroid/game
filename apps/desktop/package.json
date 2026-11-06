@@ -1,12 +1,12 @@
 {
   "name": "@chromashift/desktop",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "CHROMASHIFT as a desktop app: the web build in its own window.",
+  "description": "CHROMASHIFT as a desktop app: the live game in its own window, updated with the site.",
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "pack": "npm run build -w @chromashift/client && electron-builder --dir --win"
+    "pack": "electron-builder --win nsis"
   },
   "build": {
     "appId": "game.chromashift.desktop",
@@ -16,17 +16,27 @@
     },
     "files": [
       "main.cjs",
+      "offline.html",
       {
-        "from": "../client/dist",
-        "to": "web",
+        "from": "../client/public",
+        "to": ".",
         "filter": [
-          "**/*"
+          "pwa-512x512.png"
         ]
       }
     ],
     "win": {
-      "target": "dir",
+      "target": "nsis",
       "icon": "../client/public/pwa-512x512.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "CHROMASHIFT",
+      "artifactName": "CHROMASHIFT-Setup-${version}.${ext}"
     },
     "electronVersion": "45.2.3"
   },

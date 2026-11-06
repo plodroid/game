@@ -19,9 +19,11 @@ A colourful third-person team paint shooter that runs in the browser. Two teams 
 - **Bots that actually play**: an auto-generated navigation graph (walk, jump, drop and launch-pad links), A* routing that avoids rival paint, painting goals, fighting with leading aim and ledge awareness, refilling, retreating, supporting teammates, team goal claims and specials. Four difficulties change reaction time, aim wobble, turn rate and strategy; bots never get extra rules or perfect aim.
 - **Seven original maps**: Skyline (sunset rooftops), Core (indoor arena), Float (islands in the clouds), Dye Docks (a harbour at dusk), Bloom Gardens (hedges and a gazebo), Prism Canyon (red-rock terraces), Neon Arcade (a rooftop arcade at night). Maps are mirrored, so both teams get identical routes.
 - **Multiplayer**: host a game from the browser and share a 5-character code (it stays the same each time you host) or an invite link. Browsers connect directly over WebRTC; the host's tab runs the same authoritative match code as the optional Colyseus dedicated server. Host controls, bot fill, late join, reconnection, recent games, client prediction with reconciliation, snapshot interpolation, input validation and rate limiting.
-- **Accounts** (free Firebase Spark plan): everyone signs in with a username and a strong password. An email is optional (private, for updates). A Google account can be linked as the way back in if the password is forgotten.
+- **Accounts** (free Firebase Spark plan): everyone signs in with a username and a strong password. An email is optional (private, for updates). A Google account can be linked as the way back in if the password is forgotten. Progress, coins, purchases, favourites and settings follow the account live between the site, the desktop app and phones; saves from two devices at once are merged, never overwritten. Graphics settings stay per kind of device (a phone keeps its own).
 - **Social**: search players by username, view their cards, add friends, see who's online, and get in-game notifications. Parties of up to four (invites last five minutes) follow the leader into games. Messages between friends support text and voice notes.
-- **In the match**: chat (T, Tab for team chat), voice chat with push to talk (V) or an open mic, name tags with a health bar that light up with a mic while someone talks, and a minimap with player names (M to enlarge).
+- **In the match**: chat (T, Tab for team chat), voice chat with push to talk (V) or an open mic, name tags with a health bar that light up with a mic while someone talks, and a minimap with player names (M to enlarge). Voice is proximity chat by default (voices fade with distance; or teammates anywhere plus rivals nearby, or everyone), with a corner indicator that lights only while your voice is going out, a list of who is talking, and mute mic, deafen and per-player mute in the pause menu and lobby.
+- **Locker favourites**: star any item; a Favourites shelf gathers them across every category.
+- **Every device**: keyboard and mouse, Xbox and PlayStation controllers (button names follow the controller; D-pad and stick move through menus), and touch with on-screen controls, chat and hold-to-talk buttons. Layouts adapt to phones and tablets in either orientation.
 - **Settings**: Very Low to Ultra graphics presets plus every option individually, hardware check, audio buses, key rebinding, gamepad and touch controls, camera and HUD options, and accessibility (colour-blind palettes with shape markers, text size, reduced motion, subtitles, visual audio cues, high contrast).
 - **PWA**: installable, works offline against bots, asks before updating.
 - **All assets are original and generated in code**: character and weapon models, textures, music and sound effects. Nothing is downloaded or licensed.
@@ -134,6 +136,8 @@ With Firebase configured, every player signs in before playing, with a username 
 
 Create a free Firebase project (Spark plan, no billing), enable **Email/Password** and **Google** sign-in, set the `VITE_FIREBASE_*` values, and deploy [firestore.rules](firestore.rules) (`npx firebase deploy --only firestore:rules`). The rules must be deployed whenever they change, or sign-up and social features will be refused. Full steps are in [docs/FIREBASE.md](docs/FIREBASE.md).
 
+**Playtesting without accounts:** `npm run dev:ungated` serves the game on http://localhost:5175/game/ with accounts switched off.
+
 **Testing accounts locally:** the repository's `.env` points at the real project, so test sign-ups belong on the local emulators. Run `npm run emulators`, then `npm run dev:emulated`, and open http://localhost:5174/game/. That mode forces a demo project, so nothing reaches the live one. Test accounts are listed in [scripts/emulator-accounts.json](scripts/emulator-accounts.json).
 
 Coins, quests and owned items are saved on the device and synced to the account. Without a paid server-side plan they are client-reported, like offline XP.
@@ -148,7 +152,7 @@ Optional repository **Variables** (Settings → Secrets and variables → Action
 
 ## Desktop app (Windows)
 
-`npm run desktop:pack` builds the client and packs it with Electron into `apps/desktop/release/win-unpacked/CHROMASHIFT.exe`. Run that EXE directly; nothing is installed. The app serves the game from a fixed local address (`http://localhost:47821/game/`), so sign-in, settings and saves persist between launches. It allows the microphone for voice chat, and F11 toggles fullscreen. `npm run desktop` runs it from the last client build without packing. The build isn't code-signed, so Windows SmartScreen may ask before the first run. Google sign-in pages can refuse embedded windows, so link Google from the browser version.
+`npm run desktop:pack` builds the Windows installer `apps/desktop/release/CHROMASHIFT-Setup-<version>.exe` (Start menu and desktop shortcuts, choice of folder, uninstaller). The app is a window onto the published site, so every deploy updates it without reinstalling: a new version installs in the background and applies on the next launch (or right away from the in-game "Update" prompt). The site's service worker caches the game, so after the first launch it also starts offline. It prefers the dedicated graphics card, keeps full speed in the background for voice and online play, allows the microphone for voice chat, and F11 toggles fullscreen. `npm run desktop` runs it without packing; set `CHROMASHIFT_URL` (for example `http://localhost:5173/game/`) to point it at a dev server. The installer isn't code-signed, so Windows SmartScreen may ask before the first run. Google sign-in pages can refuse embedded windows, so link Google from the browser version.
 
 ## Installing the app (PWA)
 
@@ -159,6 +163,8 @@ Optional repository **Variables** (Settings → Secrets and variables → Action
 The installed app opens straight into the game and keeps working offline for bot matches. When a new version is deployed, it asks before updating. Online play checks the protocol version, so an outdated cached copy can't join an incompatible server.
 
 ## Graphics and performance
+
+Characters are built from many small parts, so each one is merged per joint at load: parts that share a material become one mesh, plain parts share one material that carries colour, roughness and glow per vertex, and each joint casts its shadow from one merged shadow-only copy. The picture is pixel-identical; a match draws less than half as many draw calls. Every shader a match can use is compiled during loading (no mid-match compile stalls), and sound effects are rendered once into buffers instead of being synthesised live for every shot.
 
 WebGL2 is required. If it's unavailable, the game shows a message explaining how to fix it.
 

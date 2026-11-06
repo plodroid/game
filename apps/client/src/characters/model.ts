@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ACCENT_COLORS, HAIR_COLORS, SKIN_TONES, WEAPONS, type Cosmetics, type WeaponId } from '@chromashift/shared';
 import { buildWeapon, type WeaponModel } from '../weapons/models';
 import { buildBack } from './back';
+import { compactRig } from './compact';
 import { shapeOf } from './gear';
 import { buildHead, type HeadParts } from './head';
 import { darken, patternTexture, type Pattern } from './patterns';
@@ -301,6 +302,33 @@ export function buildCharacter(o: ModelOptions): Rig {
   blob.visible = false;
   blob.castShadow = false;
   root.add(blob);
+
+  compactRig(
+    root,
+    // Joints the animation moves, plus the weapons (they can be hidden on their own).
+    [
+      root,
+      body,
+      hips,
+      spine,
+      chest,
+      head,
+      L.shoulder,
+      R.shoulder,
+      L.elbow,
+      R.elbow,
+      L.hand,
+      R.hand,
+      LL.hip,
+      RL.hip,
+      LL.knee,
+      RL.knee,
+      weapon.group,
+      ...(offWeapon ? [offWeapon.group] : []),
+    ],
+    new Set([blob, canisterFill]),
+    (x) => void g(x),
+  );
 
   return {
     root, body, hips, spine, chest, head,

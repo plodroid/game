@@ -64,6 +64,18 @@ export class Effects {
     this.parts.count = 0;
     this.parts.frustumCulled = false;
     this.group.add(this.parts);
+    // One hidden sample of each material made later on demand, so their shaders are compiled with
+    // the rest at load (see MatchView) instead of stalling a frame the first time one appears.
+    // They stay (hidden) so those shaders stay compiled.
+    const warm = new THREE.Group();
+    warm.visible = false;
+    warm.add(
+      new THREE.Mesh(this.ringGeo, ringMaterial()),
+      new THREE.Mesh(this.shieldGeo, shieldMaterial(colors[0])),
+      new THREE.Mesh(this.shieldGeo, novaMaterial(colors[0])),
+      beaconMesh(colors[0]),
+    );
+    this.group.add(warm);
   }
 
   setColors(c: [THREE.Color, THREE.Color]) {
@@ -136,7 +148,7 @@ export class Effects {
     // Bounded pool: when every ring is busy, recycle the most advanced one.
     if (!r && this.rings.length >= 24) r = this.rings.reduce((a, b) => (b.t / b.dur > a.t / a.dur ? b : a));
     if (!r) {
-      const mesh = new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+      const mesh = new THREE.Mesh(this.ringGeo, ringMaterial());
       mesh.rotation.x = -Math.PI / 2;
       this.group.add(mesh);
       r = { mesh, t: 0, dur, r: radius };
@@ -177,7 +189,7 @@ export class Effects {
       } else if (e.kind === 'nova' || e.kind === 'disrupt') {
         let m = this.novas.get(e.id);
         if (!m) {
-          m = new THREE.Mesh(this.shieldGeo, new THREE.MeshBasicMaterial({ color: this.colors[e.team], transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }));
+          m = new THREE.Mesh(this.shieldGeo, novaMaterial(this.colors[e.team]));
           this.group.add(m);
           this.novas.set(e.id, m);
         }
@@ -259,6 +271,22 @@ export class Effects {
     this.group.removeFromParent();
   }
 }
+
+const ringMaterial = () =>
+  new THREE.MeshBasicMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+  });
+const novaMaterial = (color: THREE.Color) =>
+  new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0.5,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
 
 function shieldMaterial(color: THREE.Color) {
   return new THREE.ShaderMaterial({

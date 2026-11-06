@@ -14,6 +14,32 @@ interface PlayOpts {
 }
 
 const MAX_VOICES = 40;
+const SFX: Sfx[] = [
+  'splat',
+  'drip',
+  'hit',
+  'hurt',
+  'ko',
+  'jump',
+  'land',
+  'dive',
+  'surface',
+  'swim',
+  'empty',
+  'special',
+  'ready',
+  'blast',
+  'spawn',
+  'click',
+  'hover',
+  'back',
+  'confirm',
+  'count',
+  'go',
+  'time',
+  'zone',
+];
+const SHOT_BASES = ['pulse', 'arc', 'lobber', 'roller', 'dual'];
 const NOTE = (n: number) => 440 * Math.pow(2, (n - 69) / 12);
 
 /**
@@ -26,6 +52,9 @@ class AudioEngine {
   private buses = {} as Record<Bus, GainNode>;
   private noise!: AudioBuffer;
   private voices = 0;
+  private burst = new Map<Sfx, { t: number; n: number }>();
+  /** Every effect rendered once into a buffer: playing one is a single source, not a synth graph. */
+  private bank = new Map<string, AudioBuffer>();
   private listener = { x: 0, y: 0, z: 0, yaw: 0 };
   private music: { timer: number; step: number; next: number; kind: 'menu' | 'match' } | null = null;
   private intensity = 0;
@@ -54,8 +83,14 @@ class AudioEngine {
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
       this.applyVolumes();
       useSettings.subscribe(() => this.applyVolumes());
+      // The system can suspend or interrupt audio (device switch, sleep, another app taking the
+      // output); any key or click brings it back instead of the game staying silent.
+      const wake = () => this.ctx && this.ctx.state !== 'running' && void this.ctx.resume();
+      addEventListener('keydown', wake, true);
+      addEventListener('pointerdown', wake, true);
+      void this.prerender();
     }
-    if (this.ctx.state === 'suspended') void this.ctx.resume();
+    if (this.ctx.state !== 'running') void this.ctx.resume();
   }
 
   applyVolumes() {
@@ -104,12 +139,50 @@ class AudioEngine {
   }
 
   private track(node: AudioScheduledSourceNode) {
+    // Only live sounds count towards the voice limit (not ones being rendered into the bank).
+    if (node.context !== this.ctx) return;
     this.voices++;
     node.onended = () => this.voices--;
   }
 
-  private tone(dest: AudioNode, t: number, f0: number, f1: number, dur: number, type: OscillatorType, vol: number, attack = 0.004) {
-    const ctx = this.ctx!;
+  /**
+   * Renders each effect once, offline, into a short buffer. Same synthesis, done ahead of time:
+   * during play each sound is then one buffer source instead of several oscillators and filters,
+   * which keeps the audio thread light on phones and older PCs.
+   */
+  private async prerender() {
+    const live = this.ctx;
+    if (!live || typeof OfflineAudioContext === 'undefined') return;
+    const rate = live.sampleRate;
+    for (const key of [...SFX, ...SHOT_BASES.map((b) => `shot:${b}`)]) {
+      try {
+        const off = new OfflineAudioContext(1, Math.ceil(rate * 1.3), rate);
+        this.synth(key, off.destination, 0, 1);
+        const buf = await off.startRendering();
+        // Trim the silent tail.
+        const d = buf.getChannelData(0);
+        let end = d.length - 1;
+        while (end > 0 && Math.abs(d[end]) < 1e-4) end--;
+        const out = live.createBuffer(1, Math.min(d.length, end + 64), rate);
+        out.copyToChannel(d.subarray(0, out.length), 0);
+        this.bank.set(key, out);
+      } catch {
+        // Rendering unsupported here: that sound keeps being synthesised live.
+      }
+    }
+  }
+
+  private tone(
+    dest: AudioNode,
+    t: number,
+    f0: number,
+    f1: number,
+    dur: number,
+    type: OscillatorType,
+    vol: number,
+    attack = 0.004,
+  ) {
+    const ctx = dest.context;
     const o = ctx.createOscillator();
     const g = ctx.createGain();
     o.type = type;
@@ -124,8 +197,17 @@ class AudioEngine {
     this.track(o);
   }
 
-  private hiss(dest: AudioNode, t: number, dur: number, type: BiquadFilterType, f0: number, f1: number, q: number, vol: number) {
-    const ctx = this.ctx!;
+  private hiss(
+    dest: AudioNode,
+    t: number,
+    dur: number,
+    type: BiquadFilterType,
+    f0: number,
+    f1: number,
+    q: number,
+    vol: number,
+  ) {
+    const ctx = dest.context;
     const s = ctx.createBufferSource();
     s.buffer = this.noise;
     s.playbackRate.value = 0.8 + Math.random() * 0.4;
@@ -146,6 +228,13 @@ class AudioEngine {
   play(name: Sfx, o: PlayOpts = {}) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
+    // After a hitch the game catches up several ticks at once; stacking dozens of copies of one
+    // sound on the same instant only clips, so a few per moment is plenty.
+    const burst = this.burst.get(name);
+    if (burst && t - burst.t < 0.03) {
+      if (burst.n >= 3) return;
+      burst.n++;
+    } else this.burst.set(name, { t, n: 1 });
     const p = o.pitch ?? 1;
     const vary = 0.94 + Math.random() * 0.12;
     const bus: Bus = name === 'shot' ? 'weapons' : ['click', 'hover', 'back', 'confirm', 'count', 'go', 'time', 'ready'].includes(name) ? 'ui' : 'sfx';
@@ -153,9 +242,23 @@ class AudioEngine {
     if (!dest) return;
     if (o.at && (name === 'shot' || name === 'blast' || name === 'ko')) this.onWorldSound?.(o.at, name);
     const k = p * vary;
+    const key = name === 'shot' ? `shot:${WEAPONS[o.weapon ?? 'pulse']?.base ?? 'pulse'}` : name;
+    const buf = this.bank.get(key);
+    if (!buf) return this.synth(key, dest, t, k);
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = k;
+    src.connect(dest);
+    src.start(t);
+    this.track(src);
+  }
+
+  /** The synthesis of one effect (`shot:<base>` for weapon shots) into `dest`, starting at `t`. */
+  private synth(key: string, dest: AudioNode, t: number, k: number) {
+    const [name, base] = key.split(':') as [Sfx, string | undefined];
     switch (name) {
       case 'shot': {
-        const w = WEAPONS[o.weapon ?? 'pulse']?.base ?? 'pulse';
+        const w = base ?? 'pulse';
         if (w === 'arc') {
           this.tone(dest, t, 180 * k, 48, 0.22, 'sine', 0.7);
           this.hiss(dest, t, 0.25, 'lowpass', 2400, 300, 0.8, 0.5);
@@ -277,6 +380,12 @@ class AudioEngine {
     m.timer = window.setInterval(() => {
       const ctx = this.ctx;
       if (!ctx || this.music !== m) return;
+      // If the page stalled, skip the beats that were missed rather than playing them all at once.
+      if (m.next < ctx.currentTime) {
+        const missed = Math.ceil((ctx.currentTime - m.next) / sixteenth);
+        m.step += missed;
+        m.next += missed * sixteenth;
+      }
       while (m.next < ctx.currentTime + 0.15) {
         const s = m.step % 16, bar = Math.floor(m.step / 16) % 4;
         const t = m.next;

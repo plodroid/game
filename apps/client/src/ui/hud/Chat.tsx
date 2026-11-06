@@ -15,11 +15,7 @@ const SHOW_MS = 9000;
 export function Chat({ me }: { me: { id: number; name: string; team: number } | null }) {
   const { lines, open, team, setOpen, setTeam } = useChat();
   const room = useNet((n) => n.room);
-  const live = useVoice((v) => v.live);
-  const active = useVoice((v) => v.active);
-  const voiceErr = useVoice((v) => v.error);
   const bindings = useSettings((s) => s.controls.bindings);
-  const mode = useSettings((s) => s.audio.voiceMode);
   const myTeam = useHud((h) => h.myTeam);
   const [text, setText] = useState('');
   const [, tick] = useState(0);
@@ -44,6 +40,7 @@ export function Chat({ me }: { me: { id: number; name: string; team: number } | 
 
   return (
     <div className="chat" data-open={open}>
+      {room && <VoicePanel colors={colors} />}
       <div className="chat__log" ref={log} aria-live="polite">
         {shown.map((l) => (
           <div key={l.key} className="chat__line" style={{ opacity: open ? 1 : Math.min(1, (SHOW_MS - (now - l.at)) / 1500) }}>
@@ -90,21 +87,66 @@ export function Chat({ me }: { me: { id: number; name: string; team: number } | 
       ) : (
         <div className="chat__hint">
           <span className="key-hint">{keyLabel(bindings.chat?.[0])}</span> chat
-          {room && mode !== 'off' && (
-            <span className="voice-hint" data-live={live} title={voiceErr ?? undefined}>
-              {live ? <Icon.mic size={14} /> : <Icon.micOff size={14} />}
-              {mode === 'ptt' ? (
-                <>
-                  hold <span className="key-hint">{keyLabel(bindings.talk?.[0])}</span> to talk
-                </>
-              ) : (
-                'open mic'
-              )}
-              {!active && ' (connecting)'}
-            </span>
-          )}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Voice in the corner: who is talking right now, and your own mic, which only lights up while
+ * your voice is actually going out (not merely because the mic is open).
+ */
+function VoicePanel({ colors }: { colors: string[] }) {
+  const v = useVoice();
+  const mode = useSettings((s) => s.audio.voiceMode);
+  const talkKey = useSettings((s) => s.controls.bindings.talk?.[0]);
+  const board = useHud((h) => h.board);
+  if (mode === 'off') return null;
+  const you = board.find((b) => b.you)?.id;
+  const talking = you != null && !!v.speaking[you];
+  const state = v.micMuted ? 'muted' : talking ? 'talking' : v.live ? 'live' : 'idle';
+  const label =
+    state === 'muted' ? (
+      'Mic muted'
+    ) : state === 'talking' ? (
+      'Talking'
+    ) : state === 'live' ? (
+      mode === 'open' ? (
+        'Open mic'
+      ) : (
+        'Mic on'
+      )
+    ) : (
+      <>
+        Hold <span className="key-hint">{keyLabel(talkKey)}</span> to talk
+      </>
+    );
+  const others = board.filter((b) => !b.you && v.speaking[b.id]);
+  return (
+    <div className="vc">
+      {others.map((b) => (
+        <div
+          key={b.id}
+          className="vc__talker"
+          style={{ ['--c' as string]: colors[b.team] }}
+          data-muted={!!v.muted[b.id]}
+        >
+          {v.muted[b.id] ? <Icon.micOff size={13} /> : <Icon.mic size={13} />}
+          {b.name}
+        </div>
+      ))}
+      <div
+        className="vc__me"
+        data-state={state}
+        aria-label={`Voice: ${state === 'idle' ? 'not talking' : state}`}
+      >
+        {state === 'muted' ? <Icon.micOff size={14} /> : <Icon.mic size={14} />}
+        <span>{label}</span>
+        {v.deafened && <span className="vc__note">deafened</span>}
+        {!v.active && <span className="vc__note">connecting</span>}
+      </div>
+      {v.error && <div className="vc__err">{v.error}</div>}
     </div>
   );
 }

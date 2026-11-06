@@ -1785,7 +1785,9 @@ textarea.input:focus {
   max-width: 48ch;
 }
 
-@media (max-width: 760px) {
+/* Phones, and tablets held upright: full-width sheets, and the home menu as a bottom sheet under
+   the character (the menu camera frames portrait screens the same way). */
+@media (max-width: 760px), (max-aspect-ratio: 4/5) {
   :root {
     --gutter: 18px;
   }
@@ -2023,6 +2025,72 @@ textarea.input:focus {
 
 .item[data-picked='true']:not([aria-pressed='true']) {
   box-shadow: inset 0 0 0 3px var(--tx-3);
+}
+
+/* Favourite star: a small drop in the tile's corner, gold once starred. */
+.item-cell {
+  position: relative;
+  display: grid;
+}
+
+.fav {
+  appearance: none;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50% 50% 50% 18%;
+  background: color-mix(in srgb, var(--s1) 78%, transparent);
+  color: var(--tx-2);
+  cursor: pointer;
+  transition:
+    opacity 160ms ease,
+    transform 220ms var(--ease-spring),
+    color 160ms ease;
+}
+
+.fav[aria-pressed='true'] {
+  color: var(--gold);
+}
+
+.fav:active {
+  transform: scale(0.85);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .fav:not([aria-pressed='true']) {
+    opacity: 0;
+  }
+  .item-cell:hover .fav,
+  .fav:focus-visible {
+    opacity: 1;
+  }
+  .fav:hover {
+    color: var(--gold);
+  }
+}
+
+.dock__fav[aria-pressed='true'] {
+  color: var(--gold);
+}
+
+.tab > svg {
+  margin-right: 5px;
+  vertical-align: -2px;
+}
+
+.tab__count {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.3);
+  color: inherit;
+  font-size: 0.75rem;
 }
 
 .item__title {
@@ -2338,6 +2406,18 @@ textarea.input:focus {
 
 .count--ok {
   background: var(--success);
+}
+
+/* Friends online: a quiet presence dot, not a number asking for attention. */
+.presence-dot {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 2px var(--s2);
 }
 
 .count--inline {
@@ -2665,4 +2745,50 @@ textarea.input:focus {
   font-size: 0.82rem;
   text-transform: uppercase;
   letter-spacing: 0.02em;
+}
+
+/* A player talking on voice chat glows in the lobby. */
+.slot[data-talking='true'] {
+  box-shadow:
+    0 0 0 2px var(--teal),
+    0 0 14px color-mix(in srgb, var(--teal) 45%, transparent);
+}
+
+/* Phones held sideways: short screens get a compact two-column main menu that fits at once. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .home {
+    --sheet: 560px;
+    padding-top: 10px;
+  }
+  .brand__word {
+    font-size: 2.2rem;
+  }
+  .menu {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .menu__item {
+    padding: 8px 12px 9px 50px;
+    --flood: circle(0 at 25px 50%);
+  }
+  .menu__label {
+    font-size: 1.45rem;
+  }
+  .menu__desc {
+    display: none;
+  }
+}
+
+/* Touch screens: messages drop in at the top, clear of thumbs and on-screen controls. */
+@media (pointer: coarse) {
+  .toasts {
+    top: calc(10px + var(--safe-t));
+    bottom: auto;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: calc(100vw - 24px);
+  }
 }

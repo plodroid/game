@@ -218,6 +218,15 @@ export class PaintAtlas {
   }
   private pendingRebuild = false;
 
+  /** Compiles the stamp shader now, not on the first paint of the match. */
+  warm() {
+    const r = this.renderer,
+      prev = r.getRenderTarget();
+    r.setRenderTarget(this.target);
+    r.compile(this.scene, this.camera);
+    r.setRenderTarget(prev);
+  }
+
   /** Renders queued stamps into the atlas. Call once per frame before the main render. */
   flush() {
     if (!this.count && !this.pendingRebuild) return;

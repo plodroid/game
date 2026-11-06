@@ -17,6 +17,7 @@ import {
   Timestamp,
   updateDoc,
   where,
+  writeBatch,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { sanitizeCosmetics, usernameKey, type Cosmetics } from '@chromashift/shared';
@@ -164,6 +165,17 @@ export function watchNotes(on: (notes: Note[]) => void): Unsubscribe {
 export async function markRead(id: string) {
   const { db, uid } = me();
   await updateDoc(doc(db, 'notifications', uid, 'items', id), { read: true });
+}
+
+/** Marks several notifications read in one write. */
+export async function markAllRead(ids: string[]) {
+  const { db, uid } = me();
+  for (let i = 0; i < ids.length; i += 400) {
+    const b = writeBatch(db);
+    for (const id of ids.slice(i, i + 400))
+      b.update(doc(db, 'notifications', uid, 'items', id), { read: true });
+    await b.commit();
+  }
 }
 
 export async function clearNote(id: string) {

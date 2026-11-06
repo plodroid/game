@@ -47,7 +47,7 @@ service cloud.firestore {
         && (!('finish' in c) || shortId(c.finish));
     }
     function validUser(d) {
-      return d.keys().hasOnly(['username', 'usernameKey', 'displayName', 'createdAt', 'updatedAt', 'xp', 'stats', 'weapon', 'special', 'cosmetics', 'settings', 'coins', 'owned', 'quests'])
+      return d.keys().hasOnly(['username', 'usernameKey', 'displayName', 'createdAt', 'updatedAt', 'xp', 'stats', 'weapon', 'special', 'cosmetics', 'settings', 'coins', 'owned', 'favs', 'quests'])
         && validUsername(d.username)
         && d.usernameKey == d.username.lower()
         && validDisplayName(d.displayName)
@@ -60,6 +60,7 @@ service cloud.firestore {
         // Coins are earned and spent on this device (no server to check them on the free plan).
         && (!('coins' in d) || count(d.coins))
         && (!('owned' in d) || (d.owned is list && d.owned.size() <= 500))
+        && (!('favs' in d) || (d.favs is list && d.favs.size() <= 400))
         && (!('quests' in d) || d.quests is map);
     }
     function validStatsCard(s) {

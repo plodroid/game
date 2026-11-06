@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { engine, PRESET_LABEL } from '../../game/engine';
+import { PAD_LABEL, padStyle, type PadStyle } from '../../game/input';
 import { menu } from '../../game/session';
 import { PALETTES } from '../../rendering/palette';
 import { benchmark, probeHardware, recommend, type HardwareReport } from '../../settings/hardware';
@@ -165,7 +166,7 @@ function Graphics() {
 function Audio() {
   const a = useSettings((s) => s.audio);
   const set = useSettings((s) => s.set);
-  const rows: [Exclude<keyof typeof a, 'voiceMode'>, string][] = [
+  const rows: [Exclude<keyof typeof a, 'voiceMode' | 'voiceRange'>, string][] = [
     ['master', 'Master'],
     ['music', 'Music'],
     ['sfx', 'Sound effects'],
@@ -194,6 +195,21 @@ function Audio() {
           ]}
         />
       </Setting>
+      <Setting
+        name="Voice chat range"
+        hint="Proximity: players fade out with distance, like being there. Team: teammates are heard anywhere, rivals only up close."
+      >
+        <Segmented
+          label="Voice chat range"
+          value={a.voiceRange}
+          onChange={(v) => set('audio', { voiceRange: v })}
+          options={[
+            { value: 'proximity', label: 'Proximity' },
+            { value: 'team', label: 'Team + nearby' },
+            { value: 'all', label: 'Everyone' },
+          ]}
+        />
+      </Setting>
     </>
   );
 }
@@ -217,6 +233,48 @@ const ACTIONS: [Action, string][] = [
   ['scoreboard', 'Scoreboard (hold)'],
   ['pause', 'Pause'],
 ];
+
+/** Controller buttons, named for whichever kind is plugged in (PlayStation or Xbox-style). */
+function PadHint() {
+  const [style, setStyle] = useState<PadStyle | null>(() => {
+    const p = [...(navigator.getGamepads?.() ?? [])].find((x) => x?.connected);
+    return p ? padStyle(p) : null;
+  });
+  useEffect(() => {
+    const on = (e: GamepadEvent) => setStyle(padStyle(e.gamepad));
+    const off = () => setStyle(null);
+    addEventListener('gamepadconnected', on);
+    addEventListener('gamepaddisconnected', off);
+    return () => {
+      removeEventListener('gamepadconnected', on);
+      removeEventListener('gamepaddisconnected', off);
+    };
+  }, []);
+  const l = PAD_LABEL[style ?? 'xbox'];
+  const acts: [Action, string][] = [
+    ['fire', 'fire'],
+    ['dive', 'dive'],
+    ['jump', 'jump'],
+    ['slide', 'slide'],
+    ['dodge', 'dodge'],
+    ['special', 'special'],
+    ['sprint', 'sprint'],
+    ['emote', 'emote'],
+    ['talk', 'talk'],
+    ['map', 'map'],
+    ['pause', 'pause'],
+  ];
+  return (
+    <span className="muted small">
+      {style === 'playstation'
+        ? 'PlayStation controller'
+        : style
+          ? 'Controller'
+          : 'Controller (Xbox or PlayStation)'}
+      : {acts.map(([a, n]) => `${l[a]} ${n}`).join(' · ')}
+    </span>
+  );
+}
 
 function Controls() {
   const c = useSettings((s) => s.controls);
@@ -256,7 +314,7 @@ function Controls() {
       ))}
       <div className="row" style={{ marginTop: 12 }}>
         <Button onClick={() => set('controls', { bindings: DEFAULT_BINDINGS })}>Reset bindings</Button>
-        <span className="muted small">Gamepad: RT fire · LT dive · A jump · B slide · X dodge · RB special · L3 sprint · Y emote</span>
+        <PadHint />
       </div>
     </>
   );

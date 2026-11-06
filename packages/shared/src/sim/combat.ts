@@ -39,7 +39,9 @@ export interface Effect {
   hp: number;
 }
 
-const tmpA = v3(), tmpB = v3(), dirs = [v3(), v3(), v3(), v3(), v3(), v3(), v3(), v3()];
+const tmpA = v3(),
+  tmpB = v3(),
+  dirs: Vec3[] = [];
 const DOWN = Object.freeze(v3(0, -1, 0));
 
 /** World position the weapon fires from. `shot` alternates dual-stream muzzles. */
@@ -66,14 +68,17 @@ export function forEachPellet(
       pp += (rnd() - 0.3) * 0.08;
       speed *= 0.85 + rnd() * 0.3;
     } else if (w.kind === 'lobber') {
-      py += (i - 1) * w.spread * DEG;
-      speed *= i === 1 ? 1.06 : 0.94;
+      // A fan centred on the aim, whatever the pellet count; the middle lob flies a little further.
+      const off = i - (w.pellets - 1) / 2;
+      py += off * w.spread * DEG;
+      speed *= Math.abs(off) < 0.6 ? 1.06 : 0.94;
     } else {
       const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * w.spread * DEG;
       py += Math.cos(a) * r;
       pp += Math.sin(a) * r * 0.6;
     }
-    cb(dirFromAngles(dirs[i], py, pp), speed, i);
+    // Scratch vectors grow with the weapon that fires the most pellets.
+    cb(dirFromAngles((dirs[i] ??= v3()), py, pp), speed, i);
   }
 }
 

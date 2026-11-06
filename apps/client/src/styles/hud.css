@@ -491,6 +491,8 @@
 
 .pause__card {
   width: min(400px, calc(100vw - 32px));
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
   display: grid;
   gap: 6px;
   padding: 26px;
@@ -733,13 +735,167 @@
   font-weight: 800;
 }
 
-.voice-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-left: 8px;
+/* Voice: who is talking, and your own mic, lit only while your voice is going out. */
+.vc {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  margin-bottom: 8px;
 }
 
-.voice-hint[data-live='true'] {
-  color: #5fd68a;
+.vc__me,
+.vc__talker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px 4px 9px;
+  border-radius: 999px 999px 999px 8px;
+  background: rgba(18, 15, 24, 0.62);
+  font-size: 0.8rem;
+  font-weight: 750;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    box-shadow 160ms ease;
+}
+
+.vc__me {
+  color: rgba(244, 239, 233, 0.55);
+}
+
+.vc__me[data-state='live'] {
+  color: rgba(244, 239, 233, 0.85);
+}
+
+.vc__me[data-state='talking'] {
+  color: #fff;
+  background: rgba(47, 211, 208, 0.38);
+  box-shadow:
+    0 0 0 2px #2fd3d0,
+    0 0 16px rgba(47, 211, 208, 0.55);
+}
+
+.vc__me[data-state='muted'] {
+  color: var(--danger);
+}
+
+.vc__talker {
+  color: #fff;
+  box-shadow:
+    inset 3px 0 0 var(--c, #fff),
+    0 0 12px color-mix(in srgb, var(--c, #fff) 40%, transparent);
+  animation: enter 140ms var(--ease-out) both;
+}
+
+.vc__talker[data-muted='true'] {
+  color: rgba(244, 239, 233, 0.55);
+  box-shadow: inset 3px 0 0 var(--c, #fff);
+}
+
+.vc__note {
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.vc__err {
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: rgba(18, 15, 24, 0.75);
+  color: #ffb3b5;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+/* Voice chat in the pause menu. */
+.pause__voice {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--blob);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.pause__sub {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--tx-2);
+}
+
+.pause__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pause__row .btn {
+  flex: 1;
+}
+
+.voice-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.voice-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px 2px 10px;
+  border-radius: 12px;
+  transition: background-color 140ms ease;
+}
+
+.voice-list li[data-talking='true'] {
+  background: rgba(47, 211, 208, 0.18);
+}
+
+.voice-list__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+/* Touch: chat and hold-to-talk sit by the pause button, out of the thumbs' way. */
+.tbtn--chat,
+.tbtn--talk {
+  top: calc(60px + var(--safe-t));
+  width: 44px;
+  height: 44px;
+}
+.tbtn--chat {
+  right: calc(68px + var(--safe-r));
+}
+.tbtn--talk {
+  right: calc(120px + var(--safe-r));
+}
+.tbtn--talk.is-down {
+  background: rgba(47, 211, 208, 0.75);
+  box-shadow:
+    0 0 0 2px #2fd3d0,
+    0 0 16px rgba(47, 211, 208, 0.6);
+}
+
+/* Touch: the minimap moves to the left, clear of the action buttons; no keyboard hints. */
+.hud--touch .minimap {
+  right: auto;
+  left: calc(16px + var(--safe-l));
+}
+.hud--touch .chat__hint {
+  display: none;
+}
+.hud--touch .chat {
+  bottom: auto;
+  top: calc(56px + var(--safe-t) + min(190px, 30vmin) + 10px);
 }

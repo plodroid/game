@@ -25,6 +25,17 @@ export function SocialBar() {
   const [open, setOpen] = useState(false);
   const [, tick] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
+  /** Notes that were new when the panel opened keep their highlight while it stays open. */
+  const fresh = useRef(new Set<string>());
+  const unreadIds = s.notes.filter((n) => !n.read).map((n) => n.id);
+  const unreadKey = unreadIds.join(',');
+  // Opening the bell reads everything in it, including what arrives while it's open.
+  useEffect(() => {
+    if (!open || !unreadKey) return;
+    const ids = unreadKey.split(',');
+    ids.forEach((id) => fresh.current.add(id));
+    void social((x) => x.markAllRead(ids));
+  }, [open, unreadKey]);
   useEffect(() => {
     if (!open) return;
     const t = setInterval(() => tick((n) => n + 1), 1000);
@@ -37,8 +48,12 @@ export function SocialBar() {
   }, [open]);
   if (!s.ready) return null;
 
-  const unread = s.notes.filter((n) => !n.read).length;
+  const unread = unreadIds.length;
   const online = s.friendships.filter((f) => f.status === 'accepted' && s.cards[f.other]?.online).length;
+  // The friends button only pings for what needs you there: new requests and messages.
+  const attention = s.notes.filter(
+    (n) => !n.read && (n.type === 'friendRequest' || n.type === 'message'),
+  ).length;
   const party = s.party;
 
   const act = (n: Note) => {
@@ -62,11 +77,26 @@ export function SocialBar() {
           <span className="small">{party.leader === me ? 'Your party' : `${party.names[party.leader] ?? 'Party'}’s party`}</span>
         </button>
       )}
-      <button className="round-btn" onClick={() => (audio.play('click'), go('social'))} aria-label={`Friends, ${online} online`}>
+      <button
+        className="round-btn"
+        onClick={() => (audio.play('click'), go('social'))}
+        aria-label={`Friends, ${online} online${attention ? `, ${attention} new` : ''}`}
+        title={online ? `${online} friend${online === 1 ? '' : 's'} online` : 'Friends'}
+      >
         <Icon.users />
-        {online > 0 && <span className="count count--ok">{online}</span>}
+        {online > 0 && <span className="presence-dot" />}
+        {attention > 0 && <span className="count">{attention > 9 ? '9+' : attention}</span>}
       </button>
-      <button className="round-btn" aria-expanded={open} onClick={() => (audio.play('click'), setOpen(!open))} aria-label={`Notifications, ${unread} unread`}>
+      <button
+        className="round-btn"
+        aria-expanded={open}
+        onClick={() => {
+          audio.play('click');
+          if (!open) fresh.current = new Set();
+          setOpen(!open);
+        }}
+        aria-label={`Notifications, ${unread} unread`}
+      >
         <Icon.bell />
         {unread > 0 && <span className="count">{unread > 9 ? '9+' : unread}</span>}
       </button>
@@ -86,7 +116,12 @@ export function SocialBar() {
           {s.notes.map((n) => {
             const expired = n.type === 'partyInvite' && (n.expiresAt ?? 0) < Date.now();
             return (
-              <div key={n.id} className="note" data-read={n.read} data-type={n.type}>
+              <div
+                key={n.id}
+                className="note"
+                data-read={n.read && !fresh.current.has(n.id)}
+                data-type={n.type}
+              >
                 <Avatar cosmetics={s.cards[n.from]?.cosmetics} name={n.fromName} />
                 <button className="note__body" onClick={() => !expired && act(n)} disabled={expired}>
                   <span>

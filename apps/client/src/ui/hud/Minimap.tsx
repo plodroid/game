@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { MapDef } from '@chromashift/shared';
 import { engine } from '../../game/engine';
 import type { MatchView } from '../../game/matchView';
@@ -52,7 +52,14 @@ function drawLayout(map: MapDef, size: number, colors: string[]) {
 export function Minimap() {
   const big = useHud((h) => h.bigMap);
   const ref = useRef<HTMLCanvasElement>(null);
-  const size = big ? 340 : 190;
+  // Sized to the screen, so a phone held sideways keeps room for its touch buttons.
+  const [vh, setVh] = useState(() => Math.min(innerWidth, innerHeight));
+  useEffect(() => {
+    const on = () => setVh(Math.min(innerWidth, innerHeight));
+    addEventListener('resize', on);
+    return () => removeEventListener('resize', on);
+  }, []);
+  const size = big ? Math.min(340, Math.round(vh * 0.8)) : Math.min(190, Math.round(vh * 0.3));
   useEffect(() => {
     const cv = ref.current;
     if (!cv) return;

@@ -40,10 +40,12 @@ import {
   Timestamp,
   where,
   type Firestore,
+  type SetOptions,
 } from 'firebase/firestore';
 import { levelInfo, sanitizeCosmetics, STARTING_COINS, usernameKey, validateDisplayName, validateEmail, validatePassword, validateUsername, type Cosmetics } from '@chromashift/shared';
 import { env } from '../env';
 import { settingsSnapshot, useSettings, type Settings } from '../settings/settings';
+import { mergeSynced, same, type Synced } from '../state/merge';
 import { newProfile, useProfile, type Profile, type Stats } from '../state/profile';
 import { useAccount, type AccountUser } from './account';
 
@@ -53,6 +55,11 @@ let db: Firestore;
 let user: User | null = null;
 /** A sign-up is creating the profile; the auth listener mustn't report it missing meanwhile. */
 let claiming = false;
+/** What this device and the cloud last agreed on: the base for merging another device's saves. */
+let base: Synced | null = null;
+/** Set while cloud data is applied, so applying it doesn't queue a save of the same data. */
+let applying = false;
+let stopUserDoc: (() => void) | null = null;
 
 /** Private, owner-only document. Never contains the password or the email. */
 interface UserDoc {
@@ -68,6 +75,7 @@ interface UserDoc {
   cosmetics: Cosmetics;
   coins?: number;
   owned?: string[];
+  favs?: string[];
   quests?: Profile['quests'];
   settings?: Partial<Settings>;
 }
@@ -99,6 +107,9 @@ const providerOf = (u: User): AccountUser['provider'] =>
 
 async function onUser(u: User | null) {
   user = u;
+  stopUserDoc?.();
+  stopUserDoc = null;
+  base = null;
   if (!u) {
     useAccount.setState({ status: 'signedOut', user: null, verified: null });
     // Back to a guest profile, but keep this device's settings.
@@ -109,43 +120,127 @@ async function onUser(u: User | null) {
     user: { uid: u.uid, email: u.email, provider: providerOf(u), photoURL: u.photoURL, emailVerified: u.emailVerified, google: hasGoogle(u) },
     status: 'loading',
   });
+  // The account is watched live, so whatever another device saves (the app, the site, a phone)
+  // shows up here straight away instead of at the next sign-in.
+  let first = true;
+  const settle = () => {
+    first = false;
+    clearTimeout(slow);
+  };
+  // Offline with nothing cached: keep playing on the local copy and sync later.
+  const slow = setTimeout(
+    () => first && useAccount.setState({ status: 'signedIn', sync: 'pending' }),
+    10_000,
+  );
+  stopUserDoc = onSnapshot(
+    doc(db, 'users', u.uid),
+    (snap) => {
+      if (snap.metadata.hasPendingWrites) return;
+      if (!snap.exists()) {
+        if (first && !claiming) useAccount.setState({ status: 'needsUsername' });
+        settle();
+        return;
+      }
+      const d = snap.data() as UserDoc;
+      if (first || !base) {
+        settle();
+        applyCloud(u.uid, d);
+        useAccount.setState({ status: 'signedIn', sync: 'synced', error: null });
+        void loadVerified(u.uid);
+      } else receive(u.uid, d);
+    },
+    (e) => {
+      console.warn('Profile load failed', e);
+      settle();
+      useAccount.setState({ status: 'signedIn', sync: 'pending' });
+    },
+  );
+}
+
+/** This device's synced data, in the same shape as the cloud copy. */
+function localSynced(): Synced {
+  const p = useProfile.getState();
+  return {
+    displayName: p.displayName,
+    xp: p.xp,
+    stats: p.stats,
+    weapon: p.weapon,
+    special: p.special,
+    cosmetics: p.cosmetics,
+    coins: p.coins,
+    owned: p.owned,
+    favs: p.favs,
+    quests: p.quests,
+    settings: settingsSnapshot(),
+  };
+}
+
+function docToSynced(uid: string, d: UserDoc): Synced {
+  const local = useProfile.getState();
+  const mine = local.uid === uid;
+  const strings = (x: unknown) =>
+    Array.isArray(x) ? x.filter((k): k is string => typeof k === 'string') : null;
+  return {
+    displayName: d.displayName || d.username,
+    xp: Math.max(0, d.xp || 0),
+    stats: { ...newProfile().stats, ...d.stats },
+    weapon: d.weapon ?? local.weapon,
+    special: d.special ?? local.special,
+    cosmetics: sanitizeCosmetics(d.cosmetics),
+    // Accounts from before the shop keep this device's copy.
+    coins:
+      typeof d.coins === 'number' ? Math.max(0, Math.floor(d.coins)) : mine ? local.coins : STARTING_COINS,
+    owned: strings(d.owned) ?? (mine ? local.owned : []),
+    favs: strings(d.favs) ?? (mine ? local.favs : []),
+    quests:
+      d.quests && typeof d.quests === 'object'
+        ? { ...newProfile().quests, ...d.quests }
+        : mine
+          ? local.quests
+          : newProfile().quests,
+    settings: d.settings ?? {},
+  };
+}
+
+function apply(uid: string, d: UserDoc, s: Synced, dirty: boolean) {
+  applying = true;
   try {
-    const snap = await getDoc(doc(db, 'users', u.uid));
-    if (!snap.exists()) {
-      if (!claiming) useAccount.setState({ status: 'needsUsername' });
-      return;
-    }
-    applyCloud(u.uid, snap.data() as UserDoc);
-    useAccount.setState({ status: 'signedIn', sync: 'synced', error: null });
-    void loadVerified(u.uid);
-  } catch (e) {
-    // Offline or quota exhausted: keep playing on the local copy, sync later.
-    console.warn('Profile load failed', e);
-    useAccount.setState({ status: 'signedIn', sync: 'pending' });
+    const local = useProfile.getState();
+    const { settings, ...rest } = s;
+    const p: Profile = {
+      ...newProfile(),
+      ...rest,
+      weapon: s.weapon as Profile['weapon'],
+      special: s.special as Profile['special'],
+      uid,
+      username: d.username,
+      createdAt: tsToMs(d.createdAt) ?? local.createdAt,
+      dirty,
+      updatedAt: Date.now(),
+    };
+    useProfile.getState().replace(p);
+    if (Object.keys(settings).length) useSettings.getState().load(settings);
+  } finally {
+    applying = false;
   }
 }
 
+/** Takes the cloud copy as this device's state. */
 function applyCloud(uid: string, d: UserDoc) {
-  const local = useProfile.getState();
-  const p: Profile = {
-    ...newProfile(),
-    uid,
-    username: d.username,
-    displayName: d.displayName || d.username,
-    createdAt: tsToMs(d.createdAt) ?? local.createdAt,
-    xp: Math.max(0, d.xp || 0),
-    stats: { ...newProfile().stats, ...d.stats },
-    weapon: (d.weapon as Profile['weapon']) ?? local.weapon,
-    special: (d.special as Profile['special']) ?? local.special,
-    cosmetics: sanitizeCosmetics(d.cosmetics),
-    coins: typeof d.coins === 'number' ? Math.max(0, Math.floor(d.coins)) : local.uid === uid ? local.coins : STARTING_COINS,
-    owned: Array.isArray(d.owned) ? d.owned.filter((k) => typeof k === 'string') : local.uid === uid ? local.owned : [],
-    quests: d.quests && typeof d.quests === 'object' ? { ...newProfile().quests, ...d.quests } : local.uid === uid ? local.quests : newProfile().quests,
-    dirty: false,
-    updatedAt: Date.now(),
-  };
-  useProfile.getState().replace(p);
-  if (d.settings) useSettings.getState().load(d.settings);
+  apply(uid, d, docToSynced(uid, d), false);
+  base = localSynced();
+}
+
+/** Another device saved: take it as it is, or merge it with this device's unsaved changes. */
+function receive(uid: string, d: UserDoc) {
+  const remote = docToSynced(uid, d);
+  // Our own save coming back, or nothing that matters changed.
+  if (!base || same(remote, base)) return;
+  if (same(localSynced(), base)) return applyCloud(uid, d);
+  const merged = mergeSynced(base, localSynced(), remote);
+  apply(uid, d, merged, true);
+  base = remote;
+  scheduleSync(1000);
 }
 
 const tsToMs = (t: unknown) => (t && typeof (t as { toMillis?: () => number }).toMillis === 'function' ? (t as { toMillis(): number }).toMillis() : null);
@@ -290,6 +385,7 @@ export async function claimUsername(u: User | null = user, username: string) {
     cosmetics: local.cosmetics,
     coins: local.uid ? STARTING_COINS : local.coins,
     owned: local.uid ? [] : local.owned,
+    favs: local.uid ? [] : local.favs,
     quests: local.quests,
     settings: s,
   };
@@ -338,30 +434,52 @@ export function scheduleSync(delay = backoff) {
 
 export async function flush() {
   const p = useProfile.getState();
-  if (!user || !p.uid || p.uid !== user.uid || !p.username) return;
+  const u = user;
+  if (!u || !p.uid || p.uid !== u.uid || !p.username) return;
   useAccount.setState({ sync: 'syncing' });
+  const ref = doc(db, 'users', u.uid);
+  const sent = localSynced();
+  // Each synced field is replaced whole (not deep-merged), so the cloud copy matches exactly.
+  const opts = (data: Synced): SetOptions => ({ mergeFields: [...Object.keys(data), 'updatedAt'] });
   try {
-    const s = settingsSnapshot();
+    let result: { data: Synced; cloud: UserDoc | null };
+    try {
+      // A transaction, so two devices saving at the same moment can't overwrite each other:
+      // anything another device saved since this one last synced is merged in before writing.
+      result = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        const cloud = snap.exists() ? (snap.data() as UserDoc) : null;
+        const remote = cloud ? docToSynced(u.uid, cloud) : null;
+        const data = remote && base && !same(remote, base) ? mergeSynced(base, sent, remote) : sent;
+        tx.set(ref, { ...data, updatedAt: serverTimestamp() }, opts(data));
+        return { data, cloud };
+      });
+    } catch (e) {
+      // Offline: transactions need the server, so queue a plain write that goes out on reconnect.
+      if ((e as { code?: string }).code !== 'unavailable') throw e;
+      void setDoc(ref, { ...sent, updatedAt: serverTimestamp() }, opts(sent)).catch(() => undefined);
+      result = { data: sent, cloud: null };
+    }
+    const { data, cloud } = result;
+    const now = localSynced();
+    if (same(now, sent)) {
+      // Nothing changed here during the save: take the merged result.
+      if (cloud && !same(data, sent)) apply(u.uid, cloud, data, false);
+      base = localSynced();
+      useProfile.setState({ dirty: false });
+    } else {
+      // Changes made during the save go on top of the merged result and save next.
+      if (cloud) apply(u.uid, cloud, mergeSynced(sent, now, data), true);
+      base = data;
+      scheduleSync(1000);
+    }
+    const q = useProfile.getState();
     await setDoc(
-      doc(db, 'users', user.uid),
-      {
-        displayName: p.displayName,
-        xp: p.xp,
-        stats: p.stats,
-        weapon: p.weapon,
-        special: p.special,
-        cosmetics: p.cosmetics,
-        coins: p.coins,
-        owned: p.owned,
-        quests: p.quests,
-        settings: s,
-        updatedAt: serverTimestamp(),
-      },
+      doc(db, 'profiles', u.uid),
+      publicDoc(q.username, q.displayName, q.xp, q.cosmetics, q.stats),
       { merge: true },
     );
-    await setDoc(doc(db, 'profiles', user.uid), publicDoc(p.username, p.displayName, p.xp, p.cosmetics, p.stats), { merge: true });
-    useProfile.setState({ dirty: false });
-    useAccount.setState({ sync: 'synced' });
+    useAccount.setState({ sync: useProfile.getState().dirty ? 'pending' : 'synced' });
     backoff = 4000;
   } catch (e) {
     const code = (e as { code?: string }).code ?? '';
@@ -371,8 +489,9 @@ export async function flush() {
   }
 }
 
-// Any local change while signed in is queued for sync.
+// Any local change while signed in is queued for sync (but not cloud data being applied).
 useProfile.subscribe((s, prev) => {
+  if (applying) return;
   if (user && s.uid && s.dirty && (s.updatedAt !== prev.updatedAt || !prev.dirty)) {
     useAccount.setState({ sync: 'pending' });
     scheduleSync(4000);
@@ -382,7 +501,10 @@ let settingsRef = useSettings.getState();
 useSettings.subscribe((s) => {
   if (s === settingsRef) return;
   settingsRef = s;
-  if (user && useProfile.getState().uid) scheduleSync(6000);
+  if (applying || !user || !useProfile.getState().uid) return;
+  if (base && same(settingsSnapshot(), base.settings)) return;
+  useAccount.setState({ sync: 'pending' });
+  scheduleSync(3000);
 });
 addEventListener('online', () => scheduleSync(1000));
 

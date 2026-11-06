@@ -1,85 +1,38 @@
-// CHROMASHIFT desktop: the web build served from inside the app, in its own window.
+// CHROMASHIFT desktop: the live game in its own window, tuned for play.
+// It loads the published site, so every update reaches the app without reinstalling; the site's
+// service worker caches the game, so after the first launch it also starts and plays offline.
 // Electron's main process loads as CommonJS.
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { app, BrowserWindow, session, shell } = require('electron');
-const fs = require('node:fs');
-const http = require('node:http');
 const path = require('node:path');
 
-// Packaged: the build is copied next to this file. In development: the client's dist folder.
-const ROOT = fs.existsSync(path.join(__dirname, 'web')) ? path.join(__dirname, 'web') : path.join(__dirname, '../client/dist');
-const BASE = '/game/';
-// A fixed port keeps the page's origin the same every launch, so sign-in, settings and saves persist.
-// "localhost" is also an authorised domain for Firebase sign-in by default.
-const PORTS = [47821, 47822, 47823, 47824];
+const GAME = process.env.CHROMASHIFT_URL || 'https://plodroid.github.io/game/';
 
-const TYPES = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json',
-  '.webmanifest': 'application/manifest+json',
-  '.png': 'image/png',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-  '.woff2': 'font/woff2',
-  '.wasm': 'application/wasm',
-  '.txt': 'text/plain; charset=utf-8',
-};
+// Use the dedicated graphics card on machines that have two, and let the GPU do the rasterising.
+app.commandLine.appendSwitch('force_high_performance_gpu');
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+// Older but capable drivers are sometimes blocklisted, which would drop WebGL to the slow CPU path.
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
+// Keep full speed when the window is covered or loses focus (voice chat and online play keep running).
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
 
-function serve(port) {
-  return new Promise((resolve, reject) => {
-    const server = http.createServer((req, res) => {
-      const url = new URL(req.url, 'http://localhost');
-      if (!url.pathname.startsWith(BASE)) {
-        res.writeHead(302, { Location: BASE });
-        return res.end();
-      }
-      const rel = decodeURIComponent(url.pathname.slice(BASE.length)) || 'index.html';
-      const file = path.normalize(path.join(ROOT, rel));
-      if (!file.startsWith(ROOT)) {
-        res.writeHead(403);
-        return res.end();
-      }
-      fs.readFile(file, (err, data) => {
-        // Unknown paths get the app itself (it routes in the page).
-        if (err) return fs.readFile(path.join(ROOT, 'index.html'), (e2, html) => (res.writeHead(e2 ? 404 : 200, { 'Content-Type': TYPES['.html'] }), res.end(html)));
-        res.writeHead(200, { 'Content-Type': TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream', 'Cache-Control': 'no-cache' });
-        res.end(data);
-      });
-    });
-    server.once('error', reject);
-    server.listen(port, 'localhost', () => resolve(server));
-  });
-}
-
-async function start() {
-  let port = 0;
-  for (const p of PORTS) {
-    try {
-      await serve(p);
-      port = p;
-      break;
-    } catch {
-      // Port in use: try the next one.
-    }
-  }
-  if (!port) throw new Error('No free local port for the game.');
-
+function start() {
   // Microphone for voice chat, pointer lock and fullscreen for play; nothing else.
   session.defaultSession.setPermissionRequestHandler((_wc, permission, done) => done(['media', 'pointerLock', 'fullscreen', 'clipboard-sanitized-write'].includes(permission)));
 
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
-    minWidth: 960,
-    minHeight: 600,
+    minWidth: 360,
+    minHeight: 360,
     title: 'CHROMASHIFT',
+    icon: path.join(__dirname, 'pwa-512x512.png'),
     backgroundColor: '#120f17',
     autoHideMenuBar: true,
     show: false,
-    webPreferences: { contextIsolation: true, sandbox: true, backgroundThrottling: false },
+    webPreferences: { contextIsolation: true, sandbox: true, backgroundThrottling: false, spellcheck: false },
   });
   win.once('ready-to-show', () => win.show());
   // Sign-in windows (Google, Firebase) open as popups; every other link opens in the browser.
@@ -89,9 +42,16 @@ async function start() {
     return { action: 'deny' };
   });
   win.webContents.on('before-input-event', (_e, input) => {
-    if (input.type === 'keyDown' && input.key === 'F11') win.setFullScreen(!win.isFullScreen());
+    if (input.type !== 'keyDown') return;
+    if (input.key === 'F11') win.setFullScreen(!win.isFullScreen());
+    if (input.key === 'F5' || (input.control && input.key.toLowerCase() === 'r')) win.webContents.reload();
   });
-  await win.loadURL(`http://localhost:${port}${BASE}`);
+  // First launch without internet (nothing cached yet): say so, and retry by itself.
+  win.webContents.on('did-fail-load', (_e, code, _desc, url, isMain) => {
+    if (!isMain || code === -3 || url.startsWith('file:')) return;
+    void win.loadFile(path.join(__dirname, 'offline.html'), { query: { to: GAME } });
+  });
+  void win.loadURL(GAME);
 }
 
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -103,9 +63,6 @@ else {
       w.focus();
     }
   });
-  app.whenReady().then(start).catch((e) => {
-    console.error(e);
-    app.quit();
-  });
+  app.whenReady().then(start);
   app.on('window-all-closed', () => app.quit());
 }

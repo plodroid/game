@@ -4,14 +4,16 @@ import { engine } from '../../game/engine';
 import { touch } from '../../game/input';
 import { leaveMatch } from '../../game/session';
 import { useNet } from '../../multiplayer/net';
+import { voice, useVoice } from '../../multiplayer/voice';
 import { teamNames } from '../../rendering/palette';
 import { useSettings } from '../../settings/settings';
 import { publicName, useProfile } from '../../state/profile';
 import { useHud, useUi } from '../../state/ui';
+import { useChat } from '../../state/chat';
 import { Chat } from './Chat';
 import { Minimap } from './Minimap';
-import { TeamShape } from '../icons';
-import { Button, keyLabel } from '../kit';
+import { Icon, TeamShape } from '../icons';
+import { Button, keyLabel, Segmented } from '../kit';
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
@@ -301,12 +303,74 @@ function PauseMenu() {
         <Button size="lg" block onClick={() => go('settings')}>
           Settings
         </Button>
+        <VoiceControls />
         {hosting && <p className="muted small">You’re hosting: leaving ends the game for everyone.</p>}
         <Button size="lg" block variant="danger" onClick={() => leaveMatch()}>
           {hosting ? 'End game' : 'Leave match'}
         </Button>
       </div>
     </div>
+  );
+}
+
+/** Voice chat in the pause menu: your mic, deafen, range, and muting anyone in the room. */
+function VoiceControls() {
+  const v = useVoice();
+  const board = useHud((h) => h.board);
+  const range = useSettings((s) => s.audio.voiceRange);
+  const set = useSettings((s) => s.set);
+  if (!v.active && !v.error) return null;
+  const others = board.filter((b) => !b.you && !b.bot);
+  return (
+    <section className="pause__voice" aria-label="Voice chat">
+      <h3 className="pause__sub">Voice chat</h3>
+      {v.error && (
+        <p className="small" style={{ color: 'var(--danger)', margin: 0 }}>
+          {v.error}
+        </p>
+      )}
+      <div className="pause__row">
+        <Button aria-pressed={v.micMuted} onClick={() => voice.setMicMuted(!v.micMuted)}>
+          {v.micMuted ? <Icon.micOff /> : <Icon.mic />} {v.micMuted ? 'Unmute mic' : 'Mute mic'}
+        </Button>
+        <Button aria-pressed={v.deafened} onClick={() => voice.setDeafened(!v.deafened)}>
+          {v.deafened ? 'Undeafen' : 'Deafen'}
+        </Button>
+      </div>
+      <Segmented
+        label="Voice range"
+        value={range}
+        onChange={(r) => set('audio', { voiceRange: r })}
+        options={[
+          { value: 'proximity', label: 'Proximity' },
+          { value: 'team', label: 'Team' },
+          { value: 'all', label: 'Everyone' },
+        ]}
+      />
+      {others.length > 0 && (
+        <ul className="voice-list">
+          {others.map((b) => (
+            <li key={b.id} data-talking={!!v.speaking[b.id]}>
+              <span className="voice-list__name">{b.name}</span>
+              {v.peers.includes(b.id) ? (
+                <Button
+                  icon
+                  variant="ghost"
+                  aria-pressed={!!v.muted[b.id]}
+                  aria-label={v.muted[b.id] ? `Unmute ${b.name}` : `Mute ${b.name}`}
+                  title={v.muted[b.id] ? 'Unmute' : 'Mute'}
+                  onClick={() => voice.mute(b.id, !v.muted[b.id])}
+                >
+                  {v.muted[b.id] ? <Icon.micOff /> : <Icon.mic />}
+                </Button>
+              ) : (
+                <span className="muted small">not on voice</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -320,6 +384,11 @@ function TouchControls({ charge, team }: { charge: number; team: number }) {
   const last = useRef({ x: 0, y: 0 });
   const origin = useRef({ x: 0, y: 0 });
   const setPaused = useUi((s) => s.setPaused);
+  // Online only: chat (opens the on-screen keyboard) and, for push to talk, a hold-to-talk button.
+  const room = useNet((n) => n.room);
+  const voiceOn = useVoice((v) => v.active);
+  const live = useVoice((v) => v.live);
+  const voiceMode = useSettings((s) => s.audio.voiceMode);
 
   const btn = (bit: number, cls: string, label: ReactNode) => (
     <div
@@ -395,6 +464,32 @@ function TouchControls({ charge, team }: { charge: number; team: number }) {
         </>,
       )}
       {btn(32, 'tbtn--dodge', 'DODGE')}
+      {room && (
+        <div
+          className="tbtn tbtn--chat"
+          role="button"
+          aria-label="Chat"
+          onPointerDown={(e) => (e.stopPropagation(), useChat.getState().setOpen(true))}
+        >
+          <Icon.chat size={18} />
+        </div>
+      )}
+      {room && voiceOn && voiceMode === 'ptt' && (
+        <div
+          className={`tbtn tbtn--talk ${live ? 'is-down' : ''}`}
+          role="button"
+          aria-label="Hold to talk"
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            (e.target as HTMLElement).setPointerCapture(e.pointerId);
+            void voice.talk(true);
+          }}
+          onPointerUp={() => void voice.talk(false)}
+          onPointerCancel={() => void voice.talk(false)}
+        >
+          <Icon.mic size={18} />
+        </div>
+      )}
       <div className="tbtn tbtn--menu" role="button" aria-label="Pause" onPointerDown={() => setPaused(true)}>
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
           <rect x="3" y="2" width="3.5" height="12" fill="currentColor" />
