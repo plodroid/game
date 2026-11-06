@@ -1,4 +1,6 @@
+import { applyGrant, useMods } from '../auth/admin';
 import { Client, type Room } from '@colyseus/sdk';
+import type { Grant, Mods } from '@chromashift/shared';
 import { create } from 'zustand';
 import {
   DEFAULT_PORT,
@@ -360,6 +362,12 @@ function bind(room: NetRoom, kind: RoomKind, endpoint?: string) {
   });
   room.onMessage(MSG.CHAT, (line: ChatLine) => {
     if (useNet.getState().room === room) useChat.getState().push(line);
+  });
+  room.onMessage(MSG.MODS, (m: Record<number, Mods>) => {
+    if (useNet.getState().room === room) useMods.setState({ mods: m });
+  });
+  room.onMessage(MSG.GRANT, (g: Grant) => {
+    if (useNet.getState().room === room) applyGrant(g);
   });
   room.onMessage(MSG.MATCH, (start: MatchStart) => {
     useNet.setState({ status: 'match', you: start.you });

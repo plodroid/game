@@ -21,3 +21,4 @@ export * from './net/protocol';
 export * from './net/roomHost';
 export * from './validation';
 export * from './progression';
+export * from './commands';

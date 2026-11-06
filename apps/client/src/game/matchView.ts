@@ -26,6 +26,7 @@ import { buildMapMeshes } from '../rendering/mapMesh';
 import { PaintAtlas, type PaintUniforms } from '../rendering/paintAtlas';
 import { teamColors, teamNames } from '../rendering/palette';
 import { Post } from '../rendering/post';
+import { useMods } from '../auth/admin';
 import { prefersReducedMotion, useSettings, type GraphicsSettings } from '../settings/settings';
 import { useHud, useUi, type BoardRow, type FeedItem } from '../state/ui';
 import { useChat } from '../state/chat';
@@ -556,6 +557,7 @@ export class MatchView implements View {
       d = Math.atan2(Math.sin(d), Math.cos(d));
       c.yaw += d * (1 - Math.exp(-(faceAim ? 22 : 12) * dt));
       root.rotation.y = c.yaw;
+      root.scale.setScalar(useMods.getState().mods[v.id]?.size ?? 1);
       root.visible = s.alive;
       if (c.wasAlive && !s.alive) c.anim.hit();
       c.wasAlive = s.alive;

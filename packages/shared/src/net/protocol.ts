@@ -28,6 +28,12 @@ export const MSG = {
   NOTICE: 'notice',
   /** Text chat: client → host { text, team }, host → clients ChatLine. */
   CHAT: 'chat',
+  /** Admin command line: client to host { line, token? }; the host answers with NOTICE. */
+  CMD: 'cmd',
+  /** Admin modifiers of every player: host to clients { [pid]: { speed, size, god } }. */
+  MODS: 'mods',
+  /** Items, coins or XP granted by an admin: host to that player's client. */
+  GRANT: 'grant',
 } as const;
 
 export const CHAT_MAX = 120;

@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { isOwner, runLocal } from '../auth/admin';
+import { useUi } from './ui';
 import { cleanChat, MSG, type ChatLine } from '@chromashift/shared';
 
 export interface Line extends ChatLine {
@@ -37,6 +39,14 @@ export function say(text: string, room: { send(type: string, payload: unknown): 
   const clean = cleanChat(text);
   if (!clean) return;
   const team = useChat.getState().team;
+  // The owner's slash commands go to the host (online) or run right here (offline).
+  if (clean.startsWith('/') && isOwner()) return void command(clean, room, me);
   if (room) room.send(MSG.CHAT, { text: clean, team });
   else useChat.getState().push({ id: me.id, name: me.name, team: me.team, text: clean, toTeam: team });
+}
+
+async function command(line: string, room: { send(type: string, payload: unknown): void } | null, me: { id: number; name: string }) {
+  if (room) return room.send(MSG.CMD, { line, token: (await (await import('../auth/firebase')).idToken()) ?? undefined });
+  const r = runLocal(line, me);
+  useUi.getState().toast({ text: r.text, kind: r.ok ? 'info' : 'error', ttl: 7000 });
 }

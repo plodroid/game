@@ -1,3 +1,4 @@
+import { authorize } from '../auth/admin';
 import { Peer, type DataConnection } from 'peerjs';
 import { Packr } from 'msgpackr';
 import {
@@ -438,7 +439,7 @@ class BrowserHost {
     hello: PeerHello,
     private onLobby?: (state: LobbyState | null) => void,
   ) {
-    this.room = new RoomHost({ code, settings, onLobby: (s) => this.onLobby?.(s) });
+    this.room = new RoomHost({ code, settings, onLobby: (s) => this.onLobby?.(s), authorize });
     this.link = new LoopbackLink(this);
     peer.on('connection', (conn) => this.accept(conn));
     peer.on('disconnected', () => this.rejoinBroker());

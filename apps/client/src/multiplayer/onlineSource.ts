@@ -1,3 +1,4 @@
+import { useMods } from '../auth/admin';
 import {
   BTN,
   createPlayerState,
@@ -263,6 +264,9 @@ export class OnlineSource implements MatchSource {
 
   update(dt: number, inp: FrameInput): SimEvent[] {
     const L = this.local;
+    // An admin's speed change applies to our own prediction too, or we'd be pulled back every snapshot.
+    const sp = useMods.getState().mods[this.localId]?.speed;
+    L.speedMult = sp && sp !== 1 ? sp : undefined;
     this.acc = Math.min(this.acc + dt, 0.2);
     this.collectLaunchers();
     while (this.acc >= DT) {

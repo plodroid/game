@@ -7,6 +7,7 @@ import { MAP_IDS } from '../maps';
 import { emptyInput, type Input, type PlayerInfo } from '../sim/player';
 import { Simulation, type MatchResult } from '../sim/simulation';
 import { xpForMatch } from '../progression';
+import { runCommand, type Mods } from '../commands';
 import { cleanPlayerName } from '../validation';
 import {
   cleanChat,
@@ -44,6 +45,11 @@ export interface RoomHostOptions {
   record?: (result: MatchResult, xp: Record<number, number>) => Promise<boolean>;
   /** Called whenever the lobby changes: players, settings or phase. */
   onLobby?: (state: LobbyState) => void;
+  /**
+   * Decides whether someone may run admin commands: `owner` (the game's owner), `admin`, or null.
+   * Without it nobody can (dedicated servers have no admins).
+   */
+  authorize?: (who: { isHost: boolean; uid?: string; token?: string }) => Promise<'owner' | 'admin' | null>;
 }
 
 interface Member {
@@ -131,6 +137,9 @@ export class RoomHost {
   private lastLobbyPush = 0;
   private finishing = false;
   private disposed = false;
+  private mods = new Map<number, Mods>();
+  /** Connections made admin with /admin; kept for this room only. */
+  private roomAdmins = new Set<string>();
 
   constructor(private opts: RoomHostOptions) {
     this.code = opts.code;
@@ -179,6 +188,7 @@ export class RoomHost {
     };
     this.members.set(client.id, m);
     if (!this.hostId) this.hostId = client.id;
+    if (this.mods.size) client.send(MSG.MODS, Object.fromEntries(this.mods));
     if (this.phaseNow === 'match' && this.sim) this.joinRunning(m);
     this.pushLobby();
     if (this.quick && this.phaseNow === 'lobby' && this.members.size >= MAX_PLAYERS) this.startMatch();
@@ -221,6 +231,58 @@ export class RoomHost {
     this.disposed = true;
     this.sim?.dispose();
     this.sim = null;
+  }
+
+  private pushMods() {
+    const out: Record<number, Mods> = {};
+    for (const [pid, v] of this.mods) out[pid] = v;
+    for (const x of this.members.values()) if (x.connected) x.client.send(MSG.MODS, out);
+  }
+
+  /** Re-applies admin modifiers to a fresh simulation and tells everyone. */
+  private applyMods() {
+    for (const [pid, v] of this.mods) {
+      const p = this.sim?.byId(pid);
+      if (p) {
+        p.speedMult = v.speed === 1 ? undefined : v.speed;
+        p.size = v.size === 1 ? undefined : v.size;
+        p.god = v.god || undefined;
+      }
+    }
+    this.pushMods();
+  }
+
+  private async command(id: string, m: Member, d: { line?: unknown; token?: unknown }) {
+    const reply = (text: string, kind: 'info' | 'error' = 'info') => m.client.send(MSG.NOTICE, { text, kind });
+    const line = cleanChat(d?.line);
+    if (!line.startsWith('/')) return;
+    const level = this.roomAdmins.has(id)
+      ? 'admin'
+      : await this.opts.authorize?.({ isHost: this.isHost(id), uid: m.uid, token: typeof d?.token === 'string' ? d.token : undefined });
+    if (!level) return reply('You are not an admin.', 'error');
+    const owner = level === 'owner';
+    const live = this.sim?.players ?? [];
+    const players = this.sim
+      ? live.map((p) => ({ pid: p.id, name: p.info.name }))
+      : [...this.members.values()].map((x) => ({ pid: x.pid, name: x.name }));
+    const res = runCommand(line, {
+      sim: this.sim,
+      sender: { pid: m.pid, name: m.name, owner },
+      players,
+      grant: (pid, g) => {
+        for (const x of this.members.values()) if (x.pid === pid && x.connected) x.client.send(MSG.GRANT, g);
+      },
+      setAdmin: (pid, on) => {
+        const t = [...this.members.entries()].find(([, x]) => x.pid === pid);
+        if (!t) return 'Only players (not bots) can be admins.';
+        if (on) this.roomAdmins.add(t[0]);
+        else this.roomAdmins.delete(t[0]);
+        return null;
+      },
+      mods: this.mods,
+      modsChanged: () => this.pushMods(),
+    });
+    reply(res.text, res.ok ? 'info' : 'error');
   }
 
   private isHost(id: string) {
@@ -290,6 +352,9 @@ export class RoomHost {
       case MSG.TO_LOBBY:
         if (this.isHost(id) && this.phaseNow === 'results') this.toLobby();
         return;
+      case MSG.CMD:
+        void this.command(id, m, d);
+        return;
       case MSG.CHAT: {
         const text = cleanChat(d.text);
         const now = Date.now();
@@ -338,6 +403,7 @@ export class RoomHost {
       infos,
     );
     this.roster = infos.map(({ uid: _uid, ...p }) => p);
+    this.mods.clear();
     this.phaseNow = 'match';
     this.acc = this.ticks = this.snaps = 0;
     this.pending = [];
@@ -356,6 +422,7 @@ export class RoomHost {
         } satisfies MatchStart);
     }
     this.pushLobby();
+    this.pushMods();
   }
 
   /** Late joiners take over a bot on the emptier team (or a fresh slot), then get a full paint sync. */

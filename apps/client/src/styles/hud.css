@@ -899,3 +899,47 @@
   bottom: auto;
   top: calc(56px + var(--safe-t) + min(190px, 30vmin) + 10px);
 }
+
+/* Owner commands: suggestion list above the chat box. */
+.chat__sugg {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 6px;
+  padding: 6px;
+  border-radius: 16px;
+  background: rgba(14, 11, 20, 0.94);
+  box-shadow: 0 14px 34px -12px rgba(0, 0, 0, 0.7);
+  animation: enter 140ms var(--ease-out) both;
+}
+.chat__usage {
+  padding: 2px 8px;
+  color: rgba(244, 239, 233, 0.55);
+  font-size: 0.74rem;
+  font-weight: 650;
+}
+.chat__opt {
+  appearance: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #f4efe9;
+  font: inherit;
+  font-size: 0.88rem;
+  text-align: left;
+  cursor: pointer;
+}
+.chat__opt span {
+  color: rgba(244, 239, 233, 0.55);
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat__opt[aria-selected='true'],
+.chat__opt:hover {
+  background: rgba(255, 79, 154, 0.28);
+}

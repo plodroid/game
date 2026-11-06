@@ -179,7 +179,7 @@ function roll(sim: Simulation, p: SimPlayer, w: WeaponDef, dt: number) {
 }
 
 export function damagePlayer(sim: Simulation, v: SimPlayer, amount: number, by: number, w: WeaponId | 'special') {
-  if (!v.alive || v.spawnProtect > 0 || sim.phase !== 'playing' || amount <= 0) return;
+  if (!v.alive || v.god || v.spawnProtect > 0 || sim.phase !== 'playing' || amount <= 0) return;
   v.hp -= amount;
   v.regenDelay = 1.6;
   if (by >= 0) v.damagedBy.set(by, sim.time);

@@ -1,3 +1,4 @@
+import { offline, resetLocalMods } from '../auth/admin';
 import {
   botLook,
   initPhysics,
@@ -111,6 +112,8 @@ export async function startOffline(s: OfflineSetup) {
     const sim = new Simulation({ map: s.map, mode: s.mode, duration: practice ? 0 : s.duration, seed: (Math.random() * 2 ** 31) | 0 }, players);
     currentOnline = false;
     menuView = null;
+    offline.sim = sim;
+    resetLocalMods();
     engine.setView(new MatchView(new OfflineSource(sim, 1), (o) => finish(o, 1)));
     ui.setPaused(false);
     ui.go('match');
@@ -127,6 +130,7 @@ export async function startOnline(room: NetRoom, start: MatchStart) {
   const ui = useUi.getState();
   await initPhysics();
   currentOnline = true;
+  offline.sim = null;
   menuView = null;
   engine.setView(new MatchView(new OnlineSource(room, start), (o) => finish(o, start.you)));
   ui.setPaused(false);

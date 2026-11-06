@@ -146,6 +146,7 @@ export function stepMovement(
     if (p.firing) speed *= p.rolling && weapon.roll ? weapon.roll.speedMult : weapon.moveWhileFiring;
     if (p.onEnemyPaint) speed *= MOVE.enemyPaint;
   }
+  if (p.speedMult) speed *= p.speedMult;
   if (p.surgeT > 0) speed *= SURGE_SPEED;
   if (disrupted) speed *= DISRUPT_SLOW;
 

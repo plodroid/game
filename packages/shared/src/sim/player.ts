@@ -100,6 +100,10 @@ export interface PlayerState {
   regenDelay: number;
   alive: boolean;
   respawnT: number;
+  /** Admin modifiers (not part of snapshots; the host sends them separately). */
+  speedMult?: number;
+  god?: boolean;
+  size?: number;
   spawnProtect: number;
   emoteT: number;
   shots: number;

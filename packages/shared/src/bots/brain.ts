@@ -30,14 +30,20 @@ interface Skill {
   samples: number;
   /** Team awareness: reacting to allies in trouble, valuing enemy paint. */
   awareness: number;
+  /** Half-angle of the field of view in radians: nothing outside it is noticed. */
+  fov: number;
+  /** Extra aim error (rad) right after spotting a target, shrinking as the bot settles on it. */
+  flick: number;
+  /** Trigger discipline: shoots in bursts this long (s) with pauses between; 0 = holds the trigger. */
+  burst: number;
 }
 
 // Expert is sharp but human: it still reacts in ~0.2 s, wobbles ~2°, and turns at a capped rate.
 const SKILL: Record<BotDifficulty, Skill> = {
-  easy: { reaction: 0.7, aimErr: 0.16, turn: 3.2, think: 0.9, lead: 0.15, cone: 0.24, dodge: 0, strafe: 0.35, special: 0.35, retreat: 0.2, sight: 22, samples: 6, awareness: 0.3 },
-  normal: { reaction: 0.45, aimErr: 0.09, turn: 5.5, think: 0.6, lead: 0.5, cone: 0.15, dodge: 0.12, strafe: 0.6, special: 0.7, retreat: 0.5, sight: 26, samples: 10, awareness: 0.6 },
-  hard: { reaction: 0.3, aimErr: 0.055, turn: 8, think: 0.45, lead: 0.8, cone: 0.1, dodge: 0.3, strafe: 0.85, special: 0.9, retreat: 0.75, sight: 30, samples: 14, awareness: 0.85 },
-  expert: { reaction: 0.22, aimErr: 0.035, turn: 10.5, think: 0.32, lead: 0.92, cone: 0.08, dodge: 0.5, strafe: 1, special: 1, retreat: 0.9, sight: 32, samples: 18, awareness: 1 },
+  easy: { reaction: 0.9, aimErr: 0.2, turn: 2.4, think: 0.9, lead: 0, cone: 0.3, dodge: 0, strafe: 0.25, special: 0.3, retreat: 0.2, sight: 19, samples: 6, awareness: 0.25, fov: 0.95, flick: 0.28, burst: 0.5 },
+  normal: { reaction: 0.55, aimErr: 0.11, turn: 4, think: 0.6, lead: 0.35, cone: 0.18, dodge: 0.1, strafe: 0.55, special: 0.65, retreat: 0.5, sight: 24, samples: 10, awareness: 0.6, fov: 1.15, flick: 0.18, burst: 0.9 },
+  hard: { reaction: 0.38, aimErr: 0.07, turn: 6, think: 0.45, lead: 0.65, cone: 0.12, dodge: 0.25, strafe: 0.8, special: 0.85, retreat: 0.75, sight: 28, samples: 14, awareness: 0.85, fov: 1.3, flick: 0.1, burst: 1.5 },
+  expert: { reaction: 0.26, aimErr: 0.042, turn: 9, think: 0.32, lead: 0.85, cone: 0.09, dodge: 0.45, strafe: 1, special: 1, retreat: 0.9, sight: 32, samples: 18, awareness: 1, fov: 1.5, flick: 0.05, burst: 0 },
 };
 
 export type BotState = 'paint' | 'fight' | 'refill' | 'retreat' | 'support' | 'zone';
@@ -75,6 +81,13 @@ export class BotBrain {
   private flickT = 0;
   private airEdge = false;
   private pathWish = v3();
+  /** The rival that last hurt us, noticed even outside the field of view for a moment. */
+  private alertId = -1;
+  private alertT = 0;
+  private acquireT = 0;
+  private burstT = 0;
+  private resting = false;
+  private wobble = 0;
 
   constructor(
     readonly id: number,
@@ -127,9 +140,29 @@ export class BotBrain {
       this.target = -1;
     }
     const visible = !!tgt && this.canSee(sim, p, tgt);
+    if (!visible) this.acquireT = 0;
+    else if (this.seenT === 0) this.acquireT = 0;
+    else this.acquireT += dt;
     this.seenT = visible ? this.seenT + dt : 0;
 
     const wantsDodge = p.hp < this.lastHp - 15 && this.rnd() < s.dodge;
+    if (p.hp < this.lastHp - 1) {
+      // Hurt: glance towards whoever is closest and in line of sight.
+      let near = -1, nd = 30;
+      for (const e of sim.players) {
+        if (e.team === p.team || !e.alive) continue;
+        const d = dist(p.pos, e.pos);
+        if (d < nd && sim.world.lineOfSight(set(tmp, p.pos.x, p.pos.y + 0.5, p.pos.z), e.pos)) {
+          nd = d;
+          near = e.id;
+        }
+      }
+      if (near >= 0) {
+        this.alertId = near;
+        this.alertT = 2;
+      }
+    }
+    this.alertT -= dt;
     this.lastHp = p.hp;
 
     this.followPath(sim, p);
@@ -173,14 +206,19 @@ export class BotBrain {
       }
     }
 
-    if (tgt && visible && this.seenT > s.reaction && !this.dummy) {
+    if (tgt && visible && this.seenT > s.reaction * (0.8 + this.wobble * 0.4) && !this.dummy) {
       this.aimAt(p, tgt, w, tmp);
       wantYaw = tmp.x;
       wantPitch = tmp.y;
       const d = dist(p.pos, tgt.pos);
       const aligned = Math.abs(wrapAngle(wantYaw - this.yaw)) < s.cone + 0.04 * (8 / Math.max(2, d));
       const reach = w.kind === 'lobber' ? 19 : w.range * 1.3;
-      if (aligned && d < reach) {
+      // Humans shoot in bursts and let go of the trigger to re-aim.
+      if (s.burst > 0 && (this.burstT -= dt) <= 0) {
+        this.resting = !this.resting;
+        this.burstT = this.resting ? s.burst * (0.4 + this.rnd() * 0.5) : s.burst * (0.6 + this.rnd() * 0.8);
+      }
+      if (aligned && d < reach && !(s.burst > 0 && this.resting)) {
         if (w.kind === 'roller') {
           if (d < 3.5) fire = true;
           else if ((this.flickT -= dt) <= 0) {
@@ -222,13 +260,23 @@ export class BotBrain {
 
     this.errT -= dt;
     if (this.errT <= 0) {
-      this.errT = 0.35 + this.rnd() * 0.5;
+      this.errT = 0.25 + this.rnd() * 0.35;
       this.errYaw = this.gauss() * s.aimErr;
       this.errPitch = this.gauss() * s.aimErr * 0.5;
+      this.wobble = this.rnd();
     }
+    // A hand never holds still: continuous tremor, plus a larger miss right after spotting someone
+    // that settles over the first half second (the flick onto a target).
+    const t = this.sweepT * 6.1 + this.id;
+    const settle = visible ? Math.max(0, 1 - this.acquireT / 0.6) : 0;
+    const tremor = s.aimErr * 0.45;
+    const flick = s.flick * settle * (this.id % 2 ? 1 : -1);
+    const ey = this.errYaw + Math.sin(t) * tremor + flick, ep = this.errPitch + Math.cos(t * 1.3) * tremor * 0.5;
+    // Turning eases in and out instead of snapping at a constant rate.
     const turn = s.turn * dt;
-    this.yaw = wrapAngle(this.yaw + clamp(wrapAngle(wantYaw + this.errYaw - this.yaw), -turn, turn));
-    this.pitch += clamp(wantPitch + this.errPitch - this.pitch, -turn * 0.7, turn * 0.7);
+    const dy = wrapAngle(wantYaw + ey - this.yaw), dp = wantPitch + ep - this.pitch;
+    this.yaw = wrapAngle(this.yaw + clamp(dy * Math.min(1, dt * s.turn * 1.4), -turn, turn));
+    this.pitch += clamp(dp * Math.min(1, dt * s.turn * 1.4), -turn * 0.7, turn * 0.7);
     this.pitch = clamp(this.pitch, -1.2, 1.2);
 
     this.checkStuck(sim, p, dt);
@@ -264,6 +312,11 @@ export class BotBrain {
   private canSee(sim: Simulation, p: SimPlayer, e: SimPlayer) {
     const d = dist(p.pos, e.pos);
     if (d > this.skill.sight) return false;
+    // Only what is in front of the bot is noticed, unless it is right beside us or just hurt us.
+    if (d > 3.5 && !(this.alertT > 0 && e.id === this.alertId)) {
+      const off = Math.abs(wrapAngle(Math.atan2(-(e.pos.x - p.pos.x), -(e.pos.z - p.pos.z)) - this.yaw));
+      if (off > this.skill.fov) return false;
+    }
     // Rivals hidden in their own paint are invisible unless close, firing or disrupted.
     if (e.swimming && d > 4 && e.sinceFire > 1 && e.disruptedT <= 0) return false;
     set(tmp, p.pos.x, p.pos.y + 0.5, p.pos.z);

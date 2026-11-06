@@ -71,4 +71,35 @@ describe('RoomHost', () => {
     expect(b.inbox.at(-2)?.[0]).toBe(MSG.SYNC);
     room.dispose();
   });
+
+  it('runs admin commands only for authorised players and applies size, speed and god', async () => {
+    const room = new RoomHost({ code: 'ADMIN', settings: { botFill: false }, authorize: async ({ isHost }) => (isHost ? 'owner' : null) });
+    const a = seat('a'),
+      b = seat('b');
+    room.join(a.client, { name: 'Ann' });
+    room.join(b.client, { name: 'Ben' });
+    room.message('a', MSG.START, null);
+    const notice = (s: ReturnType<typeof seat>) => (s.last<{ text: string }>(MSG.NOTICE) ?? { text: '' }).text;
+    const flush = () => Promise.resolve().then(() => Promise.resolve()).then(() => Promise.resolve());
+
+    room.message('b', MSG.CMD, { line: '/size Ann 4' });
+    await flush();
+    expect(notice(b)).toContain('not an admin');
+
+    room.message('a', MSG.CMD, { line: '/size Ben 4.6' });
+    await flush();
+    expect(notice(a)).toContain('4.6');
+    expect(b.last<Record<number, { size: number }>>(MSG.MODS)[b.last<MatchStart>(MSG.MATCH).you].size).toBe(4.6);
+
+    room.message('a', MSG.CMD, { line: '/give Ben coins 500' });
+    await flush();
+    expect(b.last<{ coins: number }>(MSG.GRANT)).toEqual({ coins: 500 });
+
+    room.message('a', MSG.CMD, { line: '/admin Ben' });
+    await flush();
+    room.message('b', MSG.CMD, { line: '/god me on' });
+    await flush();
+    expect(notice(b)).toContain('God mode');
+    room.dispose();
+  });
 });

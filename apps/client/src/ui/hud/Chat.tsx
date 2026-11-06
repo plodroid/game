@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { CHAT_MAX } from '@chromashift/shared';
+import { CHAT_MAX, complete } from '@chromashift/shared';
 import { useNet } from '../../multiplayer/net';
 import { useVoice } from '../../multiplayer/voice';
+import { useAccount } from '../../auth/account';
+import { isOwner } from '../../auth/admin';
 import { teamColors } from '../../rendering/palette';
 import { useSettings } from '../../settings/settings';
 import { say, useChat } from '../../state/chat';
@@ -18,6 +20,18 @@ export function Chat({ me }: { me: { id: number; name: string; team: number } | 
   const bindings = useSettings((s) => s.controls.bindings);
   const myTeam = useHud((h) => h.myTeam);
   const [text, setText] = useState('');
+  const [pick, setPick] = useState(0);
+  const board = useHud((h) => h.board);
+  // Owner commands: a Minecraft-style list that predicts the command, then each argument.
+  const owner = useAccount((a) => isOwner() && !!a.user);
+  const hints = owner && open ? complete(text, board.map((b) => b.name), true) : null;
+  const options = hints?.options ?? [];
+  const accept = (i: number) => {
+    const o = options[i];
+    if (!o || !hints) return;
+    setText(text.slice(0, hints.from) + o.insert);
+    setPick(0);
+  };
   const [, tick] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const log = useRef<HTMLDivElement>(null);
@@ -49,6 +63,18 @@ export function Chat({ me }: { me: { id: number; name: string; team: number } | 
           </div>
         ))}
       </div>
+      {open && hints && (hints.options.length > 0 || hints.usage) && (
+        <div className="chat__sugg" role="listbox" aria-label="Command suggestions">
+          {hints.usage && <div className="chat__usage">{hints.usage}</div>}
+          {options.map((o, i) => (
+            <button key={o.label} type="button" role="option" aria-selected={i === pick} className="chat__opt" onMouseDown={(e) => (e.preventDefault(), accept(i))}>
+              <b>{o.label}</b>
+              {o.hint && <span>{o.hint}</span>}
+            </button>
+          ))}
+          {options.length > 0 && <div className="chat__usage">Tab to complete · ↑ ↓ to choose</div>}
+        </div>
+      )}
       {open ? (
         <form
           className="chat__box"
@@ -69,8 +95,20 @@ export function Chat({ me }: { me: { id: number; name: string; team: number } | 
             value={text}
             maxLength={CHAT_MAX}
             placeholder={`Say something to ${team ? 'your team' : 'everyone'}`}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              setPick(0);
+            }}
             onKeyDown={(e) => {
+              if (options.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                e.preventDefault();
+                setPick((i) => (i + (e.key === 'ArrowDown' ? 1 : options.length - 1)) % options.length);
+                return;
+              }
+              if (options.length && e.key === 'Tab') {
+                e.preventDefault();
+                return accept(pick);
+              }
               if (e.key === 'Escape') {
                 e.preventDefault();
                 setOpen(false);
