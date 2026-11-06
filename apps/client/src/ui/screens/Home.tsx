@@ -1,3 +1,4 @@
+import { InstallApp } from '../InstallApp';
 import { useEffect, useRef } from 'react';
 import { GAME_VERSION, levelInfo } from '@chromashift/shared';
 import { audio } from '../../audio/audio';
@@ -80,6 +81,7 @@ export function Home() {
             </span>
           </span>
         </button>
+        <InstallApp />
         <footer className="home__foot">
           <span>
             <span className={`dot ${online ? 'dot--ok' : 'dot--warn'}`} />

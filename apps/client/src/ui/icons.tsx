@@ -97,6 +97,11 @@ export const Icon = {
       <path d="M12 3.6l2.6 5.2 5.8.9-4.2 4.1 1 5.7L12 16.8l-5.2 2.7 1-5.7-4.2-4.1 5.8-.9z" />
     </svg>
   ),
+  download: ({ size = 20, ...p }: P) => (
+    <svg {...base(size, p)}>
+      <path d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14" />
+    </svg>
+  ),
   bot: ({ size = 16, ...p }: P) => (
     <svg {...base(size, p)}>
       <rect x="5" y="8" width="14" height="10" rx="3" />

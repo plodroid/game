@@ -36,7 +36,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "CHROMASHIFT",
-      "artifactName": "CHROMASHIFT-Setup-${version}.${ext}"
+      "artifactName": "CHROMASHIFT-Setup.${ext}"
     },
     "electronVersion": "45.2.3"
   },
