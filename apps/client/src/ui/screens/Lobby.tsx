@@ -26,7 +26,7 @@ import { useProfile } from '../../state/profile';
 import { useUi } from '../../state/ui';
 import { Avatar } from '../Avatar';
 import { Icon, TeamShape } from '../icons';
-import { Button, Header, Segmented, Setting, Toggle, useCopy } from '../kit';
+import { Button, Header, LengthDial, Segmented, Setting, Toggle, useCopy } from '../kit';
 import { DIFF_LABEL } from './Play';
 
 /** The host lists their game under Online → Public games, so strangers can find and join it. */
@@ -258,11 +258,11 @@ export default function Lobby() {
                 value={st.mode}
                 onChange={(mode) => setSettings({ mode, duration: MODES[mode].duration || st.duration })}
                 label="Mode"
-                options={(['turf', 'zones', 'knockout'] as ModeId[]).map((m) => ({ value: m, label: MODES[m].name, disabled: !host }))}
+                options={(['turf', 'zones', 'knockout', 'blitz', 'rush', 'suddendeath', 'brawl'] as ModeId[]).map((m) => ({ value: m, label: MODES[m].name, disabled: !host }))}
               />
             </Setting>
             <Setting name="Length">
-              <Segmented value={st.duration} onChange={(duration) => setSettings({ duration })} label="Length" options={DURATION_OPTIONS.map((d) => ({ value: d, label: `${d / 60} min`, disabled: !host }))} />
+              <LengthDial value={st.duration} options={DURATION_OPTIONS} onChange={(duration) => setSettings({ duration })} disabled={!host} />
             </Setting>
             <Setting name="Fill empty slots with bots">
               <Toggle label="Bot fill" checked={st.botFill} onChange={(botFill) => host && setSettings({ botFill })} />

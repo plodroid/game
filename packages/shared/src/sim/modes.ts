@@ -1,4 +1,4 @@
-import { KNOCKOUT_TICKETS, ZONE_CAPTURE_SHARE, ZONE_TARGET, type ModeId } from '../config/modes';
+import { KNOCKOUT_TICKETS, MODES, ZONE_CAPTURE_SHARE, ZONE_TARGET, type ModeId } from '../config/modes';
 import type { SimPlayer } from './player';
 import type { Simulation } from './simulation';
 
@@ -90,11 +90,14 @@ const knockout: ModeRules = {
 
 const practice: ModeRules = { ...turf, winner: () => -1 };
 
-export const RULES: Record<ModeId, ModeRules> = { turf, zones, knockout, practice };
+const BY_KIND = { turf, zones, knockout, practice };
+export const RULES = Object.fromEntries(Object.values(MODES).map((m) => [m.id, BY_KIND[m.kind]])) as Record<ModeId, ModeRules>;
 
 export function initialModeState(mode: ModeId, zoneCount: number): ModeState {
+  const def = MODES[mode];
+  const n = def.counter ?? (def.kind === 'knockout' ? KNOCKOUT_TICKETS : ZONE_TARGET);
   return {
-    counters: mode === 'knockout' ? [KNOCKOUT_TICKETS, KNOCKOUT_TICKETS] : [ZONE_TARGET, ZONE_TARGET],
+    counters: [n, n],
     holders: Array.from({ length: zoneCount }, () => -1),
   };
 }

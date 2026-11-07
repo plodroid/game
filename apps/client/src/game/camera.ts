@@ -13,6 +13,8 @@ export class ThirdPersonCamera {
   private shake = 0;
   private fov = 72;
   private init = false;
+  /** Eye-level view from the character's head, with no follow distance. */
+  firstPerson = false;
 
   constructor(aspect: number, far: number) {
     this.camera = new THREE.PerspectiveCamera(72, aspect, 0.1, far);
@@ -46,6 +48,14 @@ export class ThirdPersonCamera {
     pivot.z = this.smoothPivot.z;
 
     dirFromAngles(dir, this.yaw, this.pitch);
+    if (this.firstPerson) {
+      // Straight from the eyes (undamped, so it matches the aim), a touch ahead of the neck.
+      this.camera.position.set(target.x + dir.x * 0.12, target.y + 0.62 + dir.y * 0.04, target.z + dir.z * 0.12);
+      this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+      this.dist = 3.9;
+      this.applyShakeAndFov(dt, o);
+      return;
+    }
     const rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw);
     const back = (o.diving ? 3.5 : 3.9) + Math.max(0, -this.pitch) * 0.6;
     const side = 0.62, up = 0.16;
@@ -63,7 +73,11 @@ export class ThirdPersonCamera {
     const cam = this.camera;
     cam.position.set(pivot.x + dx * k, pivot.y + dy * k, pivot.z + dz * k);
     cam.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+    this.applyShakeAndFov(dt, o);
+  }
 
+  private applyShakeAndFov(dt: number, o: { fast: boolean; shake: number }) {
+    const cam = this.camera;
     if (this.shake > 0.001 && o.shake > 0) {
       const s = this.shake * this.shake * 0.12 * o.shake;
       cam.position.x += (Math.random() - 0.5) * s;

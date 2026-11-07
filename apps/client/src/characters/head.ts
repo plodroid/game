@@ -15,7 +15,7 @@ import { buildHair } from './hair';
  * Elevation t: −π/2 = chin, 0 ≈ eye line, +π/2 = crown.
  */
 
-export const CY = 0.2, R = 0.225, UP = 0.215, DOWN = 0.22, DEPTH = 0.94;
+export const CY = 0.2, R = 0.225, UP = 0.215, DOWN = 0.23, DEPTH = 0.94;
 export const TOP = Math.PI / 2;
 export const Y = new THREE.Vector3(0, 1, 0);
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
@@ -28,7 +28,7 @@ export const smooth = (a: number, b: number, x: number) => {
 /** Radius and height of the head surface at elevation t, pushed out by o. */
 export function headAt(t: number, o = 0): [number, number] {
   const s = Math.sin(t), c = Math.cos(t);
-  const jaw = s < 0 ? 1 - 0.18 * s * s : 1;
+  const jaw = s < 0 ? 1 - 0.3 * s * s : 1 - 0.04 * s * s;
   return [(R + o) * Math.max(0, c) * jaw, CY + ((s > 0 ? UP : DOWN) + o) * s];
 }
 
@@ -254,6 +254,8 @@ export function buildHead(
   m: HeadParts,
   detail: number,
   track: (g: THREE.BufferGeometry) => void,
+  /** Colourways repaint a face piece or headgear: materials that replace the player's own. */
+  tints: { face?: Partial<HeadParts>; gear?: Partial<HeadParts> } = {},
 ) {
   const seg = (lo: number, hi: number) => Math.round(lo + ((hi - lo) * detail) / 2);
   const nPhi = seg(18, 40), nT = seg(6, 14);
@@ -296,10 +298,10 @@ export function buildHead(
     head.add(mark);
   }
 
-  const face = buildFace(look.face, kit);
+  const face = buildFace(look.face, { ...kit, m: { ...m, ...tints.face } });
   if (face.length) head.add(...face);
   const hair = buildHair(look.hair, kit);
   if (hair.group.children.length) head.add(...hair.group.children.slice());
   if (COVERS_TOP.has(look.headgear)) for (const o of hair.style.top) o.removeFromParent();
-  buildGear(head, look.headgear, hair.style, kit);
+  buildGear(head, look.headgear, hair.style, { ...kit, m: { ...m, ...tints.gear } });
 }

@@ -7,6 +7,9 @@ import type { GameWorld } from '../world/world';
 import { BTN, type Input, type PlayerState } from './player';
 
 /** Movement tuning. Speeds in m/s, accelerations in m/s². */
+/** Where under the foot paint is sampled, as offsets from the feet. */
+const FOOT: [number, number][] = [[0, 0], [0.3, 0], [-0.3, 0], [0, 0.3], [0, -0.3]];
+
 export const MOVE = {
   walk: 5.4,
   sprint: 7.4,
@@ -24,11 +27,11 @@ export const MOVE = {
   airJump: 7.4,
   climb: 7.2,
   wallJump: 7,
-  slideSpeed: 10,
-  slideTime: 0.55,
+  slideSpeed: 11.5,
+  slideTime: 0.8,
   slideCooldown: 0.9,
-  dodgeSpeed: 13,
-  dodgeTime: 0.2,
+  dodgeSpeed: 14,
+  dodgeTime: 0.34,
   coyote: 0.1,
   jumpBuffer: 0.12,
   maxFall: 40,
@@ -108,7 +111,24 @@ export function stepMovement(
   const vel = p.vel;
 
   set(feet, p.pos.x, p.pos.y - FEET_OFFSET, p.pos.z);
-  const footOwner = p.grounded ? w.grid.ownerAt(feet, UP, 0.3) : -1;
+  // Sample under the whole foot, not one point: at a ledge or a patch edge the centre can sit past the
+  // painted cell while you are plainly standing on your paint. Your colour under any part of the foot wins.
+  let footOwner = -1;
+  if (p.grounded) {
+    const fx = feet.x, fz = feet.z;
+    for (const [ox, oz] of FOOT) {
+      feet.x = fx + ox;
+      feet.z = fz + oz;
+      const o = w.grid.ownerAt(feet, UP, 0.3);
+      if (o === p.team) {
+        footOwner = o;
+        break;
+      }
+      if (o >= 0 && footOwner < 0) footOwner = o;
+    }
+    feet.x = fx;
+    feet.z = fz;
+  }
   const onFriendly = footOwner === p.team;
   p.onEnemyPaint = footOwner === 1 - p.team;
 
@@ -157,7 +177,7 @@ export function stepMovement(
     p.slideT = 0;
   }
   const hSpeed = Math.hypot(vel.x, vel.z);
-  if (!frozen && pressed & BTN.SLIDE && p.grounded && !p.diving && p.slideCd <= 0 && hSpeed > 3.5) {
+  if (!frozen && pressed & BTN.SLIDE && p.grounded && !p.diving && p.slideCd <= 0 && hSpeed > 2.5) {
     p.slideT = MOVE.slideTime;
     p.slideCd = MOVE.slideCooldown;
     const s = Math.max(hSpeed * 1.2, MOVE.slideSpeed) / hSpeed;
@@ -167,12 +187,16 @@ export function stepMovement(
 
   if (p.dodgeT > 0) {
     p.dodgeT -= dt;
-    vel.x = p.dodgeDir.x * MOVE.dodgeSpeed;
-    vel.z = p.dodgeDir.z * MOVE.dodgeSpeed;
+    // A burst that eases off, so the dash reads instead of teleporting.
+    const k = Math.max(0, p.dodgeT) / MOVE.dodgeTime;
+    vel.x = p.dodgeDir.x * MOVE.dodgeSpeed * (0.3 + 0.7 * k);
+    vel.z = p.dodgeDir.z * MOVE.dodgeSpeed * (0.3 + 0.7 * k);
   } else if (p.slideT > 0 && p.grounded) {
-    const sp = hSpeed * (1 - 1.5 * dt);
-    let dx = vel.x / (hSpeed || 1) + wish.x * 2.5 * dt * mag;
-    let dz = vel.z / (hSpeed || 1) + wish.z * 2.5 * dt * mag;
+    // Speed now, after this tick's slide boost (hSpeed was measured before it).
+    const now = Math.hypot(vel.x, vel.z);
+    const sp = now * (1 - 0.9 * dt);
+    let dx = vel.x / (now || 1) + wish.x * 2.5 * dt * mag;
+    let dz = vel.z / (now || 1) + wish.z * 2.5 * dt * mag;
     const dl = Math.hypot(dx, dz) || 1;
     dx /= dl;
     dz /= dl;
@@ -302,5 +326,8 @@ export function stepMovement(
   p.surgeT = Math.max(0, p.surgeT - dt);
   p.disruptedT = Math.max(0, p.disruptedT - dt);
   p.emoteT = Math.max(0, p.emoteT - dt);
-  if (!frozen && pressed & BTN.EMOTE && p.grounded && !p.firing && !p.diving) p.emoteT = 2.4;
+  if (!frozen && pressed & BTN.EMOTE && p.grounded && !p.firing && !p.diving) {
+    p.emoteT = 2.4;
+    p.emoteSlot = Math.max(0, Math.min(7, (inp.emote ?? 0) | 0));
+  }
 }

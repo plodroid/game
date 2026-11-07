@@ -42,6 +42,8 @@ export interface FrameInput {
   aimYaw: number;
   aimPitch: number;
   buttons: number;
+  /** Emote wheel slot for an EMOTE press. */
+  emote?: number;
   /** Clears latched presses once a tick has seen them. */
   consume(): void;
 }
@@ -120,6 +122,7 @@ export class OfflineSource implements MatchSource {
         aimYaw: inp.aimYaw,
         aimPitch: inp.aimPitch,
         buttons: inp.buttons,
+        emote: inp.emote,
       });
       inp.consume();
       sim.step();

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LEVEL_COINS, levelInfo, MAPS, MODES, WEAPONS } from '@chromashift/shared';
+import { kindOf, LEVEL_COINS, levelInfo, MAPS, MODES, WEAPONS } from '@chromashift/shared';
 import { replayOffline } from '../../game/session';
 import { send, useNet } from '../../multiplayer/net';
 import { teamNames } from '../../rendering/palette';
@@ -36,7 +36,7 @@ export default function Results() {
       : me && res.winner === me.team
         ? 'Victory'
         : 'Defeat';
-  const pct = res.mode === 'turf' || practice;
+  const pct = kindOf(res.mode) === 'turf' || practice;
   const before = levelInfo(r.xpBefore),
     after = levelInfo(r.xpBefore + r.xp);
   const levelled = after.level > before.level;
@@ -82,7 +82,7 @@ export default function Results() {
           </div>
           {!pct && (
             <p className="muted small">
-              {res.mode === 'zones' ? 'Zone countdown remaining' : 'Respawn tickets left'} · coverage{' '}
+              {kindOf(res.mode) === 'zones' ? 'Zone countdown remaining' : 'Respawn tickets left'} · coverage{' '}
               {res.coverage[0].toFixed(1)}% / {res.coverage[1].toFixed(1)}%
             </p>
           )}

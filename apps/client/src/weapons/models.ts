@@ -65,7 +65,8 @@ export function buildWeapon(
     case 'roller': {
       // Long handle angled down-forward with a wide roller head.
       const handle = new THREE.Group();
-      handle.rotation.x = -0.55;
+      // Near level, so the drum stays off the floor (a steep angle dug it into the ground).
+      handle.rotation.x = 0.15;
       group.add(handle);
       const h = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, rz = 0) => {
         geos.push(geo);

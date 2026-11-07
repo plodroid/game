@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ACCENT_COLORS, HAIR_COLORS, SKIN_TONES, WEAPONS, type Cosmetics, type WeaponId } from '@chromashift/shared';
+import { ACCENT_COLORS, COLORWAYS, HAIR_COLORS, SKIN_TONES, splitWay, WEAPONS, type Colorway, type Cosmetics, type WeaponId } from '@chromashift/shared';
 import { buildWeapon, type WeaponModel } from '../weapons/models';
 import { buildBack } from './back';
 import { compactRig } from './compact';
@@ -127,9 +127,34 @@ export function buildCharacter(o: ModelOptions): Rig {
   };
   const d = o.detail;
   const c = o.cosmetics;
-  const accentColor = ACCENT_COLORS[c.accent] ?? 0x2a2d3a;
+  const mix = (a: number, b: number, t: number) => {
+    const ch = (s: number) => Math.round(((a >> s) & 255) * (1 - t) + ((b >> s) & 255) * t);
+    return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+  };
+  const wayOf = (id: string) => {
+    const [base, w] = splitWay(id);
+    return [base, w ? COLORWAYS[w] : undefined] as const;
+  };
+  /** The materials a colourway paints a piece in, in place of the player's own colours. */
+  const paint = (cw: Colorway) => {
+    const ex = { metalness: cw.metal ?? 0, roughness: cw.rough ?? 0.55 };
+    const lit = (col: number) => (cw.glow ? { emissive: col, emissiveIntensity: cw.glow } : {});
+    return {
+      accent: mat(cw.a, { ...ex, ...lit(cw.a) }),
+      teamFlat: mat(cw.b, { ...ex, ...lit(cw.b) }),
+      team: mat(cw.b, { ...ex, emissive: cw.b, emissiveIntensity: Math.max(0.3, cw.glow ?? 0) }),
+      dark: mat(cw.dark, { roughness: 0.7, metalness: (cw.metal ?? 0) * 0.5 }),
+      white: mat(cw.light, ex),
+      make: (color: number, extra?: Partial<THREE.MeshStandardMaterialParameters>) => mat(mix(color, cw.a, 0.55), { ...extra, ...ex }),
+    };
+  };
+  const [outfitId, outfitWay] = wayOf(c.outfit);
+  const [gearId, gearWay] = wayOf(c.headgear);
+  const [faceId, faceWay] = wayOf(c.face);
+  const [backId, backWay] = wayOf(c.back);
+  const accentColor = outfitWay?.a ?? ACCENT_COLORS[c.accent] ?? 0x2a2d3a;
   const skin = mat(SKIN_TONES[c.skin] ?? SKIN_TONES[1], { roughness: 0.75 });
-  const accent = mat(accentColor, { roughness: 0.7 });
+  const accent = mat(accentColor, { roughness: outfitWay?.rough ?? 0.7, metalness: outfitWay?.metal ?? 0, ...(outfitWay?.glow ? { emissive: accentColor, emissiveIntensity: outfitWay.glow * 0.6 } : {}) });
   const dark = mat(0x23252f, { roughness: 0.8 });
   const white = mat(0xf3f0ea, { roughness: 0.5 });
   const eyeMat = mat(0x14151c, { roughness: 0.25 });
@@ -139,11 +164,13 @@ export function buildCharacter(o: ModelOptions): Rig {
   const dye = HAIR_COLORS[c.hairColor];
   const hair = !dye || c.hairColor === 'team' ? team : mat(dye.color, { roughness: 0.45, metalness: dye.metal ?? 0, emissive: dye.glow ? dye.color : 0, emissiveIntensity: dye.glow ?? 0 });
 
-  const look = OUTFIT[c.outfit] ?? OUTFIT.jacket;
-  const second = look.second === -1 ? o.team.getHex() : (look.second ?? 0xffffff);
-  const patterned = look.pattern ? mat(0xffffff, { roughness: 0.7, map: patternTexture(look.pattern, look.body === 'second' ? second : accentColor, look.second === -1 ? o.team.getHex() : (look.second ?? darken(accentColor, 0.6))) }) : null;
-  const secondMat = mat(second, { roughness: c.outfit === 'raincoat' ? 0.25 : 0.65 });
-  const part = (p: Part) => ({ accent, dark, white, team: teamFlat, skin, second: secondMat })[p];
+  // An outfit's colourway repaints its trim, highlights and second colour too.
+  const look = OUTFIT[outfitId] ?? OUTFIT.jacket;
+  const ow = outfitWay ? paint(outfitWay) : null;
+  const second = outfitWay ? outfitWay.b : look.second === -1 ? o.team.getHex() : (look.second ?? 0xffffff);
+  const patterned = look.pattern ? mat(0xffffff, { roughness: 0.7, map: patternTexture(look.pattern, look.body === 'second' ? second : accentColor, outfitWay ? outfitWay.dark : look.second === -1 ? o.team.getHex() : (look.second ?? darken(accentColor, 0.6))) }) : null;
+  const secondMat = mat(second, { roughness: outfitId === 'raincoat' ? 0.25 : 0.65 });
+  const part = (p: Part) => ({ accent, dark: ow?.dark ?? dark, white: ow?.white ?? white, team: ow?.teamFlat ?? teamFlat, skin, second: secondMat })[p];
   const bodyMat = patterned ?? part(look.body);
 
   const mesh = (geo: THREE.BufferGeometry, m: THREE.Material, x = 0, y = 0, z = 0) => {
@@ -250,9 +277,23 @@ export function buildCharacter(o: ModelOptions): Rig {
   const head = node(neck, 0, 0.07, 0);
   const make: HeadParts['make'] = (color, extra) => mat(color, extra);
   // Skin, face, hair and headgear are all built on one head surface, so every combination fits.
-  buildHead(head, { hair: c.hair, headgear: c.headgear, face: c.face }, { skin, hair, accent, dark, white, eye: eyeMat, team, teamFlat, glass, make }, d, (x) => void g(x));
+  buildHead(head, { hair: c.hair, headgear: gearId, face: faceId }, { skin, hair, accent, dark, white, eye: eyeMat, team, teamFlat, glass, make }, d, (x) => void g(x), {
+    gear: gearWay ? paint(gearWay) : undefined,
+    face: faceWay ? paint(faceWay) : undefined,
+  });
 
-  buildBack(spine, c.back, { mesh, mat, team, teamFlat, dark, white, accent, glass, detail: d });
+  const bw = backWay ? paint(backWay) : null;
+  buildBack(spine, backId, {
+    mesh,
+    mat: bw ? (col, ex) => bw.make(col, ex) : mat,
+    team: bw?.team ?? team,
+    teamFlat: bw?.teamFlat ?? teamFlat,
+    dark: bw?.dark ?? dark,
+    white: bw?.white ?? white,
+    accent: bw?.accent ?? accent,
+    glass,
+    detail: d,
+  });
 
   // Arms
   const [upper, lower] = look.arms.map((p) => (p === look.body && patterned ? patterned : part(p)));

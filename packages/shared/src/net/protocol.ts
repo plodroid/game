@@ -139,12 +139,12 @@ const finite = (a: unknown[]) => a.every((x) => typeof x === 'number' && Number.
 const q = (v: number, s: number) => Math.round(v * s);
 
 export function packInput(i: Input): number[] {
-  return [i.seq, q(i.mx, 100), q(i.mz, 100), q(i.yaw, 1e4), q(i.pitch, 1e4), q(i.aimYaw, 1e4), q(i.aimPitch, 1e4), i.buttons];
+  return [i.seq, q(i.mx, 100), q(i.mz, 100), q(i.yaw, 1e4), q(i.pitch, 1e4), q(i.aimYaw, 1e4), q(i.aimPitch, 1e4), i.buttons, i.emote ?? 0];
 }
 
 /** Validates and clamps an untrusted input. Returns false for malformed data. */
 export function unpackInput(a: unknown, out: Input): boolean {
-  if (!Array.isArray(a) || a.length !== 8 || !finite(a)) return false;
+  if (!Array.isArray(a) || a.length < 8 || a.length > 9 || !finite(a)) return false;
   out.seq = a[0] | 0;
   out.mx = clamp(a[1] / 100, -1, 1);
   out.mz = clamp(a[2] / 100, -1, 1);
@@ -153,6 +153,7 @@ export function unpackInput(a: unknown, out: Input): boolean {
   out.aimYaw = wrapAngle(a[5] / 1e4);
   out.aimPitch = clamp(a[6] / 1e4, -1.55, 1.55);
   out.buttons = a[7] & BTN_MASK;
+  out.emote = clamp((a[8] ?? 0) | 0, 0, 7);
   return true;
 }
 
@@ -172,7 +173,7 @@ export function packPlayer(p: PlayerState): number[] {
     p.airJumps, q(p.airTime, 1000), q(p.jumpBuffer, 1000), q(p.slideT, 1000), q(p.slideCd, 1000), q(p.dodgeT, 1000),
     q(p.dodgeCd, 1000), q(p.dodgeDir.x, 1000), q(p.dodgeDir.z, 1000), q(p.surgeT, 1000), q(p.disruptedT, 1000),
     q(p.fireCd, 1000), q(p.emoteT, 1000), q(p.respawnT, 1000), q(p.spawnProtect, 1000), p.prevButtons, p.shots,
-    q(p.landT, 1000), q(p.sinceFire, 1000), q(p.aimYaw, 1e4), q(p.aimPitch, 1e4),
+    q(p.landT, 1000), q(p.sinceFire, 1000), q(p.aimYaw, 1e4), q(p.aimPitch, 1e4), p.emoteSlot,
   ];
 }
 
@@ -221,6 +222,7 @@ export function unpackPlayer(a: number[], p: PlayerState): number {
   p.sinceFire = a[32] / 1000;
   p.aimYaw = a[33] / 1e4;
   p.aimPitch = a[34] / 1e4;
+  p.emoteSlot = (a[35] ?? 0) & 7;
   return a[0];
 }
 

@@ -8,6 +8,7 @@ import {
   SPECIALS,
   WEAPON_IDS,
   WEAPONS,
+  WHEEL,
   type Cosmetics,
   type Item,
   type Rarity,
@@ -15,11 +16,13 @@ import {
   type WeaponId,
 } from '@chromashift/shared';
 import { audio } from '../../audio/audio';
+import { menu } from '../../game/session';
 import { peek, portrait, portraitKey, weaponKey, weaponPortrait, type Frame } from '../../characters/portrait';
 import { useProfile } from '../../state/profile';
 import { useUi } from '../../state/ui';
 import { bannerCss } from '../banner';
 import { Coin, Icon } from '../icons';
+import { EmoteRing, emoteIcon, emoteName } from '../EmoteWheel';
 import { Button, Header, Segmented } from '../kit';
 
 type Tab = Exclude<Slot, 'weapon'> | 'weapon' | 'special' | 'skin' | 'favs';
@@ -36,7 +39,7 @@ const TABS: { id: Tab; label: string; group: 'Starred' | 'Loadout' | 'Look' | 'S
   { id: 'outfit', label: 'Outfits', group: 'Look' },
   { id: 'back', label: 'Back', group: 'Look' },
   { id: 'accent', label: 'Colour', group: 'Look' },
-  { id: 'skin', label: 'Skin', group: 'Look' },
+  { id: 'skin', label: 'Body', group: 'Look' },
   { id: 'emote', label: 'Emotes', group: 'Show' },
   { id: 'title', label: 'Titles', group: 'Show' },
   { id: 'banner', label: 'Banners', group: 'Show' },
@@ -106,11 +109,48 @@ export default function Locker() {
   const [q, setQ] = useState('');
   const [picked, setPicked] = useState<Item | null>(null);
   const p = useProfile();
+  const wheel = p.cosmetics.emotes ?? [p.cosmetics.emote];
+  const [slot, setSlot] = useState(() => Math.max(0, wheel.indexOf('')));
   const toast = useUi((s) => s.toast);
   const setTryOn = useUi((s) => s.setTryOn);
   useEffect(() => () => setTryOn(null), [setTryOn]);
+  // Drag on empty space to turn the character and see every side of it (the locker only).
+  useEffect(() => {
+    let last: number | null = null;
+    const down = (e: PointerEvent) => {
+      if (e.button !== 0 || (e.target as HTMLElement).closest('button, input, select, textarea, a, [role=button], .items, .shelf, .header')) return;
+      last = e.clientX;
+    };
+    const move = (e: PointerEvent) => {
+      if (last === null) return;
+      menu()?.spin(e.clientX - last);
+      last = e.clientX;
+    };
+    const up = () => (last = null);
+    window.addEventListener('pointerdown', down);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    return () => {
+      window.removeEventListener('pointerdown', down);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
+  }, []);
 
-  const equippedId = (slot: Slot) => (slot === 'weapon' ? p.weapon : p.cosmetics[slot]);
+  const equippedId = (s: Slot) => (s === 'weapon' ? p.weapon : p.cosmetics[s]);
+  const isOn = (it: Item) => (it.slot === 'emote' ? wheel.includes(it.id) : equippedId(it.slot) === it.id);
+  /** Puts an emote in the chosen wheel slot (moving it if it's already elsewhere), then moves on to the next empty slot. */
+  const setWheel = (at: number, id: string) => {
+    const next = Array.from({ length: WHEEL }, (_, i) => wheel[i] ?? '');
+    const was = next.indexOf(id);
+    if (id && was >= 0) next[was] = next[at];
+    next[at] = id;
+    p.patch({ cosmetics: { ...p.cosmetics, emotes: next, emote: next.find(Boolean) ?? 'wave' } });
+    const free = next.indexOf('', at + 1);
+    if (id) setSlot(free >= 0 ? free : at);
+  };
   // Favourites across every category, newest first.
   const favItems = useMemo(
     () =>
@@ -152,6 +192,7 @@ export default function Locker() {
   };
   const equip = (it: Item) => {
     if (it.slot === 'weapon') p.patch({ weapon: it.id as WeaponId });
+    else if (it.slot === 'emote') setWheel(slot, it.id);
     else p.patch({ cosmetics: { ...p.cosmetics, [it.slot]: it.id } });
     setTryOn(it.slot === 'emote' ? { emote: it.id } : null);
   };
@@ -180,11 +221,7 @@ export default function Locker() {
       case 'banner':
         return <span className="item__blank" style={{ background: bannerCss(it.id) }} />;
       case 'emote':
-        return (
-          <span className="item__blank item__emote">
-            <Icon.play size={26} />
-          </span>
-        );
+        return <span className="item__blank item__emote">{emoteIcon(it.id)}</span>;
       default: {
         const look = { ...c, [it.slot]: it.id } as Cosmetics;
         const frame = FRAME[it.slot] ?? 'head';
@@ -214,7 +251,7 @@ export default function Locker() {
 
   const tile = (it: Item) => {
     const own = p.owns(it.key);
-    const on = equippedId(it.slot) === it.id;
+    const on = isOn(it);
     return (
       <div key={it.key} className="item-cell">
         <button
@@ -232,7 +269,7 @@ export default function Locker() {
             <span className="item__lock">
               {on ? (
                 <>
-                  <Icon.check size={13} /> Equipped
+                  <Icon.check size={13} /> {it.slot === 'emote' ? 'On wheel' : 'Equipped'}
                 </>
               ) : own ? (
                 'Owned'
@@ -258,7 +295,7 @@ export default function Locker() {
     <main className="screen locker" data-pig="cobalt">
       <Header
         title="Locker"
-        sub={`${allOwned} of ${CATALOGUE_SIZE} items collected. Pick anything to try it on.`}
+        sub={`${allOwned} of ${CATALOGUE_SIZE} items collected. Pick anything to try it on, and drag the empty space to turn the character.`}
         end={
           <span className="coins" aria-label={`${p.coins} coins`}>
             <Coin size={20} />
@@ -353,6 +390,35 @@ export default function Locker() {
           </div>
         )}
 
+        {tab === 'emote' && (
+          <section className="locker-wheel" aria-label="Emote wheel">
+            <EmoteRing
+              edit
+              emotes={wheel}
+              pick={slot}
+              onPick={(i) => {
+                audio.play('click');
+                setSlot(i);
+                if (wheel[i]) setTryOn({ emote: wheel[i] });
+              }}
+              hub={
+                <>
+                  <span className="wheel__hint">Slot {slot + 1}</span>
+                  <b>{wheel[slot] ? emoteName(wheel[slot]) : 'Empty'}</b>
+                </>
+              }
+            />
+            <div className="locker-wheel__text">
+              <h2 className="panel__title">Your emote wheel</h2>
+              <p className="muted">Pick a slot, then an emote you own to put it there. In a match, hold the emote button, point at one and let go. A quick tap plays the last one again.</p>
+              {wheel[slot] && (
+                <Button onClick={() => setWheel(slot, '')}>
+                  <Icon.close size={14} /> Clear slot {slot + 1}
+                </Button>
+              )}
+            </div>
+          </section>
+        )}
         {list.length > 0 && <div className="items items--gallery">{list.map(tile)}</div>}
         {tab !== 'special' && tab !== 'skin' && list.length === 0 && (
           <p className="empty">
@@ -387,7 +453,7 @@ export default function Locker() {
           {star(picked, 'btn btn--ghost btn--icon dock__fav')}
           {pickedOwned ? (
             <Button variant="ghost" disabled>
-              <Icon.check /> {equippedId(picked.slot) === picked.id ? 'Equipped' : 'Owned'}
+              <Icon.check /> {isOn(picked) ? (picked.slot === 'emote' ? 'On wheel' : 'Equipped') : picked.slot === 'emote' ? `Owned · tap to put in slot ${slot + 1}` : 'Owned'}
             </Button>
           ) : short > 0 ? (
             <Button disabled>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { MODES, SPECIALS, WEAPONS } from '@chromashift/shared';
+import { kindOf, MODES, SPECIALS, WEAPONS } from '@chromashift/shared';
 import { engine } from '../../game/engine';
 import { touch } from '../../game/input';
 import { leaveMatch } from '../../game/session';
@@ -11,6 +11,7 @@ import { publicName, useProfile } from '../../state/profile';
 import { useHud, useUi } from '../../state/ui';
 import { useChat } from '../../state/chat';
 import { Chat } from './Chat';
+import { GameEmoteWheel } from '../EmoteWheel';
 import { Minimap } from './Minimap';
 import { Icon, TeamShape } from '../icons';
 import { Button, keyLabel, Segmented } from '../kit';
@@ -32,9 +33,10 @@ export function Hud() {
   }, [showTouch]);
 
   const mode = MODES[h.mode as keyof typeof MODES];
-  const pct = h.mode === 'turf' || h.mode === 'practice';
+  const kind = kindOf(h.mode);
+  const pct = kind === 'turf' || kind === 'practice';
   const [a, b] = h.score;
-  const scoreText = (v: number) => (pct ? `${v.toFixed(1)}%` : h.mode === 'zones' ? `${Math.ceil(v)}` : `${v}`);
+  const scoreText = (v: number) => (pct ? `${v.toFixed(1)}%` : kind === 'zones' ? `${Math.ceil(v)}` : `${v}`);
   const total = Math.max(1e-6, a + b);
   const special = SPECIALS[h.special];
   const ready = h.charge >= 1;
@@ -66,11 +68,11 @@ export function Hud() {
         )}
         {!pct && (
           <div className="meter">
-            <div className="meter__a" style={{ width: `${(h.mode === 'zones' ? (b / total) : a / total) * 100}%` }} />
-            <div className="meter__b" style={{ width: `${(h.mode === 'zones' ? a / total : b / total) * 100}%` }} />
+            <div className="meter__a" style={{ width: `${(kind === 'zones' ? (b / total) : a / total) * 100}%` }} />
+            <div className="meter__b" style={{ width: `${(kind === 'zones' ? a / total : b / total) * 100}%` }} />
           </div>
         )}
-        {h.mode === 'zones' && (
+        {kind === 'zones' && (
           <div className="zones">
             {h.holders.map((t, i) => (
               <div key={i} className="zone-pip" style={{ background: t < 0 ? undefined : t === 0 ? 'var(--team-a)' : 'var(--team-b)' }} />
@@ -166,6 +168,7 @@ export function Hud() {
         {h.caption && <div className="caption">{h.caption}</div>}
       </div>
 
+      {!paused && <GameEmoteWheel />}
       {h.showBoard && <Scoreboard />}
       {showTouch && !paused && <TouchControls charge={h.charge} team={h.myTeam} />}
       {paused && <PauseMenu />}
@@ -464,6 +467,9 @@ function TouchControls({ charge, team }: { charge: number; team: number }) {
         </>,
       )}
       {btn(32, 'tbtn--dodge', 'DODGE')}
+      <div className="tbtn tbtn--emote" role="button" aria-label="Emotes" onPointerDown={(e) => (e.stopPropagation(), engine.input.openWheel())}>
+        <span aria-hidden>🙂</span>
+      </div>
       {room && (
         <div
           className="tbtn tbtn--chat"

@@ -135,6 +135,17 @@ const idb = createJSONStorage<ProfileStore>(() => ({
   removeItem: (k) => del(k),
 }));
 
+/** Owned keys as a set, rebuilt only when the list changes (the locker asks hundreds of times). */
+let ownedRef: string[] | null = null;
+let ownedSet = new Set<string>();
+function ownedHas(list: string[], key: string) {
+  if (list !== ownedRef) {
+    ownedRef = list;
+    ownedSet = new Set(list);
+  }
+  return ownedSet.has(key);
+}
+
 export const useProfile = create<ProfileStore>()(
   persist(
     (setState, getState) => ({
@@ -167,7 +178,7 @@ export const useProfile = create<ProfileStore>()(
         setState({ stats: st, xp: s.xp + xp, coins: s.coins + coins, quests: { ...quests, progress }, dirty: true, updatedAt: Date.now() });
         return { ...before, coins };
       },
-      owns: (key) => FREE.has(key) || getState().owned.includes(key),
+      owns: (key) => FREE.has(key) || ownedHas(getState().owned, key),
       buy: (key, price) => {
         const s = getState();
         if (s.owns(key) || s.coins < price) return false;

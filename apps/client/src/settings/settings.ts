@@ -4,7 +4,7 @@ import { persist } from 'zustand/middleware';
 export type Preset = 'veryLow' | 'low' | 'medium' | 'high' | 'ultra' | 'custom';
 export type Action =
   | 'forward' | 'back' | 'left' | 'right' | 'jump' | 'fire' | 'dive' | 'sprint' | 'slide' | 'dodge'
-  | 'special' | 'emote' | 'scoreboard' | 'pause' | 'chat' | 'talk' | 'map';
+  | 'special' | 'emote' | 'scoreboard' | 'pause' | 'chat' | 'talk' | 'map' | 'view';
 
 /** Voice chat: hold a key to talk, an always-open mic, or off. */
 export type VoiceMode = 'ptt' | 'open' | 'off';
@@ -131,7 +131,7 @@ export const DEFAULT_BINDINGS: Record<Action, string[]> = {
   fire: ['Mouse0'],
   dive: ['Mouse2', 'KeyF'],
   sprint: ['ShiftLeft'],
-  slide: ['KeyC'],
+  slide: ['KeyZ'],
   dodge: ['KeyQ'],
   special: ['KeyE'],
   emote: ['KeyG'],
@@ -140,6 +140,7 @@ export const DEFAULT_BINDINGS: Record<Action, string[]> = {
   chat: ['KeyT', 'Enter'],
   talk: ['KeyV'],
   map: ['KeyM'],
+  view: ['KeyC'],
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -199,6 +200,8 @@ interface SettingsStore extends Settings {
 function migrateBindings(saved?: Partial<Record<Action, string[]>>): Record<Action, string[]> {
   const out = { ...DEFAULT_BINDINGS, ...saved };
   if (saved?.emote?.length === 1 && saved.emote[0] === 'KeyT') out.emote = DEFAULT_BINDINGS.emote;
+  // Slide used to sit on C, which now switches between first and third person.
+  if (saved?.slide?.length === 1 && saved.slide[0] === 'KeyC') out.slide = DEFAULT_BINDINGS.slide;
   return out;
 }
 

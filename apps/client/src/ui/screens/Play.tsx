@@ -13,7 +13,7 @@ import { startOffline } from '../../game/session';
 import { hostFromMenu, ownHostCode } from '../../multiplayer/net';
 import { useUi } from '../../state/ui';
 import { Icon } from '../icons';
-import { Button, Header, Segmented, Setting } from '../kit';
+import { Button, Header, LengthDial, Segmented, Setting } from '../kit';
 
 export const DIFF_LABEL: Record<BotDifficulty, string> = { easy: 'Easy', normal: 'Normal', hard: 'Hard', expert: 'Expert' };
 export const onlineIntent: { mode: 'join' | null } = { mode: null };
@@ -91,12 +91,12 @@ export function Custom() {
                 if (MODES[m].duration) setDuration(MODES[m].duration);
               }}
               label="Mode"
-              options={(['turf', 'zones', 'knockout', 'practice'] as ModeId[]).map((m) => ({ value: m, label: MODES[m].name }))}
+              options={(['turf', 'blitz', 'zones', 'rush', 'knockout', 'suddendeath', 'brawl', 'practice'] as ModeId[]).map((m) => ({ value: m, label: MODES[m].name }))}
             />
           </Setting>
           {!practice && (
             <Setting name="Length">
-              <Segmented value={duration} onChange={setDuration} label="Length" options={DURATION_OPTIONS.map((d) => ({ value: d, label: `${d / 60} min` }))} />
+              <LengthDial value={duration} options={DURATION_OPTIONS} onChange={setDuration} />
             </Setting>
           )}
           <Setting name="Bot difficulty" hint="Changes reaction time, aim, awareness and teamwork, never the rules.">
@@ -118,7 +118,7 @@ export function Custom() {
             <Icon.play size={16} /> Start match
           </Button>
           <span className="muted small">
-            {practice ? 'Practice: four training targets, no timer.' : `${1 + allies} vs ${rivals} · ${MODES[mode].name} · ${MAPS[map].name}`}
+            {practice ? 'Practice: four training targets, no timer.' : `${1 + allies} vs ${rivals} · ${MODES[mode].name} · ${MAPS[map].name}${duration ? '' : ' · no time limit'}`}
           </span>
         </div>
       </div>

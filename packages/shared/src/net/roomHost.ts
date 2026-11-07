@@ -91,7 +91,7 @@ const BOT_NAMES = [
   'Pico',
   'Sable',
 ];
-const PLAYABLE: ModeId[] = ['turf', 'zones', 'knockout'];
+const PLAYABLE: ModeId[] = ['turf', 'zones', 'knockout', 'blitz', 'rush', 'suddendeath', 'brawl'];
 /** A player whose inputs stop arriving (hidden tab, stalled link) stops moving and firing instead of running on. */
 const INPUT_STALE_MS = 400;
 const pick = <T>(list: readonly T[]) => list[Math.floor(Math.random() * list.length)];

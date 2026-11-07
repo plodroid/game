@@ -38,6 +38,8 @@ export class MenuView implements View {
   private time = 0;
   private emoteT = 0;
   private lookX = 0;
+  /** Turn added by dragging in the locker, so every side of the character can be seen. */
+  private dragYaw = 0;
   private outcome: 'none' | 'win' | 'lose' = 'none';
   private unsub: () => void;
   private unsubScreen: () => void;
@@ -142,6 +144,11 @@ export class MenuView implements View {
     this.anim.spawned();
   }
 
+  /** Turns the character by a drag of `dx` pixels (the locker only). */
+  spin(dx: number) {
+    this.dragYaw += dx * 0.012;
+  }
+
   /** Small reactions to menu interactions. */
   react(kind: 'emote' | 'hop') {
     if (kind === 'emote') this.emoteT = 2.4;
@@ -157,7 +164,10 @@ export class MenuView implements View {
     const reduced = prefersReducedMotion();
     const rig = this.rig!;
     this.emoteT = Math.max(0, this.emoteT - dt);
-    const target = Math.PI + 0.35 + this.lookX * 0.35;
+    // The drag turn is kept while in the locker and unwinds the shortest way when you leave it.
+    if (useUi.getState().screen !== 'locker') this.dragYaw = Math.atan2(Math.sin(this.dragYaw), Math.cos(this.dragYaw)) * Math.exp(-3 * dt);
+    const locker = useUi.getState().screen === 'locker';
+    const target = Math.PI + 0.35 + (locker ? 0 : this.lookX * 0.35) + this.dragYaw;
     rig.root.rotation.y += (target - rig.root.rotation.y) * (1 - Math.exp(-3 * dt));
     const st: AnimState = {
       alive: true, grounded: true, diving: false, swimming: false, climbing: false, firing: false, rolling: false,

@@ -943,3 +943,11 @@
 .chat__opt:hover {
   background: rgba(255, 79, 154, 0.28);
 }
+/* Touch: emote wheel button, under the pause button. */
+.tbtn--emote {
+  right: calc(16px + var(--safe-r));
+  top: calc(112px + var(--safe-t));
+  width: 44px;
+  height: 44px;
+  font-size: 1.3rem;
+}

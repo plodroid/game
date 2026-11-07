@@ -1,5 +1,5 @@
 import { FEET_OFFSET } from '../constants';
-import type { BotDifficulty } from '../config/modes';
+import { kindOf, type BotDifficulty } from '../config/modes';
 import { WEAPONS, type WeaponDef } from '../config/weapons';
 import { mulberry32 } from '../rng';
 import { muzzle } from '../sim/combat';
@@ -381,7 +381,7 @@ export class BotBrain {
       else if (ally) {
         this.state = 'support';
         set(this.goal, ally.pos.x, ally.pos.y - FEET_OFFSET, ally.pos.z);
-      } else if (sim.config.mode === 'zones' && sim.map.zones.length) this.state = 'zone';
+      } else if (kindOf(sim.config.mode) === 'zones' && sim.map.zones.length) this.state = 'zone';
       else this.state = 'paint';
     }
 

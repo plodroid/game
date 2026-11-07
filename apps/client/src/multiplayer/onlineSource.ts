@@ -270,7 +270,7 @@ export class OnlineSource implements MatchSource {
     this.acc = Math.min(this.acc + dt, 0.2);
     this.collectLaunchers();
     while (this.acc >= DT) {
-      const i: Input = { seq: ++this.seq, mx: inp.mx, mz: inp.mz, yaw: inp.yaw, pitch: inp.pitch, aimYaw: inp.aimYaw, aimPitch: inp.aimPitch, buttons: inp.buttons };
+      const i: Input = { seq: ++this.seq, mx: inp.mx, mz: inp.mz, yaw: inp.yaw, pitch: inp.pitch, aimYaw: inp.aimYaw, aimPitch: inp.aimPitch, buttons: inp.buttons, emote: inp.emote };
       inp.consume();
       this.history.push(i);
       if (this.history.length > 180) this.history.shift();

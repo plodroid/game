@@ -31,6 +31,8 @@ export interface Input {
   aimYaw: number;
   aimPitch: number;
   buttons: number;
+  /** Emote wheel slot to play when EMOTE is pressed (0..7). */
+  emote?: number;
 }
 
 export const emptyInput = (): Input => ({ seq: 0, mx: 0, mz: 0, yaw: 0, pitch: 0, aimYaw: 0, aimPitch: 0, buttons: 0 });
@@ -106,6 +108,8 @@ export interface PlayerState {
   size?: number;
   spawnProtect: number;
   emoteT: number;
+  /** Wheel slot of the emote being played. */
+  emoteSlot: number;
   shots: number;
   prevButtons: number;
   lastSeq: number;
@@ -151,6 +155,7 @@ export function createPlayerState(info: PlayerInfo): PlayerState {
     respawnT: 0,
     spawnProtect: 0,
     emoteT: 0,
+    emoteSlot: 0,
     shots: 0,
     prevButtons: 0,
     lastSeq: 0,

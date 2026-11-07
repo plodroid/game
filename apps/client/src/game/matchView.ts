@@ -5,9 +5,12 @@ import {
   forwardXZ,
   INTRO_TIME,
   MAX_INK,
+  MOVE,
+  wheelEmote,
   muzzle,
   OUTRO_TIME,
   PAINT_KIND,
+  kindOf,
   pitchOf,
   rightXZ,
   SPECIALS,
@@ -36,6 +39,17 @@ import { engine, type View } from './engine';
 import { touch } from './input';
 import type { FrameInput, MatchOutcome, MatchSource, ViewPlayer } from './source';
 
+/** Shows only the arms and weapon of a rig (for the first-person view), or everything again. */
+function firstPersonRig(rig: Rig, on: boolean) {
+  const arms = new Set<THREE.Object3D>([rig.shoulderL, rig.shoulderR]);
+  rig.body.traverse((o) => {
+    if (!(o as THREE.Mesh).isMesh || o === rig.blob) return;
+    let arm = false;
+    for (let p: THREE.Object3D | null = o; p; p = p.parent) if (arms.has(p)) arm = true;
+    if (!arm) o.visible = !on;
+  });
+}
+
 interface CharView {
   rig: Rig;
   anim: Animator;
@@ -46,6 +60,8 @@ interface CharView {
   wasGrounded: boolean;
   rippleT: number;
   team: number;
+  /** First-person view is applied to this model (only the arms and weapon show). */
+  fp?: boolean;
 }
 
 const tmp = new THREE.Vector3(), tmp2 = v3(), camDir = v3(), aimPt = v3(), muz = v3(), fwd = v3(), right = v3();
@@ -140,6 +156,7 @@ export class MatchView implements View {
     engine.input.onChat = () => useChat.getState().setOpen(true);
     engine.input.onTalk = (down) => void voice.talk(down);
     engine.input.onMap = () => useHud.setState((h) => ({ bigMap: !h.bigMap }));
+    engine.input.onView = () => (this.cam.firstPerson = !this.cam.firstPerson);
     audio.startMusic('match');
     audio.startAmbient(map.theme.indoor ? 'hum' : 'wind');
     audio.onWorldSound = (at, kind) => this.worldCue(at, kind);
@@ -285,6 +302,7 @@ export class MatchView implements View {
     inp.mx = active ? stick.x : 0;
     inp.mz = active ? stick.z : 0;
     inp.buttons = active ? input.buttons() : 0;
+    inp.emote = input.emote();
 
     // Offline matches pause for real; online they keep running.
     const events = paused && !src.online ? [] : src.update(dt, inp);
@@ -512,7 +530,7 @@ export class MatchView implements View {
           this.capt('[Start horn]');
         } else if (e.phase === 'ending') {
           audio.play('time');
-          this.say(src.config.mode === 'knockout' ? 'KNOCKOUT!' : 'TIME!', 'neutral');
+          this.say(kindOf(src.config.mode) === 'knockout' ? 'KNOCKOUT!' : 'TIME!', 'neutral');
           this.capt('[Final buzzer]');
         }
         break;
@@ -577,7 +595,7 @@ export class MatchView implements View {
         firing: s.firing,
         rolling: s.rolling,
         sliding: s.slideT > 0 && s.grounded,
-        dodge: s.dodgeT > 0 ? 1 - s.dodgeT / 0.2 : -1,
+        dodge: s.dodgeT > 0 ? 1 - s.dodgeT / MOVE.dodgeTime : -1,
         dodgeX: vx,
         dodgeZ: vz,
         speed,
@@ -585,7 +603,7 @@ export class MatchView implements View {
         landT: s.landT,
         aimPitch: s.aimPitch,
         ink: s.ink / MAX_INK,
-        emote: v.info.cosmetics.emote,
+        emote: wheelEmote(v.info.cosmetics, s.emoteSlot),
         emoteT: s.emoteT,
         outcome: 'none',
         hiddenBlob: hidden,
@@ -613,7 +631,15 @@ export class MatchView implements View {
         if (hp !== c.tag.hp || talking !== c.tag.talking) c.tag.draw(hp, talking);
       }
       // Hide our own model if the camera is squeezed into it.
-      if (v.id === src.localId) c.rig.body.visible = c.rig.body.visible && this.cam.camera.position.distanceTo(root.position) > 1.1;
+      if (v.id === src.localId) {
+        // First person: from the eyes you see only your arms and weapon; diving and dying go back to third person.
+        const fp = this.cam.firstPerson && s.alive && !s.diving;
+        if (fp !== !!c.fp) {
+          c.fp = fp;
+          firstPersonRig(c.rig, fp);
+        }
+        if (!fp) c.rig.body.visible = c.rig.body.visible && this.cam.camera.position.distanceTo(root.position) > 1.1;
+      }
       c.wasDiving = s.diving;
       c.wasGrounded = s.grounded;
     }
@@ -784,6 +810,7 @@ export class MatchView implements View {
     engine.input.onChat = null;
     engine.input.onTalk = null;
     engine.input.onMap = null;
+    engine.input.onView = null;
     void voice.talk(false);
     voice.setNear(null);
     useChat.getState().setOpen(false);

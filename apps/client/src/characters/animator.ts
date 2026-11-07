@@ -1,4 +1,4 @@
-import { EMOTE_TIME, type WeaponKind } from '@chromashift/shared';
+import { EMOTE_TIME, splitEmote, type WeaponKind } from '@chromashift/shared';
 import type { Rig } from './model';
 
 export interface AnimState {
@@ -91,32 +91,68 @@ export class Animator {
     t.chest[0] += breathe;
     t.head[0] -= breathe * 0.6;
 
-    // Locomotion
-    t.hipL[0] += s * 0.75 * m;
-    t.hipR[0] -= s * 0.75 * m;
-    t.kneeL[0] -= (Math.max(0, c) * 1.1 + 0.08) * m;
-    t.kneeR[0] -= (Math.max(0, -c) * 1.1 + 0.08) * m;
-    t.hips[1] += s * 0.12 * m;
-    t.spine[0] -= 0.14 * m;
-    let bodyY = Math.abs(s) * 0.045 * m - 0.02 * m;
+    // Locomotion: stride from the hips, the swinging leg bends at the knee, the pelvis turns with
+    // the forward leg while the chest counters it, and the body rises as the legs pass.
+    const run = Math.min(1, Math.max(0, (a.speed - 5.6) / 1.8)) * m;
+    const stride = 0.55 + 0.25 * run;
+    t.hipL[0] += s * stride * m;
+    t.hipR[0] -= s * stride * m;
+    t.kneeL[0] -= (Math.max(0, c) * (0.95 + 0.4 * run) + 0.12) * m;
+    t.kneeR[0] -= (Math.max(0, -c) * (0.95 + 0.4 * run) + 0.12) * m;
+    t.hips[1] += s * 0.14 * m;
+    t.hips[2] += s * 0.05 * m;
+    t.spine[1] -= s * 0.12 * m;
+    t.spine[0] += 0.06 * m + 0.16 * run;
+    t.head[1] -= s * 0.03 * m;
+    let bodyY = (0.028 + 0.02 * run) * m * Math.cos(this.phase * 2) - 0.03 * m;
 
-    // Air: tucked rising, reaching when falling.
+    // Air: knees tucked while rising, legs reaching for the ground while falling.
     const rising = a.vy > 1 ? 1 : 0;
-    t.hipL[0] += (0.55 * rising + 0.25) * air;
-    t.hipR[0] += (0.15 * rising - 0.1) * air;
-    t.kneeL[0] -= (0.95 * rising + 0.35) * air;
-    t.kneeR[0] -= (0.5 * rising + 0.2) * air;
+    t.hipL[0] += (0.7 * rising + 0.2) * air;
+    t.hipR[0] += (0.25 * rising - 0.15) * air;
+    t.kneeL[0] -= (1.1 * rising + 0.3) * air;
+    t.kneeR[0] -= (0.6 * rising + 0.25) * air;
+    t.spine[0] += 0.08 * air;
 
-    // Landing squash
-    if (a.landT < 0.18) bodyY -= 0.1 * (1 - a.landT / 0.18);
+    // Landing: knees soak it up.
+    if (a.landT < 0.22) {
+      const f = 1 - a.landT / 0.22;
+      t.kneeL[0] -= 0.7 * f;
+      t.kneeR[0] -= 0.7 * f;
+      t.hipL[0] += 0.35 * f;
+      t.hipR[0] += 0.35 * f;
+      t.spine[0] += 0.2 * f;
+      bodyY -= 0.11 * f;
+    }
 
-    if (a.sliding) {
-      t.spine[0] += 0.4;
-      t.hipL[0] += 1.25;
-      t.kneeL[0] -= 0.25;
-      t.hipR[0] += 0.6;
-      t.kneeR[0] -= 1.2;
-      bodyY -= 0.36;
+    // Slide: down on the hip, lead leg out straight, the other folded under, leaning back.
+    const slide = a.sliding ? 1 : 0;
+    if (slide) {
+      t.hipL[0] = 1.45;
+      t.kneeL[0] = -0.12;
+      t.hipR[0] = 1.25;
+      t.kneeR[0] = -2.3;
+      t.hipR[2] = -0.25;
+      t.hips[1] = 0.25;
+      t.spine[0] = -0.5;
+      t.spine[1] = -0.2;
+      t.head[0] = 0.4;
+      bodyY -= 0.6;
+    }
+
+    // Dodge: a low dash, legs driving and the body leaning into the direction.
+    const dash = a.dodge >= 0 ? Math.sin(Math.min(1, a.dodge) * Math.PI) : 0;
+    if (dash > 0) {
+      const ax = Math.abs(a.dodgeX);
+      t.kneeL[0] -= 0.75 * dash;
+      t.kneeR[0] -= 0.75 * dash;
+      t.hipL[0] += (0.5 + 0.35 * a.dodgeZ) * dash;
+      t.hipR[0] += (0.5 - 0.35 * a.dodgeZ) * dash;
+      t.hipL[2] += 0.3 * ax * dash;
+      t.hipR[2] -= 0.3 * ax * dash;
+      t.spine[0] += 0.25 * dash;
+      t.head[0] -= 0.2 * dash;
+      bodyY -= 0.16 * dash;
     }
 
     // Arms by weapon
@@ -125,18 +161,20 @@ export class Animator {
     const k = this.kind;
     if (k === 'roller') {
       const roll = a.rolling ? 1 : 0;
-      t.shoulderR[0] += 0.55 + 0.3 * roll + this.recoil * 1.3;
-      t.shoulderL[0] += 0.55 + 0.3 * roll + this.recoil * 1.3;
+      t.shoulderR[0] += 0.8 + 0.3 * roll + this.recoil * 1.3;
+      t.shoulderL[0] += 0.8 + 0.3 * roll + this.recoil * 1.3;
       t.shoulderR[2] -= 0.35;
       t.shoulderL[2] += 0.35;
       t.elbowR[0] += 0.25;
       t.elbowL[0] += 0.25;
       t.spine[0] -= 0.25 * roll;
     } else if (sprinting) {
-      t.shoulderL[0] -= s * 0.7 * m;
-      t.shoulderR[0] += s * 0.4 * m + 0.6;
-      t.elbowL[0] += 0.7;
-      t.elbowR[0] += 1.1;
+      t.shoulderL[0] -= s * 0.95 * m;
+      t.shoulderR[0] += s * 0.55 * m + 0.55;
+      t.shoulderL[2] += 0.12;
+      t.shoulderR[2] -= 0.12;
+      t.elbowL[0] += 1.25;
+      t.elbowR[0] += 1.35;
     } else {
       t.shoulderR[0] += 1.45 + p + this.recoil * 0.25;
       t.shoulderR[2] -= 0.1;
@@ -153,8 +191,23 @@ export class Animator {
       t.chest[0] += p * 0.18;
     }
     t.head[0] += p * 0.45;
-    if (!a.firing && !sprinting && k !== 'roller') {
-      t.shoulderL[0] -= s * 0.15 * m;
+    if (!a.firing && !sprinting && k !== 'roller' && k !== 'dual') {
+      t.shoulderL[0] -= s * 0.3 * m;
+      t.elbowL[0] += Math.max(0, -s) * 0.2 * m;
+    }
+    if (slide && k === 'roller') {
+      // Hold the heavy drum up and clear of the floor.
+      t.shoulderR[0] += 0.8;
+    }
+    if (slide) {
+      // Free hand trails behind for balance.
+      t.shoulderL[0] = -0.5;
+      t.shoulderL[2] = 0.9;
+      t.elbowL[0] = 0.3;
+    }
+    if (dash > 0) {
+      t.shoulderL[2] += 0.5 * dash;
+      t.shoulderL[0] -= 0.4 * dash;
     }
 
     // Out-of-pigment shake: the weapon is rattled to show it's empty.
@@ -175,61 +228,65 @@ export class Animator {
 
     // Emotes and outcomes
     const e = a.emoteT > 0 ? a.emote : a.outcome === 'win' ? 'victory' : a.outcome === 'lose' ? 'defeat' : null;
+    // An emote id is a move plus an optional style (`wave-spin`).
+    const [mv, style] = e ? splitEmote(e) : [null, undefined];
+    const T = this.time * (style === 'quick' ? 1.7 : style === 'slow' ? 0.55 : 1);
+    const prog = Math.min(1, (EMOTE_TIME - a.emoteT) / EMOTE_TIME);
     let spinTarget = 0;
-    if (e === 'wave') {
+    if (mv === 'wave') {
       t.shoulderR[0] = 2.7;
-      t.shoulderR[2] = -0.5 + Math.sin(this.time * 11) * 0.35;
+      t.shoulderR[2] = -0.5 + Math.sin(T * 11) * 0.35;
       t.elbowR[0] = 0.4;
-    } else if (e === 'spin') {
-      spinTarget = (1 - a.emoteT / 2.4) * Math.PI * 4;
-    } else if (e === 'flex') {
+    } else if (mv === 'spin') {
+      spinTarget = (1 - a.emoteT / EMOTE_TIME) * Math.PI * 4;
+    } else if (mv === 'flex') {
       t.shoulderL[2] = 1.45;
       t.shoulderR[2] = -1.45;
       t.elbowL[0] = 1.8;
       t.elbowR[0] = 1.8;
       t.shoulderL[0] = t.shoulderR[0] = 0.2;
-    } else if (e === 'dance') {
-      t.hips[2] = Math.sin(this.time * 8) * 0.15;
-      t.shoulderL[0] = 1.4 + Math.sin(this.time * 8) * 0.8;
-      t.shoulderR[0] = 1.4 - Math.sin(this.time * 8) * 0.8;
-      bodyY += Math.abs(Math.sin(this.time * 8)) * 0.06;
-    } else if (e === 'clap') {
-      const c = Math.abs(Math.sin(this.time * 12));
+    } else if (mv === 'dance') {
+      t.hips[2] = Math.sin(T * 8) * 0.15;
+      t.shoulderL[0] = 1.4 + Math.sin(T * 8) * 0.8;
+      t.shoulderR[0] = 1.4 - Math.sin(T * 8) * 0.8;
+      bodyY += Math.abs(Math.sin(T * 8)) * 0.06;
+    } else if (mv === 'clap') {
+      const c = Math.abs(Math.sin(T * 12));
       t.shoulderL[0] = t.shoulderR[0] = 1.3;
       t.shoulderL[2] = 0.15 + c * 0.45;
       t.shoulderR[2] = -0.15 - c * 0.45;
       t.elbowL[0] = t.elbowR[0] = 0.9;
-    } else if (e === 'bow') {
+    } else if (mv === 'bow') {
       const k = Math.sin(Math.min(1, (EMOTE_TIME - a.emoteT) / 0.5) * Math.PI * 0.5) * (a.emoteT > 0.5 ? 1 : a.emoteT / 0.5);
       t.spine[0] = 0.75 * k;
       t.head[0] = 0.3 * k;
       t.shoulderR[0] = 0.9 * k;
       t.elbowR[0] = 1.4 * k;
       t.shoulderL[0] = -0.4 * k;
-    } else if (e === 'jump') {
-      bodyY += Math.abs(Math.sin(this.time * 7)) * 0.32;
+    } else if (mv === 'jump') {
+      bodyY += Math.abs(Math.sin(T * 7)) * 0.32;
       t.shoulderL[2] = 0.9;
       t.shoulderR[2] = -0.9;
-      t.kneeL[0] = t.kneeR[0] = -0.4 * Math.abs(Math.cos(this.time * 7));
-    } else if (e === 'point') {
+      t.kneeL[0] = t.kneeR[0] = -0.4 * Math.abs(Math.cos(T * 7));
+    } else if (mv === 'point') {
       t.shoulderR[0] = 1.6;
       t.shoulderR[2] = -0.15;
       t.elbowR[0] = 0.05;
       t.head[1] = -0.2;
       t.shoulderL[2] = 0.4;
       t.elbowL[0] = 1.8;
-    } else if (e === 'salute') {
+    } else if (mv === 'salute') {
       t.shoulderR[0] = 1.3;
       t.shoulderR[2] = -1.2;
       t.elbowR[0] = 2.3;
       t.head[0] = -0.08;
-    } else if (e === 'cheer') {
-      const w = Math.sin(this.time * 10) * 0.3;
+    } else if (mv === 'cheer') {
+      const w = Math.sin(T * 10) * 0.3;
       t.shoulderL[0] = t.shoulderR[0] = 2.9;
       t.shoulderL[2] = 0.35 + w;
       t.shoulderR[2] = -0.35 + w;
-      bodyY += Math.abs(Math.sin(this.time * 5)) * 0.1;
-    } else if (e === 'think') {
+      bodyY += Math.abs(Math.sin(T * 5)) * 0.1;
+    } else if (mv === 'think') {
       t.shoulderR[0] = 1.1;
       t.shoulderR[2] = -0.5;
       t.elbowR[0] = 2.4;
@@ -237,41 +294,163 @@ export class Animator {
       t.head[2] = 0.18;
       t.shoulderL[0] = 0.7;
       t.elbowL[0] = 1.5;
-    } else if (e === 'sway') {
-      const w = Math.sin(this.time * 4);
+    } else if (mv === 'sway') {
+      const w = Math.sin(T * 4);
       t.hips[2] = w * 0.12;
       t.spine[2] = -w * 0.18;
       t.head[2] = w * 0.15;
       t.shoulderL[2] = 0.5 + w * 0.3;
       t.shoulderR[2] = -0.5 + w * 0.3;
-    } else if (e === 'robot') {
-      const step = Math.floor(this.time * 4) % 4;
+    } else if (mv === 'robot') {
+      const step = Math.floor(T * 4) % 4;
       t.shoulderL[0] = step % 2 ? 1.57 : 0;
       t.shoulderR[0] = step % 2 ? 0 : 1.57;
       t.elbowL[0] = t.elbowR[0] = 1.57;
       t.head[1] = (step - 1.5) * 0.25;
       t.spine[1] = step % 2 ? 0.2 : -0.2;
-    } else if (e === 'laugh') {
-      const k = Math.sin(this.time * 18) * 0.08;
+    } else if (mv === 'laugh') {
+      const k = Math.sin(T * 18) * 0.08;
       t.spine[0] = -0.15 + k;
       t.head[0] = -0.3 + k;
       t.shoulderL[0] = t.shoulderR[0] = 0.5;
       t.elbowL[0] = t.elbowR[0] = 1.6;
       t.shoulderL[2] = 0.3;
       t.shoulderR[2] = -0.3;
-    } else if (e === 'sit') {
+    } else if (mv === 'sit') {
       t.hipL[0] = t.hipR[0] = 1.5;
       t.kneeL[0] = t.kneeR[0] = -1.5;
       t.shoulderL[0] = t.shoulderR[0] = 0.4;
       t.elbowL[0] = t.elbowR[0] = 0.6;
       bodyY -= 0.42;
-    } else if (e === 'victory') {
+    } else if (mv === 'shrug') {
+      const k = Math.abs(Math.sin(T * 3));
+      t.shoulderL[0] = t.shoulderR[0] = 0.35;
+      t.shoulderL[2] = 0.45 + k * 0.2;
+      t.shoulderR[2] = -0.45 - k * 0.2;
+      t.elbowL[0] = t.elbowR[0] = 1.5;
+      t.head[2] = 0.2 * k;
+      t.head[0] = -0.08;
+    } else if (mv === 'facepalm') {
+      t.shoulderR[0] = 2.05;
+      t.shoulderR[2] = 0.15;
+      t.elbowR[0] = 2.35;
+      t.head[0] = 0.35;
+      t.head[1] = Math.sin(T * 4) * 0.15;
+      t.spine[0] = 0.15;
+      t.shoulderL[2] = 0.15;
+    } else if (mv === 'kick') {
+      const k = Math.sin(T * 5);
+      t.hipR[0] = Math.max(0, k) * 1.6;
+      t.kneeR[0] = -Math.max(0, -k) * 0.9 - 0.1;
+      t.kneeL[0] = -0.15;
+      t.shoulderL[2] = 0.7;
+      t.shoulderR[2] = -0.7;
+      t.spine[0] = -0.12 * Math.max(0, k);
+    } else if (mv === 'stretch') {
+      t.shoulderL[0] = t.shoulderR[0] = 2.95;
+      t.elbowL[0] = t.elbowR[0] = 0.1;
+      t.spine[2] = Math.sin(T * 1.6) * 0.35;
+      t.head[2] = Math.sin(T * 1.6) * 0.15;
+    } else if (mv === 'yawn') {
+      const k = Math.sin(prog * Math.PI);
+      t.shoulderL[0] = t.shoulderR[0] = 2.6 * k;
+      t.shoulderL[2] = 0.6 * k;
+      t.shoulderR[2] = -0.6 * k;
+      t.elbowL[0] = t.elbowR[0] = 0.6 * k;
+      t.head[0] = -0.35 * k;
+      t.spine[0] = -0.18 * k;
+    } else if (mv === 'kneel') {
+      t.hipL[0] = 1.45;
+      t.kneeL[0] = -1.5;
+      t.hipR[0] = -0.15;
+      t.kneeR[0] = -1.75;
+      t.shoulderR[0] = 0.7;
+      t.elbowR[0] = 1.1;
+      t.shoulderL[0] = 0.4;
+      t.elbowL[0] = 0.9;
+      t.head[0] = 0.25;
+      bodyY -= 0.36;
+    } else if (mv === 'heart') {
+      t.shoulderL[0] = t.shoulderR[0] = 1.55;
+      t.shoulderL[2] = -0.38;
+      t.shoulderR[2] = 0.38;
+      t.elbowL[0] = t.elbowR[0] = 1.05;
+      t.head[2] = Math.sin(T * 3) * 0.12;
+      bodyY += Math.abs(Math.sin(T * 3)) * 0.04;
+    } else if (mv === 'boxing') {
+      const k = Math.sin(T * 9);
+      t.shoulderR[0] = 1.45 + Math.max(0, k) * 0.25;
+      t.elbowR[0] = 1.9 - Math.max(0, k) * 1.7;
+      t.shoulderL[0] = 1.45 + Math.max(0, -k) * 0.25;
+      t.elbowL[0] = 1.9 - Math.max(0, -k) * 1.7;
+      t.shoulderL[2] = -0.15;
+      t.shoulderR[2] = 0.15;
+      t.spine[1] = k * 0.22;
+      t.head[0] = 0.12;
+      t.kneeL[0] = t.kneeR[0] = -0.25;
+      bodyY += Math.abs(Math.sin(T * 6)) * 0.04 - 0.04;
+    } else if (mv === 'guitar') {
+      t.shoulderL[0] = 1.25;
+      t.shoulderL[2] = 0.65;
+      t.elbowL[0] = 0.45;
+      t.shoulderR[0] = 0.75;
+      t.shoulderR[2] = 0.25;
+      t.elbowR[0] = 1.45 + Math.sin(T * 14) * 0.4;
+      t.spine[0] = -0.16;
+      t.head[0] = Math.sin(T * 7) * 0.14;
+      t.hips[1] = 0.3;
+    } else if (mv === 'drums') {
+      const k = Math.sin(T * 10);
+      t.shoulderL[0] = 0.9 + k * 0.35;
+      t.shoulderR[0] = 0.9 - k * 0.35;
+      t.elbowL[0] = t.elbowR[0] = 1.25;
+      t.head[0] = Math.abs(Math.sin(T * 5)) * 0.18;
+      t.kneeL[0] = t.kneeR[0] = -0.2;
+    } else if (mv === 'conduct') {
+      t.shoulderR[0] = 1.6 + Math.sin(T * 3) * 0.6;
+      t.shoulderR[2] = -0.3 + Math.cos(T * 3) * 0.5;
+      t.elbowR[0] = 0.5;
+      t.shoulderL[0] = 1.0;
+      t.elbowL[0] = 1.2;
+      t.head[0] = -0.1;
+      t.head[2] = Math.cos(T * 3) * 0.12;
+    } else if (mv === 'chicken') {
+      const k = Math.abs(Math.sin(T * 10));
+      t.shoulderL[0] = t.shoulderR[0] = 0.2;
+      t.shoulderL[2] = 0.35 + k * 0.6;
+      t.shoulderR[2] = -0.35 - k * 0.6;
+      t.elbowL[0] = t.elbowR[0] = 2.4;
+      t.head[0] = Math.sin(T * 10) * 0.25;
+      t.kneeL[0] = t.kneeR[0] = -0.35;
+      bodyY -= 0.05 + k * 0.03;
+    } else if (mv === 'disco') {
+      const up = Math.sin(T * 4) > 0;
+      t.shoulderR[0] = up ? 2.8 : 0.5;
+      t.shoulderR[2] = up ? -0.6 : 0.35;
+      t.elbowR[0] = 0.05;
+      t.shoulderL[2] = 0.55;
+      t.elbowL[0] = 1.7;
+      t.hips[2] = up ? 0.12 : -0.12;
+      t.head[1] = up ? -0.3 : 0.2;
+      bodyY += Math.abs(Math.sin(T * 8)) * 0.04;
+    } else if (mv === 'twist') {
+      const k = Math.sin(T * 7);
+      t.hips[1] = k * 0.45;
+      t.spine[1] = -k * 0.6;
+      t.kneeL[0] = t.kneeR[0] = -0.5;
+      t.hipL[0] = t.hipR[0] = 0.25;
+      t.shoulderL[0] = t.shoulderR[0] = 0.8;
+      t.elbowL[0] = t.elbowR[0] = 1.4;
+      t.shoulderL[2] = 0.3 + k * 0.25;
+      t.shoulderR[2] = -0.3 + k * 0.25;
+      bodyY -= 0.08;
+    } else if (mv === 'victory') {
       t.shoulderL[0] = t.shoulderR[0] = 2.8;
       t.shoulderL[2] = 0.3;
       t.shoulderR[2] = -0.3;
-      bodyY += Math.abs(Math.sin(this.time * 6)) * 0.18;
+      bodyY += Math.abs(Math.sin(T * 6)) * 0.18;
       t.head[0] = 0.25;
-    } else if (e === 'defeat') {
+    } else if (mv === 'defeat') {
       t.head[0] = -0.55;
       t.spine[0] = -0.3;
       t.shoulderL[0] = t.shoulderR[0] = 0.1;
@@ -279,9 +458,52 @@ export class Animator {
       t.shoulderR[2] = -0.15;
       bodyY -= 0.05;
     }
-    this.spin = e === 'spin' ? spinTarget : this.spin * (1 - damp(8, dt));
+    // Styles change how a move is played.
+    if (style && e === a.emote) {
+      if (style === 'low') {
+        bodyY -= 0.2;
+        t.hipL[0] += 0.75;
+        t.hipR[0] += 0.75;
+        t.kneeL[0] -= 1.25;
+        t.kneeR[0] -= 1.25;
+        t.spine[0] += 0.2;
+      } else if (style === 'lean') {
+        t.spine[0] -= 0.22;
+        t.head[0] += 0.14;
+        t.hips[1] += 0.25;
+      } else if (style === 'hop') {
+        bodyY += Math.abs(Math.sin(T * 6)) * 0.18;
+        t.kneeL[0] -= 0.35 * Math.abs(Math.cos(T * 6));
+        t.kneeR[0] -= 0.35 * Math.abs(Math.cos(T * 6));
+      } else if (style === 'groove') {
+        t.hips[2] += Math.sin(T * 5) * 0.14;
+        t.spine[2] -= Math.sin(T * 5) * 0.1;
+        t.head[2] += Math.sin(T * 5 + 1) * 0.12;
+        bodyY += Math.abs(Math.sin(T * 5)) * 0.05;
+      } else if (style === 'wobble') {
+        t.spine[2] += Math.sin(T * 11) * 0.2;
+        t.chest[2] += Math.sin(T * 11 + 1) * 0.16;
+        t.head[2] += Math.sin(T * 11 + 2) * 0.22;
+      } else if (style === 'lefty') {
+        // Mirror the whole pose: swap sides, flip twists and tilts.
+        for (const [l, r] of [['shoulderL', 'shoulderR'], ['elbowL', 'elbowR'], ['hipL', 'hipR'], ['kneeL', 'kneeR']] as const) {
+          const L = t[l], R = t[r];
+          t[l] = [R[0], -R[1], -R[2]];
+          t[r] = [L[0], -L[1], -L[2]];
+        }
+        for (const j of ['hips', 'spine', 'chest', 'head'] as const) {
+          t[j][1] = -t[j][1];
+          t[j][2] = -t[j][2];
+        }
+      }
+      if (style === 'spin') spinTarget += prog * Math.PI * 2;
+    }
+    const spinning = mv === 'spin' || (style === 'spin' && e === a.emote);
+    // After a spin, settle by the shortest way back instead of unwinding every turn.
+    const TAU = Math.PI * 2;
+    this.spin = spinning ? spinTarget : ((((this.spin + Math.PI) % TAU) + TAU) % TAU - Math.PI) * (1 - damp(8, dt));
     // Backflip: one full turn over the shoulders, launched and landed with bent knees.
-    const flip = e === 'backflip' ? Math.min(1, Math.max(0, (EMOTE_TIME - a.emoteT - 0.25) / 0.9)) : -1;
+    const flip = mv === 'backflip' ? Math.min(1, Math.max(0, (EMOTE_TIME - a.emoteT - 0.25) / 0.9)) : -1;
     if (flip >= 0) {
       bodyY += Math.sin(flip * Math.PI) * 0.7;
       t.kneeL[0] = t.kneeR[0] = -1.2 * Math.sin(flip * Math.PI);
@@ -301,12 +523,10 @@ export class Animator {
     r.body.position.y = this.bodyY;
     r.body.rotation.y = this.spin;
 
-    // Dodge roll: one full tumble around the dodge axis.
-    if (a.dodge >= 0) {
-      const ang = a.dodge * Math.PI * 2;
-      r.body.rotation.x = -ang * a.dodgeZ;
-      r.body.rotation.z = ang * a.dodgeX;
-      r.body.position.y = this.bodyY - Math.sin(a.dodge * Math.PI) * 0.35;
+    // Dodge: the whole body leans into the dash.
+    if (dash > 0) {
+      r.body.rotation.x = -a.dodgeZ * 0.32 * dash;
+      r.body.rotation.z = -a.dodgeX * 0.32 * dash;
     } else if (flip > 0 && flip < 1) {
       r.body.rotation.x = flip * Math.PI * 2;
     } else {

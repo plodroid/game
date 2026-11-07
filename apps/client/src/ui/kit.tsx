@@ -1,4 +1,4 @@
-import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useState, type ButtonHTMLAttributes, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
 import { audio } from '../audio/audio';
 import { useUi } from '../state/ui';
 import { Icon } from './icons';
@@ -113,6 +113,79 @@ export function Slider({
     <div className="range">
       <input type="range" min={min} max={max} step={step} value={value} aria-label={label} onChange={(e) => onChange(Number(e.target.value))} />
       <span className="range__val num">{format(value)}</span>
+    </div>
+  );
+}
+
+/**
+ * Match length: one rail from 1 to 10 minutes with "no limit" at the far end. Drag the thumb (it
+ * ticks as it crosses each stop), tap anywhere on the rail, or use the arrow keys.
+ */
+export function LengthDial({ value, options, onChange, disabled }: { value: number; options: number[]; onChange: (v: number) => void; disabled?: boolean }) {
+  const last = options.length - 1;
+  const at = Math.max(0, options.indexOf(value));
+  const [drag, setDrag] = useState<number | null>(null);
+  const pos = drag ?? at;
+  const pick = (k: number) => {
+    const v = options[Math.max(0, Math.min(last, Math.round(k)))];
+    if (v !== value) {
+      audio.play('hover');
+      onChange(v);
+    }
+  };
+  const from = (e: PointerEvent<HTMLDivElement>) => {
+    const lane = e.currentTarget.firstElementChild!.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (e.clientX - lane.left) / lane.width)) * last;
+  };
+  const label = (v: number) => (v ? `${v / 60} min` : 'No limit');
+  return (
+    <div className="dial" data-dragging={drag != null} data-inf={value === 0} aria-disabled={disabled}>
+      <div
+        className="dial__rail"
+        role="slider"
+        tabIndex={disabled ? -1 : 0}
+        aria-label="Match length"
+        aria-valuemin={0}
+        aria-valuemax={last}
+        aria-valuenow={at}
+        aria-valuetext={label(value)}
+        style={{ '--p': pos / last } as CSSProperties}
+        onPointerDown={(e) => {
+          if (disabled) return;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          const k = from(e);
+          setDrag(k);
+          pick(k);
+        }}
+        onPointerMove={(e) => {
+          if (drag == null) return;
+          const k = from(e);
+          setDrag(k);
+          pick(k);
+        }}
+        onPointerUp={() => setDrag(null)}
+        onPointerCancel={() => setDrag(null)}
+        onKeyDown={(e) => {
+          if (disabled) return;
+          const d = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1, Home: -99, End: 99 }[e.key];
+          if (d == null) return;
+          e.preventDefault();
+          pick(at + d);
+        }}
+      >
+        <div className="dial__lane">
+          <span className="dial__fill" />
+          {options.map((v, i) => (
+            <span key={v} className="dial__stop" data-on={i <= at} style={{ left: `${(i / last) * 100}%` }}>
+              {v === 0 && '∞'}
+            </span>
+          ))}
+          <span className="dial__thumb">
+            <b className="num" key={value}>{value ? value / 60 : '∞'}</b>
+          </span>
+        </div>
+      </div>
+      <span className="dial__val num">{label(value)}</span>
     </div>
   );
 }

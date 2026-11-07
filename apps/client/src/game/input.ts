@@ -1,5 +1,9 @@
-import { BTN } from '@chromashift/shared';
+import { create } from 'zustand';
+import { BTN, WHEEL } from '@chromashift/shared';
 import { useSettings, type Action } from '../settings/settings';
+
+/** The emote wheel: open while the emote button is held; `pick` is the highlighted slot or -1. */
+export const useWheel = create<{ open: boolean; pick: number }>()(() => ({ open: false, pick: -1 }));
 
 /** Written by the on-screen touch controls. */
 export const touch = { active: false, mx: 0, mz: 0, lookX: 0, lookY: 0, buttons: 0 };
@@ -12,7 +16,6 @@ const ACTION_BTN: Partial<Record<Action, number>> = {
   slide: BTN.SLIDE,
   dodge: BTN.DODGE,
   special: BTN.SPECIAL,
-  emote: BTN.EMOTE,
 };
 
 // Standard-mapping gamepad buttons.
@@ -96,7 +99,54 @@ export class InputManager {
   onTalk: ((down: boolean) => void) | null = null;
   /** Minimap size key. */
   onMap: (() => void) | null = null;
+  /** First / third person key. */
+  onView: (() => void) | null = null;
   private el: HTMLElement | null = null;
+  /** Pointer or stick travel while the wheel is open, and when it opened. */
+  private wx = 0;
+  private wy = 0;
+  private wheelAt = 0;
+  /** A slot chosen on the wheel, sent with the next tick. */
+  private emoteSlot = -1;
+  private lastSlot = 0;
+
+  /** Opens the emote wheel (mouse and right stick pick a slot instead of turning the camera). */
+  openWheel() {
+    if (useWheel.getState().open) return;
+    this.wx = this.wy = 0;
+    this.wheelAt = performance.now();
+    useWheel.setState({ open: true, pick: -1 });
+  }
+  /** Closes the wheel and plays the picked slot. A quick tap replays the last emote. */
+  closeWheel(play = true) {
+    const w = useWheel.getState();
+    if (!w.open) return;
+    useWheel.setState({ open: false, pick: -1 });
+    if (!play) return;
+    if (w.pick >= 0) this.playEmote(w.pick);
+    else if (performance.now() - this.wheelAt < 220) this.playEmote(this.lastSlot);
+  }
+  playEmote(slot: number) {
+    this.emoteSlot = this.lastSlot = slot;
+  }
+  /** Highlights a slot directly (hovering or tapping the wheel). */
+  hoverWheel(slot: number) {
+    if (useWheel.getState().pick !== slot) useWheel.setState({ pick: slot });
+  }
+  /** The wheel slot to send with this tick's input. */
+  emote() {
+    return Math.max(0, this.emoteSlot);
+  }
+  private steerWheel() {
+    const l = Math.hypot(this.wx, this.wy);
+    if (l > 120) {
+      this.wx *= 120 / l;
+      this.wy *= 120 / l;
+    }
+    if (l < 28) return;
+    const a = Math.atan2(this.wx, -this.wy);
+    this.hoverWheel((Math.round(a / ((Math.PI * 2) / WHEEL)) + WHEEL) % WHEEL);
+  }
 
   private key = (e: KeyboardEvent) => {
     if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
@@ -112,6 +162,11 @@ export class InputManager {
       return;
     }
     if (e.type === 'keydown' && this.onMap && this.isBound('map', code) && !e.repeat) this.onMap();
+    if (e.type === 'keydown' && this.onView && this.isBound('view', code) && !e.repeat) this.onView();
+    if (this.wantsLock && this.isBound('emote', code)) {
+      if (e.type === 'keydown' && !e.repeat) this.openWheel();
+      else if (e.type === 'keyup') this.closeWheel();
+    }
     if (e.type === 'keydown') {
       // In a match, any key takes control: keys work at once and the mouse is captured (a key press counts as a gesture).
       if (this.wantsLock && !this.locked && !this.isBound('pause', code)) {
@@ -130,6 +185,11 @@ export class InputManager {
   };
   private mouse = (e: MouseEvent) => {
     const code = `Mouse${e.button}`;
+    if (this.wantsLock && this.isBound('emote', code)) {
+      if (e.type === 'mousedown') this.openWheel();
+      else this.closeWheel();
+      return;
+    }
     if (e.type === 'mousedown') {
       if (!this.locked && !(this.engaged && e.target === this.el)) return;
       if (!this.down.has(code)) this.latched.add(code);
@@ -138,10 +198,17 @@ export class InputManager {
   };
   private move = (e: MouseEvent) => {
     if (!this.locked) return;
+    if (useWheel.getState().open) {
+      this.wx += e.movementX;
+      this.wy += e.movementY;
+      this.steerWheel();
+      return;
+    }
     this.lookX += e.movementX;
     this.lookY += e.movementY;
   };
   private blur = () => {
+    this.closeWheel(false);
     this.down.clear();
     this.engaged = false;
     this.onScoreboard?.(false);
@@ -220,8 +287,10 @@ export class InputManager {
         if (i === PAD.pause) this.onPause?.();
         if (i === PAD.map) this.onMap?.();
         if (i === PAD.talk) this.onTalk?.(true);
+        if (i === PAD.emote && this.wantsLock) this.openWheel();
       }
       if (!on && this.padDown.has(i) && i === PAD.talk) this.onTalk?.(false);
+      if (!on && this.padDown.has(i) && i === PAD.emote) this.closeWheel();
       if (on) this.padDown.add(i);
       else this.padDown.delete(i);
     });
@@ -271,7 +340,15 @@ export class InputManager {
     let pitch = -this.lookY * 0.0022 * s.controls.mouseSensitivity * cam * aim;
     this.lookX = this.lookY = 0;
     const p = this.pad();
-    if (p) {
+    if (p && useWheel.getState().open) {
+      // The right stick points at a slot; it doesn't turn the camera while the wheel is up.
+      const rx = dz(p.axes[2] ?? 0), ry = dz(p.axes[3] ?? 0);
+      if (Math.hypot(rx, ry) > 0.5) {
+        this.wx = rx * 100;
+        this.wy = ry * 100;
+        this.steerWheel();
+      }
+    } else if (p) {
       const rx = dz(p.axes[2] ?? 0), ry = dz(p.axes[3] ?? 0);
       const g = 3.2 * s.controls.gamepadSensitivity * cam * aim * dt;
       yaw -= rx * Math.abs(rx) * g;
@@ -291,11 +368,13 @@ export class InputManager {
     let b = 0;
     for (const [a, bit] of Object.entries(ACTION_BTN) as [Action, number][]) if (this.held(a) || this.pressed(a)) b |= bit;
     if (touch.active) b |= touch.buttons;
+    if (this.emoteSlot >= 0) b |= BTN.EMOTE;
     return b;
   }
 
   /** Called after a simulation tick has seen the latched presses. */
   consume() {
+    this.emoteSlot = -1;
     this.latched.clear();
     this.padLatched.clear();
   }

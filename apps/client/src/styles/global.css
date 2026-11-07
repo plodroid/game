@@ -2814,3 +2814,237 @@ textarea.input:focus {
 .install-btn:active { transform: scale(0.96); }
 .install-steps { margin: 0 0 8px; padding-left: 20px; display: grid; gap: 6px; }
 a.btn { text-decoration: none; display: flex; justify-content: center; align-items: center; gap: 8px; }
+
+/* Match length dial: a paint rail from 1 to 10 minutes, "no limit" at the end. */
+.dial {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: min(100%, 440px);
+}
+.dial__rail {
+  --pad: 22px;
+  position: relative;
+  flex: 1;
+  height: 48px;
+  padding: 0 var(--pad);
+  border-radius: 999px;
+  background: var(--s3);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+.dial[data-dragging='true'] .dial__rail { cursor: grabbing; }
+.dial[aria-disabled='true'] .dial__rail { cursor: default; opacity: 0.6; }
+.dial__rail:focus-visible { box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35), 0 0 0 3px var(--pig); }
+.dial__lane {
+  position: relative;
+  height: 100%;
+}
+.dial__fill {
+  position: absolute;
+  left: calc(var(--pad) * -1 + 6px);
+  right: 0;
+  top: 50%;
+  height: 10px;
+  margin-top: -5px;
+  border-radius: 999px;
+  background: var(--pig);
+  transform-origin: left;
+  transform: scaleX(calc(var(--p) * 0.97 + 0.03));
+  transition: transform 380ms var(--ease-spring);
+}
+.dial__stop {
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: var(--s5);
+  transition: background-color 200ms ease;
+}
+.dial__stop[data-on='true'] { background: var(--on-paint); opacity: 0.5; }
+.dial__stop:last-of-type {
+  width: auto;
+  height: auto;
+  margin: -0.62em 0 0 -0.35em;
+  background: none;
+  color: var(--tx-3);
+  font-weight: 800;
+  opacity: 1;
+}
+.dial__thumb {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transform: translateX(calc(var(--p) * 100%));
+  transition: transform 380ms var(--ease-spring);
+}
+.dial__thumb b {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  border-radius: 50%;
+  background: var(--tx);
+  color: var(--on-paint);
+  font-size: 1.05rem;
+  font-weight: 800;
+  box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.6), 0 0 0 4px var(--pig);
+  transition: transform 220ms var(--ease-spring);
+  animation: dial-pop 260ms var(--ease-spring);
+}
+.dial[data-dragging='true'] .dial__thumb,
+.dial[data-dragging='true'] .dial__fill { transition-duration: 90ms; transition-timing-function: var(--ease-out); }
+.dial[data-dragging='true'] .dial__thumb b { transform: scale(1.14); }
+.dial[data-inf='true'] .dial__thumb b { font-size: 1.4rem; }
+.dial__val {
+  min-width: 5.5em;
+  color: var(--tx-2);
+  font-weight: 700;
+}
+@keyframes dial-pop {
+  from { transform: scale(0.82); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dial__thumb, .dial__fill, .dial__thumb b { transition: none; animation: none; }
+}
+
+/* Emote wheel: eight slots on a dark ring, one paint slice swinging to the pick. */
+.wheel {
+  --wheel: min(360px, 84vw);
+  position: relative;
+  width: var(--wheel);
+  height: var(--wheel);
+  flex: none;
+  animation: wheel-in 240ms var(--ease-spring) both;
+}
+.wheel[data-edit='true'] { --wheel: min(320px, 86vw); animation: none; }
+.wheel__disc {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  color: rgba(22, 18, 30, 0.86);
+  filter: drop-shadow(0 18px 36px rgba(0, 0, 0, 0.45));
+}
+.wheel__disc line { stroke: rgba(255, 255, 255, 0.07); stroke-width: 2; }
+.wheel__hl {
+  fill: var(--pig);
+  opacity: 0;
+  transition: transform 260ms var(--ease-spring), opacity 140ms ease;
+}
+.wheel[data-picked='true'] .wheel__hl { opacity: 0.92; }
+.wheel__slot {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 2px;
+  width: 23%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--tx);
+  font: inherit;
+  cursor: pointer;
+  translate: -50% -50%;
+  transition: scale 200ms var(--ease-spring);
+  animation: slot-in 300ms var(--ease-spring) both;
+}
+.wheel__slot[data-on='true'] { scale: 1.16; }
+.wheel__icon {
+  font-size: calc(var(--wheel) * 0.1);
+  line-height: 1;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35));
+}
+.wheel__slot[data-empty='true'] .wheel__icon { opacity: 0.35; font-weight: 300; color: var(--tx-2); filter: none; }
+.wheel__label {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--tx-2);
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wheel__slot[data-on='true'] .wheel__label { color: var(--on-paint); }
+.wheel__hub {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 2px;
+  width: 34%;
+  aspect-ratio: 1;
+  padding: 8px;
+  border-radius: 50%;
+  background: var(--s1);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.06);
+  text-align: center;
+  translate: -50% -50%;
+}
+.wheel__hub b { font-size: 0.8rem; line-height: 1.15; }
+.wheel__big { font-size: 2rem; line-height: 1; }
+.wheel__hint { color: var(--tx-3); font-size: 0.74rem; font-weight: 650; line-height: 1.2; }
+.wheel-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle, rgba(10, 8, 14, 0.15) 0, rgba(10, 8, 14, 0.55) 70%);
+  pointer-events: auto;
+  animation: fade-in 140ms ease both;
+}
+@keyframes wheel-in {
+  from { opacity: 0; scale: 0.86; rotate: -8deg; }
+}
+@keyframes slot-in {
+  from { opacity: 0; scale: 0.4; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wheel, .wheel__slot, .wheel-layer { animation: none; }
+  .wheel__hl { transition: opacity 140ms ease; }
+}
+
+.item__emote { font-size: 2.6rem; }
+.locker-wheel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px 32px;
+  margin: 4px 0 18px;
+}
+.locker-wheel__text {
+  flex: 1 1 220px;
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+.locker-wheel__text p { margin: 0; max-width: 42ch; }
+.wheel[data-edit='true'] .wheel__slot:hover:not([data-on='true']) { scale: 1.08; }
+.wheel[data-edit='true'] .wheel__slot:focus-visible { outline: 3px solid var(--pig); outline-offset: 2px; }
+/* Colour emoji wherever emotes are shown (Archivo has none, and Windows would fall back to outlines). */
+.wheel__icon,
+.wheel__big,
+.item__emote,
+.tbtn--emote {
+  font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
+  font-variant-emoji: emoji;
+}

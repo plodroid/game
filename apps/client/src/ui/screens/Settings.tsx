@@ -230,6 +230,7 @@ const ACTIONS: [Action, string][] = [
   ['chat', 'Open chat'],
   ['talk', 'Push to talk (hold)'],
   ['map', 'Bigger minimap'],
+  ['view', 'First / third person'],
   ['scoreboard', 'Scoreboard (hold)'],
   ['pause', 'Pause'],
 ];
