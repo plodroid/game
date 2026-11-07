@@ -30,7 +30,7 @@ export const MOVE = {
   slideSpeed: 11.5,
   slideTime: 0.8,
   slideCooldown: 0.9,
-  dodgeSpeed: 14,
+  dodgeSpeed: 16.5,
   dodgeTime: 0.34,
   coyote: 0.1,
   jumpBuffer: 0.12,
