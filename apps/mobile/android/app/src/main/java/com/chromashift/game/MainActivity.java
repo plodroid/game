@@ -1,5 +1,7 @@
 package com.chromashift.game;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.view.View;
 import android.view.WindowManager;
@@ -10,6 +12,10 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        // Ask for the microphone up front so voice chat works the first time.
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[] { Manifest.permission.RECORD_AUDIO }, 1);
+        }
     }
 
     @Override

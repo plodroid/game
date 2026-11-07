@@ -199,6 +199,31 @@ function Graphics() {
   );
 }
 
+function MicAccess() {
+  const [state, setState] = useState<'unknown' | 'granted' | 'denied' | 'prompt'>('unknown');
+  useEffect(() => {
+    navigator.permissions?.query({ name: 'microphone' as PermissionName }).then((r) => {
+      setState(r.state);
+      r.onchange = () => setState(r.state);
+    }, () => undefined);
+  }, []);
+  const ask = () =>
+    navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((m) => (m.getTracks().forEach((t) => t.stop()), setState('granted')))
+      .catch(() => setState('denied'));
+  return (
+    <Setting
+      name="Microphone access"
+      hint={state === 'granted' ? 'Allowed. Voice chat can use your microphone.' : state === 'denied' ? 'Blocked. Allow the microphone for this app or site in your phone or browser settings, then try again.' : 'Voice chat needs permission to use your microphone.'}
+    >
+      <Button onClick={ask} disabled={state === 'granted'}>
+        {state === 'granted' ? 'Allowed' : 'Allow microphone'}
+      </Button>
+    </Setting>
+  );
+}
+
 function Audio() {
   const a = useSettings((s) => s.audio);
   const set = useSettings((s) => s.set);
@@ -219,6 +244,7 @@ function Audio() {
           <Slider label={l} value={a[k]} min={0} max={1} onChange={(v) => set('audio', { [k]: v })} />
         </Setting>
       ))}
+      <MicAccess />
       <Setting name="Voice chat microphone" hint={`Push to talk: hold ${keyLabel(talk)} to speak. Your browser asks for the microphone the first time.`}>
         <Segmented
           label="Voice chat microphone"
