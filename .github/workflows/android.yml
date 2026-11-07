@@ -1,0 +1,40 @@
+# Builds the Android app (a Capacitor shell around the live site) and attaches the APK to a release.
+# The app loads https://plodroid.github.io/game/, so site updates reach it without a new APK.
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths: ['apps/mobile/**']
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - name: Sync Capacitor and build
+        working-directory: apps/mobile
+        run: |
+          npx cap sync android
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+      - name: Publish CHROMASHIFT.apk
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk CHROMASHIFT.apk
+          gh release view android >/dev/null 2>&1 || gh release create android --title "Android app" --notes "Install CHROMASHIFT.apk on an Android phone."
+          gh release upload android CHROMASHIFT.apk --clobber

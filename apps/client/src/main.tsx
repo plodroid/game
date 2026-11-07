@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { webgl2Available } from './settings/hardware';
 import { useUi } from './state/ui';
+import { useUpdates } from './updates';
 
 createRoot(document.getElementById('root')!).render(<App webgl2={webgl2Available()} />);
 
@@ -20,6 +21,7 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
   void import('virtual:pwa-register').then(({ registerSW }) => {
     const update = registerSW({
       onNeedRefresh() {
+        useUpdates.setState({ ready: true, apply: () => void update(true) });
         useUi.getState().toast({
           text: 'A new version of CHROMASHIFT is ready.',
           kind: 'info',

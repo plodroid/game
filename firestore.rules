@@ -14,6 +14,10 @@ service cloud.firestore {
     function isOwner(uid) {
       return signedIn() && request.auth.uid == uid;
     }
+    // The game's owner (plodroid) can look at every account, including its contact email.
+    function isAdmin() {
+      return signedIn() && request.auth.uid == 'wTN0PHGyT4cdL80qJBGyYJYXZRk1';
+    }
     function validUsername(n) {
       return n is string && n.size() >= 3 && n.size() <= 16
         && n.matches('^[A-Za-z0-9]([A-Za-z0-9_.-]*[A-Za-z0-9])?$');
@@ -29,7 +33,7 @@ service cloud.firestore {
         && s.keys().hasOnly(['games', 'wins', 'losses', 'draws', 'kills', 'deaths', 'assists', 'paint', 'bestPaint', 'weaponGames'])
         && count(s.games) && count(s.wins) && count(s.losses) && count(s.kills) && count(s.paint)
         && s.wins + s.losses <= s.games
-        && s.weaponGames is map && s.weaponGames.size() <= 32;
+        && s.weaponGames is map && s.weaponGames.size() <= 200;
     }
     function shortId(v) {
       return v is string && v.size() <= 24;
@@ -70,14 +74,15 @@ service cloud.firestore {
         && count(s.games) && count(s.wins) && count(s.kills) && count(s.paint);
     }
     function validCard(d) {
-      return d.keys().hasOnly(['username', 'usernameKey', 'displayName', 'level', 'cosmetics', 'stats', 'online', 'seenAt', 'activity', 'updatedAt'])
+      return d.keys().hasOnly(['username', 'usernameKey', 'displayName', 'level', 'cosmetics', 'stats', 'online', 'seenAt', 'activity', 'createdAt', 'updatedAt'])
         && validDisplayName(d.displayName)
         && d.level is int && d.level >= 1 && d.level <= 99
         && validCosmetics(d.cosmetics)
         && (!('usernameKey' in d) || d.usernameKey == d.username.lower())
         && (!('stats' in d) || validStatsCard(d.stats))
         && (!('online' in d) || d.online is bool)
-        && (!('activity' in d) || d.activity in ['menu', 'lobby', 'match']);
+        && (!('activity' in d) || d.activity in ['menu', 'lobby', 'match'])
+        && (!('createdAt' in d) || d.createdAt is timestamp);
     }
     // Two account ids joined in order: the id of a friendship or a conversation.
     function pairOf(id) {
@@ -110,7 +115,7 @@ service cloud.firestore {
 
     // Private profile, settings and offline progression. Owner only.
     match /users/{uid} {
-      allow read: if isOwner(uid);
+      allow read: if isOwner(uid) || isAdmin();
       allow create: if isOwner(uid)
         && validUser(request.resource.data)
         && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.usernameKey)).data.uid == uid;
@@ -139,7 +144,7 @@ service cloud.firestore {
 
     // The player's own contact email and update preference. Owner only, never public.
     match /private/{uid} {
-      allow read: if isOwner(uid);
+      allow read: if isOwner(uid) || isAdmin();
       allow write: if isOwner(uid)
         && request.resource.data.keys().hasOnly(['email', 'updates', 'updatedAt'])
         && request.resource.data.email is string && request.resource.data.email.size() <= 254

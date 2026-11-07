@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { audio } from '../audio/audio';
 import { useAccount } from '../auth/account';
+import { isOwner } from '../auth/admin';
 import type { Note } from '../auth/social';
 import { acceptInvite, social, useSocial } from '../state/social';
 import { useUi } from '../state/ui';
+import { AdminAccounts } from './AdminAccounts';
 import { Avatar } from './Avatar';
 import { Icon } from './icons';
 
@@ -23,6 +25,7 @@ export function SocialBar() {
   const go = useUi((u) => u.go);
   const me = useAccount((a) => a.user?.uid);
   const [open, setOpen] = useState(false);
+  const [admin, setAdmin] = useState(false);
   const [, tick] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
   /** Notes that were new when the panel opened keep their highlight while it stays open. */
@@ -100,6 +103,12 @@ export function SocialBar() {
         <Icon.bell />
         {unread > 0 && <span className="count">{unread > 9 ? '9+' : unread}</span>}
       </button>
+      {me && isOwner() && (
+        <button className="round-btn" onClick={() => (audio.play('click'), setAdmin(true))} aria-label="All accounts" title="All accounts (owner)">
+          <Icon.crown />
+        </button>
+      )}
+      {admin && <AdminAccounts onClose={() => setAdmin(false)} />}
       {open && (
         <div className="notes" role="dialog" aria-label="Notifications">
           <div className="notes__head">

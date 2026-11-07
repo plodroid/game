@@ -327,19 +327,59 @@ export const EMOTE_TIME = 2.4;
 const EMOTE_ROWS: Row[] = [
   ['wave', 'Wave', 'starter'],
   ['spin', 'Spin', 'starter'],
-  ['flex', 'Flex', 'common'],
   ['clap', 'Clap', 'common'],
-  ['bow', 'Bow', 'common'],
-  ['jump', 'Hop', 'common'],
   ['point', 'Point', 'common'],
-  ['dance', 'Shuffle', 'rare'],
+  ['shrug', 'Shrug', 'common'],
+  ['facepalm', 'Facepalm', 'common'],
+  ['stretch', 'Stretch', 'common'],
+  ['yawn', 'Yawn', 'common'],
+  ['bow', 'Bow', 'common'],
+  ['cheer', 'Cheer', 'common'],
+  ['jump', 'Hop', 'common'],
+  ['sleepy', 'Dozing Off', 'common'],
+  ['flex', 'Flex', 'rare'],
   ['salute', 'Salute', 'rare'],
-  ['cheer', 'Cheer', 'rare'],
   ['think', 'Think', 'rare'],
-  ['sway', 'Sway', 'rare'],
+  ['heart', 'Heart Hands', 'rare'],
+  ['peace', 'Peace', 'rare'],
+  ['fistpump', 'Fist Pump', 'rare'],
+  ['raiseroof', 'Raise the Roof', 'rare'],
+  ['laugh', 'Laugh', 'rare'],
+  ['sway', 'Concert Sway', 'rare'],
+  ['marching', 'March', 'rare'],
+  ['kick', 'Kick', 'rare'],
+  ['sit', 'Take a Seat', 'rare'],
+  ['kneel', 'Take a Knee', 'rare'],
+  ['curtsy', 'Curtsy', 'rare'],
+  ['tada', 'Ta-da', 'rare'],
+  ['jacks', 'Jumping Jacks', 'rare'],
+  ['dance', 'Running Man', 'epic'],
+  ['shuffle', 'Shuffle', 'epic'],
+  ['twist', 'Twist', 'epic'],
+  ['disco', 'Disco Point', 'epic'],
   ['robot', 'Robot', 'epic'],
-  ['laugh', 'Laugh', 'epic'],
-  ['sit', 'Take a Seat', 'epic'],
+  ['boxing', 'Shadow Box', 'epic'],
+  ['karate', 'Karate Chops', 'epic'],
+  ['guitar', 'Air Guitar', 'epic'],
+  ['drums', 'Air Drums', 'epic'],
+  ['conduct', 'Conductor', 'epic'],
+  ['chicken', 'Chicken Dance', 'epic'],
+  ['superhero', 'Hero Pose', 'epic'],
+  ['strut', 'Runway Strut', 'epic'],
+  ['rockon', 'Rock On', 'epic'],
+  ['zombie', 'Zombie', 'epic'],
+  ['sneak', 'Sneak', 'epic'],
+  ['tantrum', 'Tantrum', 'epic'],
+  ['swim', 'Freestyle', 'epic'],
+  ['windmill', 'Windmill Arms', 'epic'],
+  ['lasso', 'Lasso', 'epic'],
+  ['twostep', 'Two-Step', 'epic'],
+  ['tpose', 'T-Pose', 'legendary'],
+  ['dab', 'Dab', 'legendary'],
+  ['floss', 'Floss', 'legendary'],
+  ['sprinkler', 'Sprinkler', 'legendary'],
+  ['moonwalk', 'Moonwalk', 'legendary'],
+  ['twirl', 'Pirouette', 'legendary'],
   ['backflip', 'Backflip', 'legendary'],
 ];
 
@@ -505,8 +545,7 @@ const FINISH_ROWS: Row[] = [
  * item uses a model that already fits the body:
  *  - colourways (`base~way`) repaint a hat, face piece, back item or outfit in a fixed palette;
  *  - colours, dyes, finishes, banners and titles are combined from a shared hue wheel;
- *  - emotes combine a move with a style (`move-style`), played by the same animator.
- * ---------------------------------------------------------------------------------------------- */
+ * * ---------------------------------------------------------------------------------------------- */
 
 const UP: Rarity[] = ['starter', 'common', 'rare', 'epic', 'legendary'];
 const atLeast = (a: Rarity, b: Rarity) => (UP.indexOf(a) >= UP.indexOf(b) ? a : b);
@@ -649,39 +688,7 @@ const ROLE = ['Splatter', 'Brush', 'Roller', 'Dripper', 'Sprayer', 'Tagger', 'Mu
 const TIERS: Rarity[] = ['common', 'common', 'rare', 'rare', 'epic', 'legendary'];
 ADJ.forEach((a, ai) => ROLE.forEach((r, ri) => TITLE_ROWS.push([`${a}${r}`.toLowerCase(), `${a} ${r}`, TIERS[(ai * 5 + ri * 3) % 6]])));
 
-/** Emote styles: how a move is played. */
-export const EMOTE_STYLES: Record<string, { name: string; rarity: Rarity }> = {
-  quick: { name: 'Quick', rarity: 'common' },
-  slow: { name: 'Slow-Mo', rarity: 'common' },
-  lefty: { name: 'Lefty', rarity: 'common' },
-  low: { name: 'Low', rarity: 'common' },
-  lean: { name: 'Cool', rarity: 'rare' },
-  hop: { name: 'Hopping', rarity: 'rare' },
-  groove: { name: 'Groovy', rarity: 'rare' },
-  wobble: { name: 'Wobbly', rarity: 'epic' },
-  spin: { name: 'Spinning', rarity: 'epic' },
-};
-EMOTE_ROWS.push(
-  ['shrug', 'Shrug', 'common'],
-  ['facepalm', 'Facepalm', 'common'],
-  ['kick', 'Kick', 'common'],
-  ['stretch', 'Stretch', 'common'],
-  ['yawn', 'Yawn', 'common'],
-  ['kneel', 'Kneel', 'rare'],
-  ['heart', 'Heart Hands', 'rare'],
-  ['boxing', 'Shadow Box', 'rare'],
-  ['guitar', 'Air Guitar', 'rare'],
-  ['drums', 'Air Drums', 'rare'],
-  ['conduct', 'Conductor', 'epic'],
-  ['chicken', 'Chicken Dance', 'epic'],
-  ['disco', 'Disco Point', 'epic'],
-  ['twist', 'Twist', 'epic'],
-);
-const MOVES = EMOTE_ROWS.slice();
-for (const [sid, st] of Object.entries(EMOTE_STYLES))
-  for (const [id, name, rarity] of MOVES) EMOTE_ROWS.push([`${id}-${sid}`, `${st.name} ${name}`, atLeast(bump(rarity, 0), st.rarity)]);
-
-/** `wave-spin` → ['wave', 'spin']. */
+/** Emotes used to come in styles (`wave-spin`); saved ids like that now mean the move itself. */
 export const splitEmote = (id: string): [string, string | undefined] => {
   const i = id.indexOf('-');
   return i < 0 ? [id, undefined] : [id.slice(0, i), id.slice(i + 1)];
@@ -769,8 +776,11 @@ export function sanitizeCosmetics(c: Partial<Cosmetics> | undefined): Cosmetics 
     const v = c?.[slot];
     if (typeof v === 'string' && isItem(slot, v)) out[slot] = v;
   }
+  // Older saves hold styled emotes (`wave-quick`); keep the move.
+  const move = (id: unknown) => (typeof id !== 'string' ? '' : isItem('emote', id) ? id : isItem('emote', splitEmote(id)[0]) ? splitEmote(id)[0] : '');
+  if (typeof c?.emote === 'string' && move(c.emote)) out.emote = move(c.emote);
   const wheel = Array.isArray(c?.emotes) ? c.emotes : [out.emote];
-  out.emotes = Array.from({ length: WHEEL }, (_, i) => (typeof wheel[i] === 'string' && isItem('emote', wheel[i]) ? wheel[i] : ''));
+  out.emotes = Array.from({ length: WHEEL }, (_, i) => move(wheel[i]));
   out.emote = out.emotes.find(Boolean) ?? 'wave';
   const skin = Number(c?.skin);
   if (Number.isInteger(skin) && skin >= 0 && skin < SKIN_TONES.length) out.skin = skin;

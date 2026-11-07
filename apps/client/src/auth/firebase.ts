@@ -394,14 +394,15 @@ export async function claimUsername(u: User | null = user, username: string) {
     if ((await tx.get(nameRef)).exists()) throw new Error('USERNAME_TAKEN');
     tx.set(nameRef, { uid: u.uid, name: username.trim(), createdAt: serverTimestamp() });
     tx.set(doc(db, 'users', u.uid), data);
-    tx.set(doc(db, 'profiles', u.uid), publicDoc(username.trim(), username.trim(), data.xp, data.cosmetics, data.stats));
+    tx.set(doc(db, 'profiles', u.uid), publicDoc(username.trim(), username.trim(), data.xp, data.cosmetics, data.stats, serverTimestamp()));
   });
   applyCloud(u.uid, { ...data, createdAt: null, updatedAt: null });
   useAccount.setState({ status: 'signedIn', sync: 'synced', error: null });
 }
 
 /** The public card other players see: no email, no settings, nothing private. */
-const publicDoc = (username: string, displayName: string, xp: number, cosmetics: Cosmetics, stats: Stats) => ({
+const publicDoc = (username: string, displayName: string, xp: number, cosmetics: Cosmetics, stats: Stats, createdAt: unknown) => ({
+  createdAt,
   username,
   usernameKey: usernameKey(username),
   displayName,
@@ -476,7 +477,7 @@ export async function flush() {
     const q = useProfile.getState();
     await setDoc(
       doc(db, 'profiles', u.uid),
-      publicDoc(q.username, q.displayName, q.xp, q.cosmetics, q.stats),
+      publicDoc(q.username, q.displayName, q.xp, q.cosmetics, q.stats, Timestamp.fromMillis(q.createdAt)),
       { merge: true },
     );
     useAccount.setState({ sync: useProfile.getState().dirty ? 'pending' : 'synced' });

@@ -1,13 +1,8 @@
 // Single source of truth for weapon balance. Every system (sim, bots, UI, audio, visuals) reads from here.
 /** The five originals, free for everyone. Every other weapon is a tuning of one of them. */
 export type BaseWeaponId = 'pulse' | 'roller' | 'arc' | 'lobber' | 'dual';
-export type WeaponId =
-  | BaseWeaponId
-  | 'mist' | 'needle' | 'gusher' | 'flicker'
-  | 'brush' | 'dozer' | 'sweeper'
-  | 'thumper' | 'snap' | 'popper'
-  | 'mortar' | 'scatter' | 'comet'
-  | 'twinjet' | 'ribbon' | 'fizz';
+/** The hand-made weapons are listed by name; the generated families add more ids (`ember-pulse`). */
+export type WeaponId = string;
 export type WeaponKind = 'auto' | 'roller' | 'burst' | 'lobber' | 'dual';
 
 /** How a weapon's model differs from its base: proportions and one extra part. */
@@ -351,6 +346,82 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     ratings: { range: 1, damage: 2, paint: 3, mobility: 5 },
   }),
 };
+
+/* ------------------------------------------------------------------------------------------------
+ * Weapon families. Each base gets the same set of archetypes, and every archetype pushes the base's
+ * numbers a different way (heavier, quicker, longer, wider...), so each result plays differently
+ * and has a model of its own proportions and attachment. New ids are appended, so older network
+ * messages and saves keep meaning the same weapon.
+ * ---------------------------------------------------------------------------------------------- */
+
+interface Archetype {
+  id: string;
+  name: string;
+  line: string;
+  tier: 1 | 2 | 3 | 4;
+  /** Multipliers on damage, time between shots, range, spread, paint size, ink use, speed while firing. */
+  m: [dmg: number, rate: number, range: number, spread: number, paint: number, ink: number, move: number];
+  look: WeaponLook;
+  /** Changes to the 1-5 ratings: range, damage, paint, mobility. */
+  r: [number, number, number, number];
+}
+
+const ARCHETYPES: Archetype[] = [
+  { id: 'heavy', name: 'Heavy', line: 'Hits hard, fires slowly.', tier: 2, m: [1.35, 1.3, 1, 0.9, 1.1, 1.2, 0.85], look: { len: 1, bulk: 1.3, extra: 'tank' }, r: [0, 1, 0, -1] },
+  { id: 'feather', name: 'Feather', line: 'Light and quick, a little weak.', tier: 1, m: [0.8, 0.8, 0.9, 1.15, 0.9, 0.7, 1.15], look: { len: 0.85, bulk: 0.8, extra: 'none' }, r: [0, -1, 0, 1] },
+  { id: 'marksman', name: 'Marksman', line: 'Tight, accurate shots from far away.', tier: 3, m: [1.2, 1.25, 1.4, 0.35, 0.85, 1.05, 0.8], look: { len: 1.4, bulk: 0.9, extra: 'scope' }, r: [2, 1, -1, -1] },
+  { id: 'rapid', name: 'Rapid', line: 'Fires far faster, with less punch per shot.', tier: 2, m: [0.7, 0.62, 0.95, 1.3, 0.9, 0.85, 1], look: { len: 1, bulk: 1, extra: 'drum' }, r: [0, -1, 1, 0] },
+  { id: 'wide', name: 'Wide', line: 'A broad spray that paints big areas.', tier: 2, m: [0.85, 1, 0.85, 1.7, 1.35, 1.2, 0.95], look: { len: 0.9, bulk: 1.15, extra: 'fins' }, r: [-1, -1, 2, 0] },
+  { id: 'needle', name: 'Needle', line: 'A thin, fast line of paint.', tier: 3, m: [1.05, 0.9, 1.3, 0.5, 0.65, 0.8, 1.05], look: { len: 1.3, bulk: 0.7, extra: 'none' }, r: [1, 0, -1, 0] },
+  { id: 'turbo', name: 'Turbo', line: 'Move almost freely while firing.', tier: 3, m: [0.9, 0.9, 0.9, 1.1, 0.9, 0.9, 1.3], look: { len: 0.95, bulk: 0.95, extra: 'fins' }, r: [0, 0, 0, 2] },
+  { id: 'bulwark', name: 'Bulwark', line: 'Slow and sturdy, with a huge splash.', tier: 3, m: [1.15, 1.2, 0.9, 1.1, 1.45, 1.45, 0.7], look: { len: 0.95, bulk: 1.45, extra: 'rings' }, r: [-1, 1, 2, -2] },
+  { id: 'phantom', name: 'Phantom', line: 'Cheap on ink, so you can keep firing.', tier: 3, m: [0.95, 1, 1.05, 1, 0.95, 0.45, 1.05], look: { len: 1.1, bulk: 0.85, extra: 'grip' }, r: [0, 0, 0, 1] },
+  { id: 'comet', name: 'Comet', line: 'Shots fly further and faster.', tier: 2, m: [0.95, 1.05, 1.55, 0.9, 0.85, 1, 0.95], look: { len: 1.35, bulk: 0.9, extra: 'fins' }, r: [2, 0, -1, 0] },
+  { id: 'ember', name: 'Ember', line: 'Burns through ink for a big splash.', tier: 3, m: [1.1, 0.95, 0.95, 1.2, 1.3, 1.6, 0.95], look: { len: 1, bulk: 1.1, extra: 'spikes' }, r: [0, 0, 2, 0] },
+  { id: 'frost', name: 'Frost', line: 'Precise and steady, rarely wasted.', tier: 2, m: [1.1, 1.1, 1.2, 0.6, 0.9, 0.9, 0.95], look: { len: 1.15, bulk: 0.95, extra: 'scope' }, r: [1, 1, -1, 0] },
+  { id: 'thunder', name: 'Thunder', line: 'Big hits, big recoil, big splash.', tier: 4, m: [1.55, 1.4, 1.05, 1.1, 1.3, 1.5, 0.75], look: { len: 1.1, bulk: 1.35, extra: 'spikes' }, r: [0, 2, 1, -1] },
+  { id: 'velvet', name: 'Velvet', line: 'Smooth and forgiving to aim.', tier: 1, m: [0.9, 0.95, 1, 1.4, 1.1, 0.9, 1.1], look: { len: 0.9, bulk: 1.05, extra: 'drum' }, r: [0, -1, 1, 0] },
+  { id: 'jade', name: 'Jade', line: 'A steady all-rounder with a little extra reach.', tier: 1, m: [1.05, 1, 1.15, 0.9, 1, 0.95, 1], look: { len: 1.1, bulk: 1, extra: 'grip' }, r: [1, 0, 0, 0] },
+  { id: 'solar', name: 'Solar', line: 'Bright, wide and generous with paint.', tier: 3, m: [0.9, 0.85, 0.9, 1.35, 1.5, 1.15, 1], look: { len: 0.95, bulk: 1.2, extra: 'rings' }, r: [-1, -1, 2, 0] },
+  { id: 'lunar', name: 'Lunar', line: 'Floaty shots that carry a long way.', tier: 2, m: [1, 1.1, 1.45, 0.8, 1, 1.05, 0.95], look: { len: 1.25, bulk: 1, extra: 'tank' }, r: [2, 0, 0, 0] },
+  { id: 'tidal', name: 'Tidal', line: 'Floods a patch, then refills fast.', tier: 2, m: [0.85, 0.9, 0.9, 1.3, 1.25, 1.1, 1], look: { len: 1, bulk: 1.15, extra: 'tank' }, r: [0, -1, 1, 0] },
+  { id: 'gale', name: 'Gale', line: 'Quick on the trigger, quick on your feet.', tier: 3, m: [0.8, 0.7, 1, 1.2, 0.85, 0.8, 1.25], look: { len: 0.9, bulk: 0.85, extra: 'fins' }, r: [0, -1, 0, 2] },
+  { id: 'quartz', name: 'Quartz', line: 'Dense shots, short and punchy.', tier: 2, m: [1.3, 1.1, 0.75, 0.85, 1, 1.1, 0.95], look: { len: 0.8, bulk: 1.2, extra: 'none' }, r: [-1, 1, 0, 0] },
+  { id: 'onyx', name: 'Onyx', line: 'Dark, deadly and demanding.', tier: 4, m: [1.45, 1.15, 1.2, 0.5, 0.9, 1.3, 0.8], look: { len: 1.3, bulk: 1.05, extra: 'scope' }, r: [1, 2, -1, -1] },
+  { id: 'neon', name: 'Neon', line: 'A little of everything, and bright.', tier: 4, m: [1.1, 0.85, 1.15, 0.95, 1.2, 0.9, 1.1], look: { len: 1.05, bulk: 1.1, extra: 'rings' }, r: [1, 1, 1, 1] },
+];
+
+const FAMILY_NOUN: Record<BaseWeaponId, string> = { pulse: 'Sprayer', roller: 'Roller', arc: 'Blaster', lobber: 'Lobber', dual: 'Duals' };
+const clamp5 = (n: number) => Math.max(1, Math.min(5, n));
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+for (const base of Object.keys(BASES) as BaseWeaponId[])
+  for (const a of ARCHETYPES) {
+    const b = BASES[base], id = `${a.id}-${base}`;
+    const [dmg, rate, range, spread, paint, ink, move] = a.m;
+    WEAPONS[id] = tune(base, id, {
+      name: `${a.name} ${FAMILY_NOUN[base]}`,
+      tagline: a.line,
+      price: 500 + a.tier * 300 + (base === 'arc' || base === 'lobber' ? 100 : 0),
+      look: { len: Math.min(1.5, b.look.len * a.look.len), bulk: Math.min(1.5, b.look.bulk * a.look.bulk), extra: a.look.extra },
+      damage: Math.round(b.damage * dmg),
+      fireInterval: Math.round(b.fireInterval * rate * 1000) / 1000,
+      range: Math.round(b.range * range * 10) / 10,
+      spread: Math.round(b.spread * spread * 10) / 10,
+      paintRadius: r2(b.paintRadius * paint),
+      inkPerShot: r2(b.inkPerShot * ink),
+      moveWhileFiring: Math.min(1, r2(b.moveWhileFiring * move)),
+      splashRadius: Math.round(b.splashRadius * paint * 10) / 10,
+      splashDamage: Math.round(b.splashDamage * dmg),
+      roll: b.roll && { damage: Math.round(b.roll.damage * dmg), width: r2(b.roll.width * (0.8 + 0.2 * paint)) },
+      ratings: {
+        range: clamp5(b.ratings.range + a.r[0]),
+        damage: clamp5(b.ratings.damage + a.r[1]),
+        paint: clamp5(b.ratings.paint + a.r[2]),
+        mobility: clamp5(b.ratings.mobility + a.r[3]),
+      },
+    });
+  }
 
 export const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
 

@@ -43,6 +43,8 @@ export interface Card {
   online?: boolean;
   seenAt?: number;
   activity?: 'menu' | 'lobby' | 'match';
+  /** When the account was made (older accounts fill this in the next time they sign in). */
+  createdAt?: number;
 }
 
 export interface Friendship {
@@ -101,6 +103,7 @@ const toCard = (uid: string, d: Record<string, unknown>): Card => ({
   online: d.online === true && Date.now() - ms(d.seenAt) < ONLINE_MS,
   seenAt: d.seenAt ? ms(d.seenAt) : undefined,
   activity: d.activity as Card['activity'],
+  createdAt: d.createdAt ? ms(d.createdAt) : undefined,
 });
 
 /* ---------- Players ---------- */
@@ -317,3 +320,40 @@ async function post(other: string, body: { text?: string; voice?: string; durati
 
 export const sendText = (other: string, text: string) => post(other, { text: text.trim().slice(0, 500) }, text.trim().slice(0, 80));
 export const sendVoice = (other: string, voice: string, duration: number) => post(other, { voice, duration: Math.min(30, Math.round(duration * 10) / 10) }, `Voice message (${Math.round(duration)}s)`);
+
+/* ---------- Owner tools (the rules only let the owner account read these) ---------- */
+
+export interface AccountDetails {
+  createdAt?: number;
+  email: string;
+  wantsUpdates: boolean;
+  xp: number;
+  coins: number;
+  owned: number;
+  games: number;
+  wins: number;
+}
+
+/** Every player card, newest account first. */
+export async function listAccounts(): Promise<Card[]> {
+  const { db } = me();
+  const snap = await getDocs(query(collection(db, 'profiles'), limit(1000)));
+  return snap.docs.map((d) => toCard(d.id, d.data())).sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+}
+
+/** One account's private details: contact email, join date and progress. */
+export async function accountDetails(uid: string): Promise<AccountDetails> {
+  const { db } = me();
+  const [u, p] = await Promise.all([getDoc(doc(db, 'users', uid)), getDoc(doc(db, 'private', uid))]);
+  const d = u.data() ?? {};
+  return {
+    createdAt: d.createdAt ? ms(d.createdAt) : undefined,
+    email: String(p.data()?.email ?? ''),
+    wantsUpdates: p.data()?.updates === true,
+    xp: Number(d.xp ?? 0),
+    coins: Number(d.coins ?? 0),
+    owned: Array.isArray(d.owned) ? d.owned.length : 0,
+    games: Number(d.stats?.games ?? 0),
+    wins: Number(d.stats?.wins ?? 0),
+  };
+}

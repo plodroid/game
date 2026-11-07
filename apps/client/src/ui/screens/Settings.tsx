@@ -6,6 +6,7 @@ import { PALETTES } from '../../rendering/palette';
 import { benchmark, probeHardware, recommend, type HardwareReport } from '../../settings/hardware';
 import { DEFAULT_BINDINGS, useSettings, type Action, type Preset } from '../../settings/settings';
 import { useUi } from '../../state/ui';
+import { checkForUpdates, useUpdates, type UpdateResult } from '../../updates';
 import { Button, Header, KeyCapture, keyLabel, Segmented, Setting, Slider, Toggle } from '../kit';
 
 type Tab = 'graphics' | 'audio' | 'controls' | 'gameplay' | 'accessibility';
@@ -49,6 +50,7 @@ export default function Settings() {
           {tab === 'gameplay' && <Gameplay />}
           {tab === 'accessibility' && <Accessibility />}
         </section>
+        <UpdateCheck />
         <div className="row" style={{ marginTop: 14 }}>
           <Button variant="ghost" onClick={() => reset()}>
             Reset everything to defaults
@@ -56,6 +58,40 @@ export default function Settings() {
         </div>
       </div>
     </main>
+  );
+}
+
+function UpdateCheck() {
+  const { ready, apply } = useUpdates();
+  const [state, setState] = useState<UpdateResult | 'checking' | null>(null);
+  const check = () => {
+    setState('checking');
+    checkForUpdates().then(setState, () => setState('unavailable'));
+  };
+  const msg =
+    ready || state === 'ready'
+      ? 'A new version is ready.'
+      : state === 'latest'
+        ? 'You have the latest version.'
+        : state === 'unavailable'
+          ? 'Updates are only checked in the installed or online app.'
+          : state === 'checking'
+            ? 'Checking…'
+            : 'Looks for a newer version of the game.';
+  return (
+    <section className="panel" style={{ marginTop: 14 }}>
+      <Setting name="Updates" hint={msg}>
+        {ready || state === 'ready' ? (
+          <Button variant="primary" onClick={() => apply?.()}>
+            Update now
+          </Button>
+        ) : (
+          <Button onClick={check} disabled={state === 'checking'}>
+            Check for updates
+          </Button>
+        )}
+      </Setting>
+    </section>
   );
 }
 

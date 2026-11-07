@@ -8,7 +8,9 @@ const ICON: Record<string, string> = {
   wave: '👋', spin: '🌀', flex: '💪', clap: '👏', bow: '🙇', jump: '🐇', point: '👉', dance: '🕺', salute: '🫡', cheer: '🙌',
   think: '🤔', sway: '🎶', robot: '🤖', laugh: '😂', sit: '🪑', backflip: '🤸', shrug: '🤷', facepalm: '🤦', kick: '🦵',
   stretch: '🧘', yawn: '🥱', kneel: '🧎', heart: '🫶', boxing: '🥊', guitar: '🎸', drums: '🥁', conduct: '🎼', chicken: '🐔',
-  disco: '🪩', twist: '🌪️',
+  disco: '🪩', twist: '🌪️', fistpump: '✊', raiseroof: '🙌', peace: '✌️', curtsy: '👗', tada: '🎉', jacks: '🤾', superhero: '🦸',
+  tpose: '🧍', strut: '💃', marching: '🪖', rockon: '🤘', zombie: '🧟', sneak: '🥷', tantrum: '😤', swim: '🏊', windmill: '🌀',
+  lasso: '🤠', twostep: '👢', karate: '🥋', dab: '😎', floss: '🧵', sprinkler: '💦', moonwalk: '🌙', twirl: '🩰', sleepy: '😴',
 };
 const NAME = new Map(itemsFor('emote').map((i) => [i.id, i.name]));
 

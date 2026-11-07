@@ -58,6 +58,7 @@ export default function PlayerCard({ uid }: { uid: string }) {
                 @{card.username} · Level {card.level} · <span className={`dot ${card.online ? 'dot--ok' : ''}`} />
                 {seen(card)}
               </span>
+              {card.createdAt && <span className="muted small">Account made {new Date(card.createdAt).toLocaleDateString([], { dateStyle: 'long' })}</span>}
             </div>
             {card.stats && (
               <div className="stats" style={{ margin: '14px 0' }}>

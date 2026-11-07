@@ -1,0 +1,17 @@
+{
+  "name": "@chromashift/mobile",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "CHROMASHIFT for Android: a Capacitor shell around the live website.",
+  "scripts": {
+    "sync": "cap sync android",
+    "open": "cap open android",
+    "apk": "cap sync android && cd android && gradlew assembleDebug"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^7.4.0",
+    "@capacitor/cli": "^7.4.0",
+    "@capacitor/core": "^7.4.0"
+  }
+}

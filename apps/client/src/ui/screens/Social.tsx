@@ -73,6 +73,7 @@ function Row({ card, uid, children }: { card?: Card; uid: string; children?: Rea
           <span className="person__name">{name}</span>
           <span className="muted small person__meta">
             {title ? `${title} · ` : ''}Lv {card?.level ?? 1} · {seen(card)}
+            {card?.createdAt ? ` · joined ${new Date(card.createdAt).toLocaleDateString()}` : ''}
           </span>
         </span>
       </button>
