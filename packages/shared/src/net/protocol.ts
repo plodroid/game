@@ -74,6 +74,8 @@ export interface LobbyPlayer {
   connected: boolean;
   /** Signed in with a verified account on this server. */
   verified: boolean;
+  /** The game's owner, shown in white. */
+  admin?: boolean;
 }
 
 export interface LobbyState {

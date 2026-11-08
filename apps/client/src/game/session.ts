@@ -5,7 +5,7 @@ import {
   levelInfo,
   Simulation,
   SPECIAL_IDS,
-  WEAPON_IDS,
+  publicWeapons,
   type BotDifficulty,
   type MapId,
   type MatchStart,
@@ -92,7 +92,7 @@ export async function startOffline(s: OfflineSetup) {
       { id: 1, name: publicName(p), team: 0, weapon: p.weapon, special: p.special, bot: false, cosmetics: p.cosmetics },
     ];
     const names = shuffled(BOT_NAMES);
-    const weapons = shuffled(WEAPON_IDS);
+    const weapons = shuffled(publicWeapons());
     const practice = s.mode === 'practice';
     let id = 2;
     const addBot = (team: 0 | 1, i: number) =>

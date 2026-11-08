@@ -1,4 +1,5 @@
-import { authorize } from '../auth/admin';
+import { authorize, isOwner } from '../auth/admin';
+import { accounts } from '../auth/account';
 import { Peer, type DataConnection } from 'peerjs';
 import { Packr } from 'msgpackr';
 import {
@@ -55,7 +56,10 @@ export const PEER_OPTIONS = {
 export const hasRelay = !!env.turn;
 
 /** What a guest tells the host. Never includes the account token: the host is just another player. */
-export type PeerHello = Pick<JoinOptions, 'name' | 'protocol' | 'weapon' | 'special' | 'cosmetics'>;
+export type PeerHello = Pick<JoinOptions, 'name' | 'protocol' | 'weapon' | 'special' | 'cosmetics'> & {
+  /** The game's owner says so; the host checks it against the owner's note in Firestore (no token is ever sent). */
+  admin?: boolean;
+};
 
 class P2PError extends Error {
   constructor(readonly type: string) {
@@ -422,6 +426,11 @@ interface Session {
 }
 
 /** The server half, living in the host's tab. */
+/** Did the owner just say they are joining this game? (Needs this player to be signed in to look.) */
+async function adminNoted(code: string) {
+  return (await accounts()?.then((m) => m.checkAdminJoin(code)).catch(() => false)) === true;
+}
+
 class BrowserHost {
   readonly room: RoomHost;
   readonly link: LoopbackLink;
@@ -445,20 +454,29 @@ class BrowserHost {
     peer.on('disconnected', () => this.rejoinBroker());
     this.stopTicker = ticker(() => this.tick());
     addEventListener('pagehide', this.close);
-    this.room.join(this.link.client, hello);
+    this.room.join(this.link.client, hello, { admin: isOwner() });
   }
 
   private accept(conn: DataConnection) {
     if (this.closed) return conn.close();
     let s: Session | null = null;
+    let waiting = false;
     const helloTimer = setTimeout(() => !s && conn.close(), HELLO_MS);
     conn.on('data', (raw) => {
       const m = decode(raw);
-      if (!m) return;
+      if (!m || waiting) return;
       if (!s) {
         if (m[0] !== '~hello') return conn.close();
         clearTimeout(helloTimer);
-        s = this.hello(conn, m[1]);
+        const first = m[1] as Partial<PeerHello> | undefined;
+        if (first?.admin === true) {
+          // The owner left a fresh note for this game's code; check it before letting them past a full game.
+          waiting = true;
+          void adminNoted(this.code).then((ok) => {
+            s = this.hello(conn, first, ok);
+            waiting = false;
+          });
+        } else s = this.hello(conn, m[1]);
         return;
       }
       if (s.conn !== conn) return;
@@ -481,7 +499,11 @@ class BrowserHost {
     conn.on('error', () => conn.close());
   }
 
-  private hello(conn: DataConnection, raw: unknown): Session | null {
+  private get code() {
+    return this.room.code;
+  }
+
+  private hello(conn: DataConnection, raw: unknown, admin = false): Session | null {
     const h = (raw && typeof raw === 'object' ? raw : {}) as Partial<PeerHello> & { resume?: unknown };
     const refuse = (reason: string) => {
       this.raw(conn, '~refuse', { reason });
@@ -501,7 +523,7 @@ class BrowserHost {
       this.room.reconnect(seat.client);
       return seat;
     }
-    if (this.room.size >= MAX_PLAYERS) return refuse('full');
+    if (this.room.size >= MAX_PLAYERS && !admin) return refuse('full');
     const s: Session = {
       id: randomId(6),
       resume: randomId(),
@@ -515,7 +537,7 @@ class BrowserHost {
     s.client = { id: s.id, send: (type, payload) => this.sendTo(s, type, payload) };
     this.sessions.set(s.id, s);
     this.raw(conn, '~welcome', { resume: s.resume });
-    this.room.join(s.client, { name: h.name, weapon: h.weapon, special: h.special, cosmetics: h.cosmetics });
+    this.room.join(s.client, { name: h.name, weapon: h.weapon, special: h.special, cosmetics: h.cosmetics }, { admin });
     return s;
   }
 
@@ -620,6 +642,10 @@ export async function host(
 
 /** Joins a game hosted in someone else's browser. */
 export async function join(code: string, hello: PeerHello): Promise<NetRoom> {
+  if (isOwner()) {
+    hello = { ...hello, admin: true };
+    await accounts()?.then((m) => m.markAdminJoin(code)).catch(() => undefined);
+  }
   const peer = await openPeer();
   const link = new PeerLink(peer, ID_PREFIX + code, hello);
   try {

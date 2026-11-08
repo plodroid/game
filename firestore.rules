@@ -250,6 +250,12 @@ service cloud.firestore {
         && (request.resource.data.code == null || (request.resource.data.code is string && request.resource.data.code.size() <= 12));
     }
 
+    // The owner's note that they are joining a game (by its code), so that game's host can let them in.
+    match /adminJoin/{code} {
+      allow read: if signedIn();
+      allow write: if isAdmin() && request.resource.data.keys().hasOnly(['at']) && request.resource.data.at == request.time;
+    }
+
     // The owner's weapon config: new weapons, tuned weapons and limited sales. Everyone reads, only the owner writes.
     match /config/{doc} {
       allow read: if true;

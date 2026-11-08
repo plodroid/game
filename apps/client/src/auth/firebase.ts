@@ -581,3 +581,17 @@ export async function saveWeaponConfig(json: string) {
   await setDoc(doc(db, 'config', 'weapons'), { json, updatedAt: serverTimestamp() });
   setWeaponConfig(json);
 }
+
+/* ---------- The owner joining a game ---------- */
+
+/** The owner leaves a short note that they are about to join this game, so its host lets them in (full or not). */
+export async function markAdminJoin(code: string) {
+  await setDoc(doc(db, 'adminJoin', code), { at: serverTimestamp() });
+}
+
+/** True when the owner left that note in the last minute. */
+export async function checkAdminJoin(code: string) {
+  if (!user) return false;
+  const d = (await getDoc(doc(db, 'adminJoin', code))).data();
+  return !!d?.at && Date.now() - (d.at as Timestamp).toMillis() < 60_000;
+}

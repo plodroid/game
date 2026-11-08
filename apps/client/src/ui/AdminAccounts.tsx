@@ -115,13 +115,19 @@ function AccountTools({ card, info, reload, onClose }: { card: Card; info: Accou
   const [give, setGive] = useState('');
   const n = (v: string) => Math.max(0, Math.min(99_999_999, Math.floor(Number(v) || 0)));
   const edit = async (f: Parameters<typeof import('../auth/social').adminEdit>[1], ok: string) => {
-    await social((x) => x.adminEdit(card.uid, f), ok);
-    reload();
+    try {
+      const x = await import('../auth/social');
+      await x.adminEdit(card.uid, f);
+      useUi.getState().toast({ text: ok, kind: 'success' });
+      reload();
+    } catch (e) {
+      useUi.getState().toast({ text: `Couldn’t save: ${(e as { code?: string }).code ?? (e as Error).message}`, kind: 'error' });
+    }
   };
   const teleport = async () => {
     const code = await social((x) => x.roomOf(card.uid));
     const ui = useUi.getState();
-    if (!code) return ui.toast({ text: `${card.displayName} isn’t in a hosted game right now (offline games can’t be joined).`, kind: 'warn' });
+    if (!code) return ui.toast({ text: `${card.displayName} isn’t in a hosted game I can see (they need to be online on the newest version; offline games can’t be joined).`, kind: 'warn' });
     ui.toast({ text: `Joining ${card.displayName}’s game…` });
     try {
       await joinGame(code);

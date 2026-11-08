@@ -48,6 +48,8 @@ export interface PlayerInfo {
   /** Practice target: walks to a spot and never fires. */
   dummy?: boolean;
   cosmetics: Cosmetics;
+  /** The game's owner, drawn in white. */
+  admin?: boolean;
   /** Verified account id (server-side only). */
   uid?: string;
 }

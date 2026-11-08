@@ -464,6 +464,9 @@ export const gate = {
   },
 };
 
+/** Weapons anyone may use (bots and other players never get the owner's). */
+export const publicWeapons = () => WEAPON_IDS.filter((id) => !WEAPONS[id].admin);
+
 /** Ids that came from the owner's config. */
 export const CUSTOM = new Set<WeaponId>();
 

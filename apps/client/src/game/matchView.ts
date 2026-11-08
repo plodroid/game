@@ -216,7 +216,7 @@ export class MatchView implements View {
     const g = useSettings.getState().graphics;
     const rig = buildCharacter({
       cosmetics: v.info.cosmetics,
-      team: this.colors[v.info.team],
+      team: v.info.admin ? new THREE.Color(0xffffff) : this.colors[v.info.team],
       weapon: v.info.weapon,
       detail: g.modelDetail,
       lambert: g.paintQuality === 0,
@@ -228,7 +228,7 @@ export class MatchView implements View {
     const friendly = me ? me.info.team === v.info.team : false;
     let tag: Tag | null = null;
     if (v.id !== this.source.localId) {
-      tag = nameTag(v.info.name, this.colors[v.info.team], friendly);
+      tag = nameTag(v.info.name, v.info.admin ? new THREE.Color(0xffffff) : this.colors[v.info.team], friendly);
       rig.root.add(tag.sprite);
       tag.sprite.position.y = 2.28;
     }

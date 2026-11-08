@@ -96,8 +96,8 @@ export function AdminWeapons({ onClose }: { onClose: () => void }) {
       setD(fromDef(out.id));
       setHours('0');
       toast({ text: `${out.name} saved for everyone.`, kind: 'success' });
-    } catch {
-      toast({ text: 'Couldn’t save (are the new Firestore rules deployed?).', kind: 'error' });
+    } catch (e) {
+      toast({ text: `Couldn’t save: ${(e as { code?: string }).code ?? (e as Error).message}`, kind: 'error' });
     }
     setBusy(false);
   };

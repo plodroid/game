@@ -2,7 +2,7 @@ import { DT, MAX_PLAYERS, TEAM_SIZE, type Team } from '../constants';
 import { botLook, DEFAULT_COSMETICS, sanitizeCosmetics, type Cosmetics } from '../config/cosmetics';
 import { BOT_DIFFICULTIES, DURATION_OPTIONS, MODES, type ModeId } from '../config/modes';
 import { SPECIAL_IDS, type SpecialId } from '../config/specials';
-import { WEAPON_IDS, type WeaponId } from '../config/weapons';
+import { publicWeapons, WEAPON_IDS, WEAPONS, type WeaponId } from '../config/weapons';
 import { MAP_IDS } from '../maps';
 import { emptyInput, type Input, type PlayerInfo } from '../sim/player';
 import { Simulation, type MatchResult } from '../sim/simulation';
@@ -35,6 +35,8 @@ export interface HostClient {
 export interface JoinAuth {
   uid?: string;
   username?: string | null;
+  /** The host has checked that this is the game's owner (who may join a full game, shown in white). */
+  admin?: boolean;
 }
 
 export interface RoomHostOptions {
@@ -57,6 +59,7 @@ interface Member {
   name: string;
   uid?: string;
   verified: boolean;
+  admin: boolean;
   team: Team;
   ready: boolean;
   weapon: WeaponId;
@@ -148,6 +151,11 @@ export class RoomHost {
     if (this.quick) this.autoStartAt = Date.now() + 20_000;
   }
 
+  /** A real weapon; the owner's own is only for the owner. */
+  private weaponOk(w: unknown, admin: boolean) {
+    return WEAPON_IDS.includes(w as WeaponId) && (admin || !WEAPONS[w as WeaponId].admin);
+  }
+
   get size() {
     return this.members.size;
   }
@@ -170,9 +178,10 @@ export class RoomHost {
       name: cleanPlayerName(auth?.username ?? options?.name, `Player${this.nextPid}`),
       uid: auth?.uid,
       verified: !!auth?.username,
+      admin: !!auth?.admin,
       team: this.emptierTeam(),
       ready: false,
-      weapon: WEAPON_IDS.includes(options?.weapon as WeaponId) ? (options!.weapon as WeaponId) : 'pulse',
+      weapon: this.weaponOk(options?.weapon, !!auth?.admin) ? (options!.weapon as WeaponId) : 'pulse',
       special: SPECIAL_IDS.includes(options?.special as SpecialId)
         ? (options!.special as SpecialId)
         : 'surge',
@@ -325,7 +334,7 @@ export class RoomHost {
         return this.pushLobby();
       case MSG.LOADOUT:
         if (this.phaseNow === 'match') return;
-        if (WEAPON_IDS.includes(d.weapon as WeaponId)) m.weapon = d.weapon as WeaponId;
+        if (this.weaponOk(d.weapon, m.admin)) m.weapon = d.weapon as WeaponId;
         if (SPECIAL_IDS.includes(d.special as SpecialId)) m.special = d.special as SpecialId;
         if (d.cosmetics && typeof d.cosmetics === 'object')
           m.cosmetics = sanitizeCosmetics(d.cosmetics as Partial<Cosmetics>);
@@ -382,6 +391,7 @@ export class RoomHost {
       difficulty: s.botDifficulty,
       cosmetics: m.cosmetics,
       uid: m.uid,
+      ...(m.admin ? { admin: true } : {}),
     }));
     if (s.botFill) {
       const names = [...BOT_NAMES].sort(() => Math.random() - 0.5);
@@ -391,7 +401,7 @@ export class RoomHost {
             id: this.nextPid++,
             name: names.pop() ?? 'Bot',
             team: t,
-            weapon: pick(WEAPON_IDS),
+            weapon: pick(publicWeapons()),
             special: pick(SPECIAL_IDS),
             bot: true,
             difficulty: s.botDifficulty,
@@ -438,8 +448,9 @@ export class RoomHost {
       m.special = bot.special;
       bot.info.name = m.name;
       bot.info.uid = m.uid;
+      bot.info.admin = m.admin || undefined;
       sim.setBot(bot.id, null);
-    } else if (sim.players.length < MAX_PLAYERS) {
+    } else if (sim.players.length < MAX_PLAYERS || m.admin) {
       sim.addPlayer({
         id: m.pid,
         name: m.name,
@@ -449,6 +460,7 @@ export class RoomHost {
         bot: false,
         cosmetics: m.cosmetics,
         uid: m.uid,
+        ...(m.admin ? { admin: true } : {}),
       });
     } else return;
     this.roster = sim.players.map((p) => {
@@ -568,6 +580,7 @@ export class RoomHost {
       bot: false,
       connected: m.connected,
       verified: m.verified,
+      ...(m.admin ? { admin: true } : {}),
     }));
     return {
       code: this.code,
