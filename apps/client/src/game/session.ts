@@ -129,8 +129,8 @@ export async function startOffline(s: OfflineSetup) {
     engine.setView(new MatchView(source, (o) => finish(o, 1)));
     ui.setPaused(false);
     ui.go('match');
-    // Friends (and the owner) can step into this match while it runs; practice and the tutorial stay private.
-    if (!practice && !s.private) void openWorldFor(source, 1);
+    // Friends (and the owner) can step into this match while it runs, practice included; only the tutorial stays private.
+    if (!s.private) void openWorldFor(source, 1);
   } catch (e) {
     console.error(e);
     ui.toast({ text: 'Couldn’t start the match. Try a lower graphics preset.', kind: 'error' });

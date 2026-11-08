@@ -353,14 +353,14 @@ function Thread({ convo }: { convo: Convo }) {
 
   const pick = async (f: File | undefined) => {
     if (!f) return;
-    if (!f.type.startsWith('image/')) return toast({ text: 'Pick a picture.', kind: 'warn' });
+    // Some systems report no type for valid pictures (webp, heic); the decoder is the real check.
     setSending(true);
     try {
       const url = await compressImage(f);
       await social((x) => x.sendImage(convo, url));
       stick.current = true;
     } catch (e) {
-      toast({ text: e instanceof Error ? e.message : 'Couldn’t send that picture.', kind: 'error' });
+      toast({ text: e instanceof Error && e.message === 'That picture is too large.' ? e.message : 'Couldn’t read that picture. Try a JPG or PNG.', kind: 'error' });
     }
     setSending(false);
   };

@@ -96,7 +96,8 @@ export async function start() {
     persistence: [indexedDBLocalPersistence, browserLocalPersistence],
     popupRedirectResolver: browserPopupRedirectResolver,
   });
-  db = initializeFirestore(app, env.emulator ? {} : { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+  // Phone networks and webviews often break Firestore's streaming channel ("unavailable"), so fall back to long polling.
+  db = initializeFirestore(app, env.emulator ? {} : { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }), experimentalAutoDetectLongPolling: true });
   if (env.emulator) {
     connectAuthEmulator(auth, `http://${location.hostname}:9099`, { disableWarnings: true });
     connectFirestoreEmulator(db, location.hostname, 8080);
