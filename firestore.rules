@@ -53,7 +53,7 @@ service cloud.firestore {
         && (!('emotes' in c) || (c.emotes is list && c.emotes.size() <= 8));
     }
     function validUser(d) {
-      return d.keys().hasOnly(['username', 'usernameKey', 'displayName', 'createdAt', 'updatedAt', 'xp', 'stats', 'weapon', 'special', 'cosmetics', 'settings', 'coins', 'owned', 'favs', 'quests'])
+      return d.keys().hasOnly(['username', 'usernameKey', 'displayName', 'createdAt', 'updatedAt', 'xp', 'stats', 'weapon', 'special', 'cosmetics', 'settings', 'coins', 'owned', 'favs', 'quests', 'banned'])
         && validUsername(d.username)
         && d.usernameKey == d.username.lower()
         && validDisplayName(d.displayName)
@@ -67,7 +67,8 @@ service cloud.firestore {
         && (!('coins' in d) || count(d.coins))
         && (!('owned' in d) || (d.owned is list && d.owned.size() <= 6000))
         && (!('favs' in d) || (d.favs is list && d.favs.size() <= 400))
-        && (!('quests' in d) || d.quests is map);
+        && (!('quests' in d) || d.quests is map)
+        && (!('banned' in d) || d.banned is bool);
     }
     function validStatsCard(s) {
       return s is map && s.keys().hasOnly(['games', 'wins', 'kills', 'paint'])
@@ -125,8 +126,13 @@ service cloud.firestore {
         && request.resource.data.username == resource.data.username
         && request.resource.data.usernameKey == resource.data.usernameKey
         && request.resource.data.createdAt == resource.data.createdAt
+        // Only the owner can ban or unban.
+        && request.resource.data.get('banned', false) == resource.data.get('banned', false)
         // Offline XP is client-reported; cap how fast it can grow per write.
         && request.resource.data.xp <= resource.data.xp + 50000;
+      // The owner can edit any account's stats and ban or unban it.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['xp', 'coins', 'owned', 'stats', 'banned', 'updatedAt']);
       allow delete: if false;
     }
 
@@ -235,6 +241,20 @@ service cloud.firestore {
           );
         allow delete: if inPair(id) && resource.data.from == request.auth.uid;
       }
+    }
+
+    // Where a player is playing (the code of the game they are in). Only they and the owner can see it.
+    match /presence/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if isOwner(uid) && request.resource.data.keys().hasOnly(['code', 'updatedAt'])
+        && (request.resource.data.code == null || (request.resource.data.code is string && request.resource.data.code.size() <= 12));
+    }
+
+    // The owner's weapon config: new weapons, tuned weapons and limited sales. Everyone reads, only the owner writes.
+    match /config/{doc} {
+      allow read: if true;
+      allow write: if isAdmin() && request.resource.data.keys().hasOnly(['json', 'updatedAt'])
+        && request.resource.data.json is string && request.resource.data.json.size() < 600000;
     }
 
     // Server-verified online record. Read by the owner; written only via the Admin SDK.

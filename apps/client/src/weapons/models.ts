@@ -51,7 +51,20 @@ export function buildWeapon(
   group.add(muzzle);
   const Z = Math.PI / 2;
 
-  switch (def.kind) {
+  const parts = def.look.parts;
+  if (parts?.length) {
+    const mat = { team, dark, light, shell };
+    for (const q of parts) {
+      const geo =
+        q.s === 'box' ? new THREE.BoxGeometry(1, 1, 1)
+        : q.s === 'cyl' ? new THREE.CylinderGeometry(0.5, 0.5, 1, s(10)).rotateX(Z)
+        : q.s === 'sphere' ? new THREE.SphereGeometry(0.5, s(10), s(8))
+        : q.s === 'cone' ? new THREE.ConeGeometry(0.5, 1, s(10)).rotateX(-Z)
+        : new THREE.TorusGeometry(0.5, 0.12, 6, s(14));
+      add(geo, mat[q.c], q.x, q.y, q.z).scale.set(q.w, q.h, q.d);
+    }
+    muzzle.position.set(0, def.look.muzzle?.[0] ?? 0.1, def.look.muzzle?.[1] ?? -0.4);
+  } else switch (def.kind) {
     case 'auto':
       add(new THREE.BoxGeometry(0.05, 0.12, 0.06), dark, 0, 0.01, 0.03, -0.25);
       add(new THREE.CapsuleGeometry(0.055, 0.26, 3, s(8)).rotateX(Z), shell, 0, 0.11, -0.06);
@@ -116,7 +129,7 @@ export function buildWeapon(
 
   // What sets each weapon apart from its base: one extra part, then its proportions.
   const top = def.kind === 'dual' ? 0.13 : 0.2;
-  switch (def.look.extra) {
+  switch (parts?.length ? 'none' : def.look.extra) {
     case 'scope':
       add(new THREE.CylinderGeometry(0.02, 0.02, 0.14, s(8)).rotateX(Z), dark, 0, top + 0.03, -0.08);
       add(new THREE.CircleGeometry(0.018, s(8)), glass, 0, top + 0.03, -0.151);

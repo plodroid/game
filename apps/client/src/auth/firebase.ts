@@ -47,6 +47,7 @@ import { env } from '../env';
 import { settingsSnapshot, useSettings, type Settings } from '../settings/settings';
 import { mergeSynced, same, type Synced } from '../state/merge';
 import { newProfile, useProfile, type Profile, type Stats } from '../state/profile';
+import { setWeaponConfig } from '../weapons/custom';
 import { useAccount, type AccountUser } from './account';
 
 let app: FirebaseApp;
@@ -77,6 +78,7 @@ interface UserDoc {
   owned?: string[];
   favs?: string[];
   quests?: Profile['quests'];
+  banned?: boolean;
   settings?: Partial<Settings>;
 }
 
@@ -99,6 +101,7 @@ export async function start() {
     connectFirestoreEmulator(db, location.hostname, 8080);
   }
   await getRedirectResult(auth).catch(() => null);
+  await loadWeaponConfig();
   onAuthStateChanged(auth, (u) => void onUser(u));
 }
 
@@ -142,6 +145,12 @@ async function onUser(u: User | null) {
         return;
       }
       const d = snap.data() as UserDoc;
+      if (d.banned) {
+        settle();
+        useAccount.setState({ error: 'This account has been banned.' });
+        void fbSignOut(auth);
+        return;
+      }
       if (first || !base) {
         settle();
         applyCloud(u.uid, d);
@@ -553,4 +562,22 @@ export function watchGames(freshMs: number, onGames: (games: PublicGame[]) => vo
       ),
     onError,
   );
+}
+
+/* ---------- The owner's weapon config ---------- */
+
+/** Reads the weapon config everyone shares; a slow or missing one never holds the game up. */
+async function loadWeaponConfig() {
+  try {
+    const s = await Promise.race([getDoc(doc(db, 'config', 'weapons')), new Promise<never>((_, no) => setTimeout(() => no(new Error('slow')), 3000))]);
+    if (s.exists()) setWeaponConfig(String(s.data().json));
+  } catch {
+    /* offline: the built-in weapons */
+  }
+}
+
+/** Owner only (the rules refuse anyone else). */
+export async function saveWeaponConfig(json: string) {
+  await setDoc(doc(db, 'config', 'weapons'), { json, updatedAt: serverTimestamp() });
+  setWeaponConfig(json);
 }

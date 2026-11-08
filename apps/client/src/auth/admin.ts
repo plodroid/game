@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { COSMETIC_ITEMS, runCommand, WEAPON_IDS, type CommandContext, type Grant, type Mods, type Simulation } from '@chromashift/shared';
+import { COSMETIC_ITEMS, gate, runCommand, WEAPON_IDS, type CommandContext, type Grant, type Mods, type Simulation } from '@chromashift/shared';
 import { env } from '../env';
 import { useProfile } from '../state/profile';
 import { useAccount } from './account';
@@ -17,6 +17,8 @@ export function isOwner() {
   const uid = useAccount.getState().user?.uid;
   return !!uid && (uid === OWNER_UID || env.emulator);
 }
+
+gate.check = isOwner;
 
 /** Admin modifiers of every player in the current match, for drawing and prediction. */
 export const useMods = create<{ mods: Record<number, Mods> }>()(() => ({ mods: {} }));

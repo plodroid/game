@@ -11,6 +11,22 @@ export interface WeaponLook {
   len: number;
   bulk: number;
   extra: 'none' | 'scope' | 'drum' | 'fins' | 'tank' | 'spikes' | 'rings' | 'grip';
+  /** A hand-modelled gun: replaces the base shape. Built in the weapon frame (barrel toward -Z). */
+  parts?: WeaponPart[];
+  /** Where shots leave a hand-modelled gun: [y, z]. */
+  muzzle?: [number, number];
+}
+
+/** One primitive of a hand-modelled gun: position, size (x, y, z) and colour. */
+export interface WeaponPart {
+  s: 'box' | 'cyl' | 'sphere' | 'cone' | 'torus';
+  x: number;
+  y: number;
+  z: number;
+  w: number;
+  h: number;
+  d: number;
+  c: 'team' | 'dark' | 'light' | 'shell';
 }
 
 export interface WeaponDef {
@@ -53,6 +69,10 @@ export interface WeaponDef {
   /** Explode at the end of the straight phase instead of dropping. */
   burstAtRange: boolean;
   roll?: { width: number; inkPerSec: number; damage: number; speedMult: number };
+  /** Owner only: never sold, and only the game's owner can use it. */
+  admin?: boolean;
+  /** A limited weapon can only be bought until this time (ms since 1970); owners keep it. */
+  limitedUntil?: number;
   /** 1–5 ratings shown in the UI, derived by hand from the numbers above. */
   ratings: { range: number; damage: number; paint: number; mobility: number };
 }
@@ -423,7 +443,101 @@ for (const base of Object.keys(BASES) as BaseWeaponId[])
     });
   }
 
+/** The owner's own weapon: huge, fast and free to use, but nobody else can equip it. */
+WEAPONS.overlord = tune('arc', 'overlord', {
+  name: 'Overlord',
+  tagline: 'Admin weapon. Wide, relentless and never runs dry.',
+  price: 0,
+  admin: true,
+  look: { len: 1.3, bulk: 1.4, extra: 'rings' },
+  damage: 200, fireInterval: 0.12, range: 30, spread: 3, projectileSpeed: 70, paintRadius: 3, inkPerShot: 0, splashRadius: 4, splashDamage: 120, moveWhileFiring: 1, dodgeCooldown: 0.4,
+  ratings: { range: 5, damage: 5, paint: 5, mobility: 5 },
+});
+
 export const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
+
+/** Set by the client when the signed-in account is the owner; admin weapons are theirs alone. */
+export const gate = {
+  check: () => false,
+  get owner() {
+    return this.check();
+  },
+};
+
+/** Ids that came from the owner's config. */
+export const CUSTOM = new Set<WeaponId>();
+
+const num = (v: unknown, lo: number, hi: number, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
+const PART_SHAPES = ['box', 'cyl', 'sphere', 'cone', 'torus'];
+const PART_COLOURS = ['team', 'dark', 'light', 'shell'];
+
+/** Makes a weapon from the owner's config safe to use: known base, clamped numbers, tidy model. */
+function cleanDef(raw: Record<string, unknown>): WeaponDef | null {
+  const id = typeof raw.id === 'string' && /^[a-z0-9-]{2,32}$/.test(raw.id) ? raw.id : null;
+  const base = raw.base as BaseWeaponId;
+  if (!id || !BASES[base]) return null;
+  const b = BASES[base];
+  const f = (k: keyof WeaponDef, lo: number, hi: number) => num(raw[k], lo, hi, b[k] as number);
+  const look = (raw.look ?? {}) as Partial<WeaponLook>;
+  const parts = Array.isArray(look.parts)
+    ? look.parts.slice(0, 40).map(
+        (p): WeaponPart => ({
+          s: PART_SHAPES.includes(p.s) ? p.s : 'box',
+          x: num(p.x, -1.5, 1.5, 0), y: num(p.y, -1.5, 1.5, 0), z: num(p.z, -1.5, 1.5, 0),
+          w: num(p.w, 0.005, 1.5, 0.1), h: num(p.h, 0.005, 1.5, 0.1), d: num(p.d, 0.005, 1.5, 0.1),
+          c: PART_COLOURS.includes(p.c) ? p.c : 'shell',
+        }),
+      )
+    : undefined;
+  const r = (raw.ratings ?? b.ratings) as WeaponDef['ratings'];
+  const lim = num(raw.limitedUntil, 0, 4e12, 0);
+  const m = look.muzzle;
+  return {
+    ...b,
+    id,
+    base,
+    kind: b.kind,
+    name: String(raw.name ?? id).slice(0, 28),
+    tagline: String(raw.tagline ?? '').slice(0, 90),
+    price: Math.round(f('price', 0, 100000)),
+    damage: f('damage', 1, 1000), fireInterval: f('fireInterval', 0.03, 5), range: f('range', 1, 80), spread: f('spread', 0, 45),
+    projectileSpeed: f('projectileSpeed', 5, 120), gravity: f('gravity', 0, 80), pellets: Math.round(f('pellets', 1, 12)),
+    paintRadius: f('paintRadius', 0.1, 8), inkPerShot: f('inkPerShot', 0, 40), reloadSpeed: f('reloadSpeed', 0.1, 5),
+    moveWhileFiring: f('moveWhileFiring', 0.1, 1.5), splashRadius: f('splashRadius', 0, 10), splashDamage: f('splashDamage', 0, 500),
+    dodgeCooldown: f('dodgeCooldown', 0.1, 5),
+    look: {
+      len: num(look.len, 0.4, 2, 1),
+      bulk: num(look.bulk, 0.4, 2, 1),
+      extra: (['none', 'scope', 'drum', 'fins', 'tank', 'spikes', 'rings', 'grip'].includes(look.extra as string) ? look.extra : 'none') as WeaponLook['extra'],
+      ...(parts?.length ? { parts } : {}),
+      ...(parts?.length && Array.isArray(m) ? { muzzle: [num(m[0], -1, 1, 0.1), num(m[1], -2, 0.5, -0.4)] as [number, number] } : {}),
+    },
+    roll: b.roll && { ...b.roll, ...(raw.roll as object) },
+    ratings: { range: num(r.range, 1, 5, 3), damage: num(r.damage, 1, 5, 3), paint: num(r.paint, 1, 5, 3), mobility: num(r.mobility, 1, 5, 3) },
+    ...(raw.admin ? { admin: true } : {}),
+    ...(lim ? { limitedUntil: lim } : {}),
+  };
+}
+
+/** Applies the owner's weapon config: new weapons are added after the built-in ones, existing ones replaced. */
+export function registerWeapons(list: Record<string, unknown>[]) {
+  for (const raw of list) {
+    const def = cleanDef(raw);
+    if (!def) continue;
+    if (!WEAPONS[def.id]) WEAPON_IDS.push(def.id);
+    WEAPONS[def.id] = def;
+    CUSTOM.add(def.id);
+  }
+}
+
+/** Sets up the id `preview-draft` for the owner's editor to draw; it isn't a playable weapon. */
+export function previewWeapon(raw: Record<string, unknown>) {
+  const def = cleanDef({ ...raw, id: 'preview-draft' });
+  if (def) WEAPONS['preview-draft'] = def;
+}
+
+/** Can this weapon still be bought? (Limited weapons close; admin ones are never sold.) */
+export const onSale = (w: WeaponDef, now = Date.now()) => !w.admin && (!w.limitedUntil || w.limitedUntil > now);
 
 /** Seconds a projectile flies (almost) straight before gravity takes over. */
 export const straightTime = (w: WeaponDef) => (w.kind === 'lobber' ? 0 : w.range / w.projectileSpeed);

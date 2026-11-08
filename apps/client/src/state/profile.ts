@@ -13,6 +13,8 @@ import {
   SPECIAL_IDS,
   STARTING_COINS,
   WEAPON_IDS,
+  gate,
+  onSale,
   WEAPONS,
   weekIndex,
   weeklyQuests,
@@ -83,7 +85,7 @@ function rollQuests(q: QuestState): QuestState {
 /** Starter items and the original weapons belong to everyone. */
 export const FREE = new Set([
   ...COSMETIC_ITEMS.filter((i) => i.price === 0).map((i) => i.key),
-  ...WEAPON_IDS.filter((w) => WEAPONS[w].price === 0).map((w) => `weapon:${w}`),
+  ...WEAPON_IDS.filter((w) => WEAPONS[w].price === 0 && !WEAPONS[w].admin).map((w) => `weapon:${w}`),
 ]);
 
 const emptyStats = (): Stats => ({ games: 0, wins: 0, losses: 0, draws: 0, kills: 0, deaths: 0, assists: 0, paint: 0, bestPaint: 0, weaponGames: {} });
@@ -178,10 +180,11 @@ export const useProfile = create<ProfileStore>()(
         setState({ stats: st, xp: s.xp + xp, coins: s.coins + coins, quests: { ...quests, progress }, dirty: true, updatedAt: Date.now() });
         return { ...before, coins };
       },
-      owns: (key) => FREE.has(key) || ownedHas(getState().owned, key),
+      owns: (key) => (WEAPONS[key.slice(7)]?.admin ? gate.owner : FREE.has(key) || ownedHas(getState().owned, key)),
       buy: (key, price) => {
         const s = getState();
-        if (s.owns(key) || s.coins < price) return false;
+        const w = WEAPONS[key.slice(7)];
+        if (s.owns(key) || s.coins < price || (key.startsWith('weapon:') && w && !onSale(w))) return false;
         setState({ coins: s.coins - price, owned: [...s.owned, key], dirty: true, updatedAt: Date.now() });
         return true;
       },

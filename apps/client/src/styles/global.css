@@ -3059,3 +3059,71 @@ a.btn { text-decoration: none; display: flex; justify-content: center; align-ite
 .admin-row dd {
   text-align: right;
 }
+
+/* Owner tools */
+.admin-tools { display: grid; gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.admin-tools__row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.admin-tools__row > .input { flex: 1 1 140px; min-width: 0; }
+.admin-tools__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.admin-field { display: grid; gap: 4px; min-width: 0; }
+.admin-field .input { width: 100%; min-width: 0; }
+.admin-check { grid-auto-flow: column; justify-content: start; align-items: center; gap: 8px; }
+.admin-weapons { width: min(640px, 94vw); max-height: 88vh; overflow: auto; }
+.admin-weapons__edit { display: grid; gap: 10px; }
+.admin-weapons__h { margin: 8px 0 0; font-size: 0.95rem; }
+.admin-weapons__pic { display: grid; place-items: center; min-height: 140px; border-radius: 16px; background: rgba(255, 255, 255, 0.05); }
+.admin-weapons__pic img { max-height: 160px; max-width: 100%; object-fit: contain; }
+.admin-weapons__save { position: sticky; bottom: -1px; padding: 10px 0 2px; background: inherit; }
+.admin-part { display: grid; gap: 8px; padding: 10px; border-radius: 14px; background: rgba(255, 255, 255, 0.04); }
+.admin-tools__grid--6 { grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); }
+.admin-row--btn { width: 100%; background: none; border: 0; border-top: 1px solid rgba(255, 255, 255, 0.08); color: inherit; text-align: left; cursor: pointer; }
+
+/* Layout safety: grids and flex rows may shrink below their content, fields never push a screen wider than the phone,
+   and the title shrinks to fit even where the condensed font isn't available. */
+.col,
+.col--wide,
+.options {
+  grid-template-columns: minmax(0, 1fr);
+}
+.col > *,
+.col--wide > *,
+.options > *,
+.panel > *,
+.row > * {
+  min-width: 0;
+}
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+.brand {
+  max-width: 100%;
+  min-width: 0;
+}
+.brand__word {
+  white-space: nowrap;
+  font-size: min(clamp(3rem, 8vh, 4.6rem), calc((100vw - 110px) / 7.4));
+}
+.gate__brand .brand__word {
+  font-size: min(3rem, calc((100vw - 110px) / 7.4));
+}
+@media (max-width: 720px) {
+  .brand__word {
+    font-size: min(2.6rem, calc((100vw - 110px) / 7.4));
+  }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .brand__word {
+    font-size: min(2.2rem, calc((100vw - 110px) / 7.4));
+  }
+}
+.field {
+  grid-template-columns: minmax(0, 1fr);
+}
+.field > .input,
+.field > .select,
+.input--code {
+  width: 100%;
+  min-width: 0;
+}

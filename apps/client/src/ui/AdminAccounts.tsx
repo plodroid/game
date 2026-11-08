@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { titleName } from '@chromashift/shared';
+import { titleName, WEAPON_IDS, WEAPONS } from '@chromashift/shared';
 import { audio } from '../audio/audio';
 import type { AccountDetails, Card } from '../auth/social';
+import { joinGame } from '../multiplayer/net';
 import { social } from '../state/social';
+import { useUi } from '../state/ui';
 import { Avatar } from './Avatar';
 import { Icon } from './icons';
 import { seen } from './PlayerCard';
@@ -98,6 +100,83 @@ export function AdminAccounts({ onClose }: { onClose: () => void }) {
             ))}
           </dl>
         )}
+        {open && info && <AccountTools card={open} info={info} reload={() => setOpen({ ...open })} onClose={onClose} />}
+      </div>
+    </div>
+  );
+}
+
+/** Owner actions on one account: join their game, edit their numbers, give a weapon, ban. */
+function AccountTools({ card, info, reload, onClose }: { card: Card; info: AccountDetails; reload: () => void; onClose: () => void }) {
+  const [coins, setCoins] = useState(String(info.coins));
+  const [xp, setXp] = useState(String(info.xp));
+  const [games, setGames] = useState(String(info.games));
+  const [wins, setWins] = useState(String(info.wins));
+  const [give, setGive] = useState('');
+  const n = (v: string) => Math.max(0, Math.min(99_999_999, Math.floor(Number(v) || 0)));
+  const edit = async (f: Parameters<typeof import('../auth/social').adminEdit>[1], ok: string) => {
+    await social((x) => x.adminEdit(card.uid, f), ok);
+    reload();
+  };
+  const teleport = async () => {
+    const code = await social((x) => x.roomOf(card.uid));
+    const ui = useUi.getState();
+    if (!code) return ui.toast({ text: `${card.displayName} isn’t in a hosted game right now (offline games can’t be joined).`, kind: 'warn' });
+    ui.toast({ text: `Joining ${card.displayName}’s game…` });
+    try {
+      await joinGame(code);
+      onClose();
+      ui.go('lobby');
+    } catch {
+      ui.toast({ text: 'Couldn’t join that game.', kind: 'error' });
+    }
+  };
+  return (
+    <div className="admin-tools">
+      <div className="row admin-tools__row">
+        <button className="btn" onClick={() => void teleport()}>
+          Join their game
+        </button>
+        <button
+          className="btn btn--ghost"
+          onClick={() => window.confirm(info.banned ? `Unban ${card.displayName}?` : `Ban ${card.displayName}? They are signed out and can’t sign in.`) && void edit({ banned: !info.banned }, info.banned ? 'Unbanned' : 'Banned')}
+        >
+          {info.banned ? 'Unban' : 'Ban'}
+        </button>
+      </div>
+      <div className="admin-tools__grid">
+        {(
+          [
+            ['Coins', coins, setCoins],
+            ['XP', xp, setXp],
+            ['Games', games, setGames],
+            ['Wins', wins, setWins],
+          ] as const
+        ).map(([label, v, set]) => (
+          <label key={label} className="admin-field">
+            <span className="muted small">{label}</span>
+            <input className="input" inputMode="numeric" value={v} onChange={(e) => set(e.target.value.replace(/D/g, ''))} />
+          </label>
+        ))}
+      </div>
+      <button
+        className="btn"
+        onClick={() => void edit({ coins: n(coins), xp: n(xp), stats: { ...info.stats, games: n(games), wins: Math.min(n(wins), n(games)) } }, 'Stats saved')}
+      >
+        Save stats
+      </button>
+      <div className="row admin-tools__row">
+        <select className="input" value={give} onChange={(e) => setGive(e.target.value)} aria-label="Weapon to give">
+          <option value="">Give a weapon…</option>
+          {WEAPON_IDS.map((w) => (
+            <option key={w} value={w}>
+              {WEAPONS[w].name}
+            </option>
+          ))}
+        </select>
+        <button className="btn" disabled={!give} onClick={() => void edit({ owned: [...new Set([...info.ownedList, `weapon:${give}`])] }, 'Weapon given')}>
+          Give
+        </button>
       </div>
     </div>
   );

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { AdminWeapons } from '../AdminWeapons';
+import { useWeapons } from '../../weapons/custom';
 import {
   ACCENT_COLORS,
   COSMETIC_ITEMS,
@@ -7,6 +9,8 @@ import {
   SPECIAL_IDS,
   SPECIALS,
   WEAPON_IDS,
+  gate,
+  onSale,
   WEAPONS,
   WHEEL,
   type Cosmetics,
@@ -49,13 +53,21 @@ const FRAME: Partial<Record<Tab, Frame>> = { hair: 'side', headgear: 'hat', outf
 export const RARITY_LABEL: Record<Rarity, string> = { starter: 'Starter', common: 'Common', rare: 'Rare', epic: 'Epic', legendary: 'Legendary' };
 
 /** Everything the gallery can show, weapons included, as catalogue items. */
-const WEAPON_ITEMS: Item[] = WEAPON_IDS.map((id) => {
-  const w = WEAPONS[id];
-  const rarity: Rarity = w.price === 0 ? 'starter' : w.price < 1000 ? 'rare' : w.price < 1300 ? 'epic' : 'legendary';
-  return { key: `weapon:${id}`, slot: 'weapon', id, name: w.name, rarity, price: w.price };
-});
-export const CATALOGUE_SIZE = COSMETIC_ITEMS.length + WEAPON_ITEMS.length;
-const BY_KEY = new Map([...WEAPON_ITEMS, ...COSMETIC_ITEMS].map((it) => [it.key, it]));
+const WEAPON_ITEMS: Item[] = [];
+const BY_KEY = new Map<string, Item>();
+/** Rebuilds the weapon shelf (the owner can add and edit weapons while the game runs). */
+function rebuildWeapons() {
+  WEAPON_ITEMS.length = 0;
+  for (const id of WEAPON_IDS) {
+    const w = WEAPONS[id];
+    const rarity: Rarity = w.admin ? 'legendary' : w.price === 0 ? 'starter' : w.price < 1000 ? 'rare' : w.price < 1300 ? 'epic' : 'legendary';
+    const it: Item = { key: `weapon:${id}`, slot: 'weapon', id, name: w.name + (w.limitedUntil ? ' · Limited' : '') + (w.admin ? ' · Admin' : ''), rarity, price: w.price };
+    WEAPON_ITEMS.push(it);
+    BY_KEY.set(it.key, it);
+  }
+  for (const it of COSMETIC_ITEMS) BY_KEY.set(it.key, it);
+}
+rebuildWeapons();
 
 /* Portraits are drawn a few per frame as tiles scroll into view, so a full shelf never stalls. */
 const queue: (() => void)[] = [];
@@ -100,9 +112,18 @@ function Preview({ cacheKey, draw, fallback }: { cacheKey: string; draw: () => s
   return src ? <img src={src} alt="" draggable={false} /> : <span ref={ref} className="item__blank" style={fallback ? { background: fallback } : undefined} />;
 }
 
+/** Admin weapons are the owner's alone; limited ones close for everyone who doesn't own them. */
+const sellable = (id: string, owns: boolean) => {
+  const w = WEAPONS[id];
+  return !w || (w.admin ? gate.owner : owns || onSale(w));
+};
+
 const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
 export default function Locker() {
+  const wv = useWeapons((x) => x.v);
+  useMemo(rebuildWeapons, [wv]);
+  const [editing, setEditing] = useState(false);
   const [tab, setTab] = useState<Tab>('weapon');
   const [show, setShow] = useState<'all' | 'owned' | 'shop'>('all');
   const [rarity, setRarity] = useState<Rarity | 'any'>('any');
@@ -170,7 +191,7 @@ export default function Locker() {
           : itemsFor(t);
   const list = useMemo(() => {
     if (tab === 'special' || tab === 'skin') return [];
-    const all = tab === 'favs' ? favItems : tab === 'weapon' ? WEAPON_ITEMS : itemsFor(tab);
+    const all = (tab === 'favs' ? favItems : tab === 'weapon' ? WEAPON_ITEMS : itemsFor(tab)).filter((it) => it.slot !== 'weapon' || sellable(it.id, p.owns(it.key)));
     const needle = q.trim().toLowerCase();
     return all.filter(
       (it) =>
@@ -178,7 +199,7 @@ export default function Locker() {
         (rarity === 'any' || it.rarity === rarity) &&
         (!needle || it.name.toLowerCase().includes(needle)),
     );
-  }, [tab, show, rarity, q, p, favItems]);
+  }, [tab, show, rarity, q, p, favItems, wv]);
 
   const owned = shelfItems(tab).filter((it) => p.owns(it.key)).length;
   const total = shelfItems(tab).length;
@@ -293,14 +314,22 @@ export default function Locker() {
 
   return (
     <main className="screen locker" data-pig="cobalt">
+      {editing && <AdminWeapons onClose={() => setEditing(false)} />}
       <Header
         title="Locker"
-        sub={`${allOwned} of ${CATALOGUE_SIZE} items collected. Pick anything to try it on, and drag the empty space to turn the character.`}
+        sub={`${allOwned} of ${COSMETIC_ITEMS.length + WEAPON_ITEMS.length} items collected. Pick anything to try it on, and drag the empty space to turn the character.`}
         end={
+          <>
+            {gate.owner && (
+              <button className="btn btn--ghost" onClick={() => setEditing(true)}>
+                Admin weapons
+              </button>
+            )}
           <span className="coins" aria-label={`${p.coins} coins`}>
             <Coin size={20} />
             <span className="num">{p.coins.toLocaleString()}</span>
           </span>
+          </>
         }
       />
       <div className="col--wide locker__body">

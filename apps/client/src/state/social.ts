@@ -188,9 +188,21 @@ async function start() {
     }),
   );
   useSocial.setState({ ready: true });
-  const pulse = () => void s.setPresence(true, activity()).catch(() => undefined);
+  const pulse = () => {
+    void s.setPresence(true, activity()).catch(() => undefined);
+    shareRoom();
+  };
   pulse();
   beat = window.setInterval(pulse, 60_000);
+}
+
+let sharedRoom: string | null = null;
+/** Lets the owner see which game this player is in (and nobody else). */
+function shareRoom(force = false) {
+  const code = useNet.getState().lobby?.code ?? null;
+  if (!api || !useSocial.getState().ready || (!code && sharedRoom === null && !force)) return;
+  sharedRoom = code;
+  void api.setRoom(code).catch(() => undefined);
 }
 
 function stop() {
@@ -223,6 +235,7 @@ useUi.subscribe((u, prev) => {
   if (u.screen !== prev.screen && api && useSocial.getState().ready) void api.setPresence(true, activity()).catch(() => undefined);
 });
 useNet.subscribe((n, prev) => {
+  if (n.lobby?.code !== prev.lobby?.code) shareRoom();
   const me = useAccount.getState().user?.uid;
   const party = useSocial.getState().party;
   if (!api || !me || party?.leader !== me || n.lobby?.code === prev.lobby?.code) return;

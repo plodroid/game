@@ -142,6 +142,12 @@ export async function setPresence(online: boolean, activity: Card['activity'] = 
   await setDoc(doc(db, 'profiles', uid), { online, activity, seenAt: serverTimestamp() }, { merge: true });
 }
 
+/** Tells the owner which game this player is in (the owner can read it; nobody else can). */
+export async function setRoom(code: string | null) {
+  const { db, uid } = me();
+  await setDoc(doc(db, 'presence', uid), { code, updatedAt: serverTimestamp() });
+}
+
 /* ---------- Notifications ---------- */
 
 async function notify(to: string, n: Omit<Note, 'id' | 'from' | 'fromName' | 'createdAt' | 'read' | 'expiresAt'> & { expiresAt?: number }) {
@@ -332,6 +338,9 @@ export interface AccountDetails {
   owned: number;
   games: number;
   wins: number;
+  banned: boolean;
+  stats: Record<string, unknown>;
+  ownedList: string[];
 }
 
 /** Every player card, newest account first. */
@@ -355,5 +364,21 @@ export async function accountDetails(uid: string): Promise<AccountDetails> {
     owned: Array.isArray(d.owned) ? d.owned.length : 0,
     games: Number(d.stats?.games ?? 0),
     wins: Number(d.stats?.wins ?? 0),
+    banned: d.banned === true,
+    stats: (d.stats as Record<string, unknown>) ?? {},
+    ownedList: Array.isArray(d.owned) ? d.owned.filter((k): k is string => typeof k === 'string') : [],
   };
+}
+
+/** The game code this player is in right now, if they were seen in one lately. */
+export async function roomOf(uid: string): Promise<string | null> {
+  const { db } = me();
+  const d = (await getDoc(doc(db, 'presence', uid))).data();
+  return d?.code && Date.now() - ms(d.updatedAt) < ONLINE_MS + 60_000 ? String(d.code) : null;
+}
+
+/** Owner only: changes an account's progress or bans it (the rules refuse anyone else). */
+export async function adminEdit(uid: string, f: { xp?: number; coins?: number; stats?: Record<string, unknown>; owned?: string[]; banned?: boolean }) {
+  const { db } = me();
+  await setDoc(doc(db, 'users', uid), { ...f, updatedAt: serverTimestamp() }, { merge: true });
 }

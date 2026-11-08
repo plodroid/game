@@ -17,6 +17,8 @@ export const portraitKey = (c: Cosmetics, team: 0 | 1, frame: Frame) => `${frame
 export const weaponKey = (id: WeaponId, finish: string) => `weapon:${id}:${finish}`;
 /** A portrait already drawn, without drawing one. */
 export const peek = (key: string) => cache.get(key) ?? null;
+/** Forgets drawn weapon portraits (after the owner edits a weapon). */
+export const dropWeaponPortraits = () => [...cache.keys()].forEach((k) => k.startsWith('weapon:') && cache.delete(k));
 
 function getStage() {
   if (!stage) {
