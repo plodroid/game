@@ -83,6 +83,8 @@ export class OfflineSource implements MatchSource {
   private seq = 0;
   private prev = new Map<number, Vec3>();
   private view: ViewPlayer[] = [];
+  /** Set when this match has been opened to guests: they feed in before each step and get the result after. */
+  tap: { before(): void; after(events: SimEvent[]): void } | null = null;
 
   constructor(
     readonly sim: Simulation,
@@ -113,6 +115,7 @@ export class OfflineSource implements MatchSource {
         q.z = p.pos.z;
         this.prev.set(p.id, q);
       }
+      this.tap?.before();
       sim.setInput(this.localId, {
         seq: ++this.seq,
         mx: inp.mx,
@@ -126,7 +129,9 @@ export class OfflineSource implements MatchSource {
       });
       inp.consume();
       sim.step();
-      for (const e of sim.drainEvents()) out.push(e);
+      const stepEvents = sim.drainEvents();
+      for (const e of stepEvents) out.push(e);
+      this.tap?.after(stepEvents);
       this.acc -= DT;
     }
     const a = this.acc / DT;

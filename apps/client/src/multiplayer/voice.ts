@@ -1,5 +1,6 @@
 import type { MediaConnection, Peer as PeerType } from 'peerjs';
 import { create } from 'zustand';
+import { getMic } from '../audio/mic';
 import { useSettings } from '../settings/settings';
 
 /*
@@ -165,14 +166,26 @@ function sendTrack() {
 
 const inApp = typeof navigator !== 'undefined' && /Electron/i.test(navigator.userAgent);
 
+function listen(stream: MediaStream) {
+  const c = audioCtx();
+  micAnalyser = c.createAnalyser();
+  micAnalyser.fftSize = 512;
+  c.createMediaStreamSource(stream).connect(micAnalyser);
+}
+
+/** The player picked a different microphone: switch to it without leaving the room. */
+async function swapMic() {
+  if (!mic) return;
+  mic.getTracks().forEach((t) => t.stop());
+  mic = null;
+  await ensureMic();
+}
+
 async function ensureMic() {
   if (mic) return true;
   try {
-    mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-    const c = audioCtx();
-    micAnalyser = c.createAnalyser();
-    micAnalyser.fftSize = 512;
-    c.createMediaStreamSource(mic).connect(micAnalyser);
+    mic = await getMic();
+    listen(mic);
     sendTrack();
     applyMic();
     useVoice.setState({ error: null });
@@ -291,6 +304,7 @@ export const voice = {
 // Volume and mic mode follow the settings live.
 useSettings.subscribe((s, prev) => {
   if (s.audio === prev.audio) return;
+  if (s.audio.micId !== prev.audio.micId) void swapMic();
   applyVolumes();
   if (s.audio.voiceMode === 'open' && room) void ensureMic();
   applyMic();

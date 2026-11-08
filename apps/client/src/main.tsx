@@ -2,6 +2,7 @@
 import '@fontsource-variable/archivo/standard.css';
 import './styles/global.css';
 import './styles/hud.css';
+import './styles/social.css';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { webgl2Available } from './settings/hardware';

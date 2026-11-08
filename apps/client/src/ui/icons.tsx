@@ -169,6 +169,31 @@ export const Icon = {
       <path d="M3 19c.6-3.2 2.6-5 5-5s4.4 1.8 5 5M13.5 15.2c.9-.8 1.9-1.2 3-1.2 2 0 3.6 1.6 4 5" />
     </svg>
   ),
+  phone: ({ size = 18, ...p }: P) => (
+    <svg {...base(size, p)}>
+      <path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A15 15 0 0 1 3 6a2 2 0 0 1 2-2z" />
+    </svg>
+  ),
+  hangup: ({ size = 18, ...p }: P) => (
+    <svg {...base(size, p)}>
+      <path d="M3 14c5-4 13-4 18 0l-1.5 2.5-3-1.2v-2.3a11 11 0 0 0-8 0v2.3l-3 1.2z" fill="currentColor" />
+    </svg>
+  ),
+  image: ({ size = 18, ...p }: P) => (
+    <svg {...base(size, p)}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+      <circle cx="9" cy="10" r="1.6" />
+      <path d="M4 17l5-4.5 3.5 3L16 12l4 4" />
+    </svg>
+  ),
+  pad: ({ size = 18, ...p }: P) => (
+    <svg {...base(size, p)}>
+      <path d="M7 8h10a4 4 0 0 1 4 4v1.5a3 3 0 0 1-5.2 2L14.5 14h-5l-1.3 1.5A3 3 0 0 1 3 13.5V12a4 4 0 0 1 4-4z" />
+      <path d="M8 10.5v2M7 11.5h2" />
+      <circle cx="15.5" cy="11" r=".6" fill="currentColor" />
+      <circle cx="17.5" cy="12.5" r=".6" fill="currentColor" />
+    </svg>
+  ),
   stop: ({ size = 16, ...p }: P) => (
     <svg {...base(size, p)}>
       <rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none" />

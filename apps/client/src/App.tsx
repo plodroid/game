@@ -12,6 +12,7 @@ import { Home } from './ui/screens/Home';
 import { Custom, Play } from './ui/screens/Play';
 import { useMenuGamepad } from './ui/useMenuGamepad';
 import { SocialBar } from './ui/SocialBar';
+import { CallUi } from './ui/CallUi';
 import { useSocial } from './state/social';
 
 const Online = lazy(() => import('./ui/screens/Online'));
@@ -131,6 +132,7 @@ export function App({ webgl2 }: { webgl2: boolean }) {
       {!gated && screen !== 'match' && <SocialBar />}
       <Viewing />
       <Toasts />
+      {!gated && <CallUi />}
       <Reconnecting />
     </>
   );

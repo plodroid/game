@@ -61,7 +61,9 @@ export function buildWeapon(
         : q.s === 'sphere' ? new THREE.SphereGeometry(0.5, s(10), s(8))
         : q.s === 'cone' ? new THREE.ConeGeometry(0.5, 1, s(10)).rotateX(-Z)
         : new THREE.TorusGeometry(0.5, 0.12, 6, s(14));
-      add(geo, mat[q.c], q.x, q.y, q.z).scale.set(q.w, q.h, q.d);
+      const part = add(geo, mat[q.c], q.x, q.y, q.z);
+      part.scale.set(q.w, q.h, q.d);
+      if (q.rx || q.ry || q.rz) part.rotation.set(((q.rx ?? 0) * Math.PI) / 180, ((q.ry ?? 0) * Math.PI) / 180, ((q.rz ?? 0) * Math.PI) / 180);
     }
     muzzle.position.set(0, def.look.muzzle?.[0] ?? 0.1, def.look.muzzle?.[1] ?? -0.4);
   } else switch (def.kind) {

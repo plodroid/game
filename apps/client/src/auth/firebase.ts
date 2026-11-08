@@ -27,6 +27,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   initializeFirestore,
   limit,
   onSnapshot,
@@ -530,6 +531,12 @@ export interface PublicGame {
   players: number;
   phase: string;
   protocol: number;
+  /** A skill-matched random server (found with the Random server button). */
+  random?: boolean;
+  /** The host's skill rating, used to match players of a similar level. */
+  skill?: number;
+  /** Rough region of the host (from their time zone), so random servers are close. */
+  region?: string;
   /** Server time of the last refresh, in ms; listings that stop refreshing are ignored. */
   updatedAt: number;
 }
@@ -538,6 +545,18 @@ export interface PublicGame {
 export async function publishGame(g: Omit<PublicGame, 'uid' | 'updatedAt'>) {
   if (!user) throw Object.assign(new Error('signed-out'), { code: 'signed-out' });
   await setDoc(doc(db, 'rooms', user.uid), { ...g, updatedAt: serverTimestamp() });
+}
+
+/** Open random servers in a region (one look, not live). */
+export async function listRandomGames(freshMs: number, region: string): Promise<PublicGame[]> {
+  const q = query(collection(db, 'rooms'), where('updatedAt', '>', Timestamp.fromMillis(Date.now() - freshMs)), orderBy('updatedAt', 'desc'), limit(60));
+  const snap = await getDocs(q);
+  return snap.docs
+    .map((d) => {
+      const x = d.data();
+      return { ...(x as Omit<PublicGame, 'uid' | 'updatedAt'>), uid: d.id, updatedAt: tsToMs(x.updatedAt) ?? Date.now() };
+    })
+    .filter((g) => g.random === true && g.region === region);
 }
 
 export async function unpublishGame() {

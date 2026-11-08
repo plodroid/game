@@ -34,6 +34,8 @@ export const MSG = {
   MODS: 'mods',
   /** Items, coins or XP granted by an admin: host to that player's client. */
   GRANT: 'grant',
+  /** A random-server player says they want another match: client → host. */
+  AGAIN: 'again',
 } as const;
 
 export const CHAT_MAX = 120;
@@ -83,6 +85,8 @@ export interface LobbyState {
   phase: 'lobby' | 'match' | 'results';
   hostId: number;
   quick: boolean;
+  /** A skill-matched random server: players who tap Play again are carried into the next lobby. */
+  random?: boolean;
   settings: LobbySettings;
   players: LobbyPlayer[];
   /** Quick Play: seconds until the match auto-starts. */

@@ -18,58 +18,14 @@ const ACTION_BTN: Partial<Record<Action, number>> = {
   special: BTN.SPECIAL,
 };
 
-// Standard-mapping gamepad buttons.
-/** Standard gamepad layout (Xbox, PlayStation and most others): button index per action. */
-const PAD: Partial<Record<Action, number>> = {
-  fire: 7,
-  dive: 6,
-  jump: 0,
-  slide: 1,
-  dodge: 2,
-  special: 5,
-  sprint: 10,
-  emote: 3,
-  scoreboard: 8,
-  pause: 9,
-  talk: 12,
-  map: 15,
-};
+export { padStyle, PAD_BUTTON, type PadStyle } from './devices';
 
-export type PadStyle = 'xbox' | 'playstation';
-/** Sony controllers (DualShock 4, DualSense) get PlayStation button names. */
-export const padStyle = (p: Gamepad | null | undefined): PadStyle =>
-  /054c|dualshock|dualsense|playstation|wireless controller/i.test(p?.id ?? '') ? 'playstation' : 'xbox';
-
-/** What each action's controller button is called on that kind of controller. */
-export const PAD_LABEL: Record<PadStyle, Partial<Record<Action, string>>> = {
-  xbox: {
-    fire: 'RT',
-    dive: 'LT',
-    jump: 'A',
-    slide: 'B',
-    dodge: 'X',
-    special: 'RB',
-    sprint: 'L3',
-    emote: 'Y',
-    scoreboard: 'View',
-    pause: 'Menu',
-    talk: 'D-pad up',
-    map: 'D-pad right',
-  },
-  playstation: {
-    fire: 'R2',
-    dive: 'L2',
-    jump: '✕',
-    slide: '○',
-    dodge: '□',
-    special: 'R1',
-    sprint: 'L3',
-    emote: '△',
-    scoreboard: 'Share',
-    pause: 'Options',
-    talk: 'D-pad up',
-    map: 'D-pad right',
-  },
+/** The controller button for an action, from the player's own bindings. */
+const padOf = (a: Action) => useSettings.getState().controls.padBindings[a] ?? undefined;
+/** The action bound to a controller button, if any. */
+const actionOf = (i: number): Action | undefined => {
+  const b = useSettings.getState().controls.padBindings;
+  return (Object.keys(b) as Action[]).find((a) => b[a] === i);
 };
 
 const DEAD = 0.18;
@@ -282,32 +238,36 @@ export class InputManager {
     if (!p) return;
     p.buttons.forEach((b, i) => {
       const on = b.pressed || b.value > 0.4;
+      const act = actionOf(i);
       if (on && !this.padDown.has(i)) {
         this.padLatched.add(i);
-        if (i === PAD.pause) this.onPause?.();
-        if (i === PAD.map) this.onMap?.();
-        if (i === PAD.talk) this.onTalk?.(true);
-        if (i === PAD.emote && this.wantsLock) this.openWheel();
+        if (act === 'pause') this.onPause?.();
+        if (act === 'map') this.onMap?.();
+        if (act === 'view') this.onView?.();
+        if (act === 'chat') this.onChat?.();
+        if (act === 'talk') this.onTalk?.(true);
+        if (act === 'emote' && this.wantsLock) this.openWheel();
       }
-      if (!on && this.padDown.has(i) && i === PAD.talk) this.onTalk?.(false);
-      if (!on && this.padDown.has(i) && i === PAD.emote) this.closeWheel();
+      if (!on && this.padDown.has(i) && act === 'talk') this.onTalk?.(false);
+      if (!on && this.padDown.has(i) && act === 'emote') this.closeWheel();
       if (on) this.padDown.add(i);
       else this.padDown.delete(i);
     });
-    if (PAD.scoreboard !== undefined) this.onScoreboard?.(this.padDown.has(PAD.scoreboard));
+    const sb = padOf('scoreboard');
+    if (sb !== undefined) this.onScoreboard?.(this.padDown.has(sb));
   }
 
   held(a: Action) {
     const codes = useSettings.getState().controls.bindings[a] ?? [];
     if (codes.some((c) => this.down.has(c))) return true;
-    const pi = PAD[a];
+    const pi = padOf(a);
     return pi !== undefined && this.padDown.has(pi);
   }
 
   private pressed(a: Action) {
     const codes = useSettings.getState().controls.bindings[a] ?? [];
     if (codes.some((c) => this.latched.has(c))) return true;
-    const pi = PAD[a];
+    const pi = padOf(a);
     return pi !== undefined && this.padLatched.has(pi);
   }
 

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { engine, PRESET_LABEL } from '../../game/engine';
-import { PAD_LABEL, padStyle, type PadStyle } from '../../game/input';
+import { audio } from '../../audio/audio';
+import { getMic, listMics, type MicDevice } from '../../audio/mic';
+import { PAD_BUTTON, useButtonStyle, useDevice } from '../../game/devices';
 import { menu } from '../../game/session';
 import { PALETTES } from '../../rendering/palette';
 import { benchmark, probeHardware, recommend, type HardwareReport } from '../../settings/hardware';
-import { DEFAULT_BINDINGS, useSettings, type Action, type Preset } from '../../settings/settings';
+import { DEFAULT_BINDINGS, DEFAULT_PAD, useSettings, type Action, type Preset } from '../../settings/settings';
 import { useUi } from '../../state/ui';
 import { checkForUpdates, useUpdates, type UpdateResult } from '../../updates';
 import { Button, Header, KeyCapture, keyLabel, Segmented, Setting, Slider, Toggle } from '../kit';
@@ -224,10 +226,98 @@ function MicAccess() {
   );
 }
 
+function MicPicker() {
+  const mic = useSettings((s) => s.audio.micId);
+  const set = useSettings((s) => s.set);
+  const [mics, setMics] = useState<MicDevice[]>([]);
+  const [level, setLevel] = useState<number | null>(null);
+  const refresh = () => void listMics().then(setMics);
+  useEffect(() => {
+    refresh();
+    navigator.mediaDevices?.addEventListener?.('devicechange', refresh);
+    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', refresh);
+  }, []);
+  // A live level so you can see the chosen microphone is picking you up.
+  useEffect(() => {
+    if (level === null) return;
+    let stop = false;
+    let stream: MediaStream | null = null;
+    let ctx: AudioContext | null = null;
+    let raf = 0;
+    void getMic()
+      .then((m) => {
+        if (stop) return m.getTracks().forEach((t) => t.stop());
+        stream = m;
+        ctx = new AudioContext();
+        const a = ctx.createAnalyser();
+        a.fftSize = 512;
+        ctx.createMediaStreamSource(m).connect(a);
+        const buf = new Float32Array(512);
+        const tick = () => {
+          a.getFloatTimeDomainData(buf);
+          let sum = 0;
+          for (const v of buf) sum += v * v;
+          setLevel(Math.min(1, Math.sqrt(sum / buf.length) * 6));
+          raf = requestAnimationFrame(tick);
+        };
+        tick();
+        refresh();
+      })
+      .catch(() => setLevel(null));
+    return () => {
+      stop = true;
+      cancelAnimationFrame(raf);
+      stream?.getTracks().forEach((t) => t.stop());
+      void ctx?.close();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [level === null, mic]);
+  return (
+    <Setting name="Microphone" hint="Pick the microphone for voice chat, calls and voice messages. Use Test to see it pick you up.">
+      <select className="select" value={mic} onChange={(e) => set('audio', { micId: e.target.value })} aria-label="Microphone">
+        <option value="">System default</option>
+        {mics.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.label}
+          </option>
+        ))}
+        {mic && !mics.some((m) => m.id === mic) && <option value={mic}>Saved microphone (not plugged in)</option>}
+      </select>
+      <Button onClick={() => setLevel(level === null ? 0 : null)}>{level === null ? 'Test' : 'Stop'}</Button>
+      {level !== null && (
+        <span className="meter-mini" aria-label="Microphone level">
+          <span style={{ width: `${Math.round(level * 100)}%` }} />
+        </span>
+      )}
+    </Setting>
+  );
+}
+
+function Notifications() {
+  const a = useSettings((s) => s.audio);
+  const set = useSettings((s) => s.set);
+  const [perm, setPerm] = useState(typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
+  return (
+    <>
+      <Setting name="Message and call sounds" hint="A chime for new messages and invites, and a ringtone when someone calls.">
+        <Toggle label="Message and call sounds" checked={a.notifySounds} onChange={(v) => set('audio', { notifySounds: v })} />
+        <Button onClick={() => audio.play('notify')}>Hear it</Button>
+      </Setting>
+      {perm !== 'unsupported' && (
+        <Setting name="Pop-up notifications" hint="Shows a notification when someone calls while the game is in the background.">
+          <Button disabled={perm === 'granted'} onClick={() => void Notification.requestPermission().then(setPerm)}>
+            {perm === 'granted' ? 'Allowed' : perm === 'denied' ? 'Blocked in browser' : 'Allow'}
+          </Button>
+        </Setting>
+      )}
+    </>
+  );
+}
+
 function Audio() {
   const a = useSettings((s) => s.audio);
   const set = useSettings((s) => s.set);
-  const rows: [Exclude<keyof typeof a, 'voiceMode' | 'voiceRange'>, string][] = [
+  const rows: [Exclude<keyof typeof a, 'voiceMode' | 'voiceRange' | 'micId' | 'notifySounds'>, string][] = [
     ['master', 'Master'],
     ['music', 'Music'],
     ['sfx', 'Sound effects'],
@@ -245,6 +335,8 @@ function Audio() {
         </Setting>
       ))}
       <MicAccess />
+      <MicPicker />
+      <Notifications />
       <Setting name="Voice chat microphone" hint={`Push to talk: hold ${keyLabel(talk)} to speak. Your browser asks for the microphone the first time.`}>
         <Segmented
           label="Voice chat microphone"
@@ -297,49 +389,142 @@ const ACTIONS: [Action, string][] = [
   ['pause', 'Pause'],
 ];
 
-/** Controller buttons, named for whichever kind is plugged in (PlayStation or Xbox-style). */
-function PadHint() {
-  const [style, setStyle] = useState<PadStyle | null>(() => {
-    const p = [...(navigator.getGamepads?.() ?? [])].find((x) => x?.connected);
-    return p ? padStyle(p) : null;
-  });
+/** The actions a controller can do (movement is the left stick and looking is the right stick). */
+const PAD_ACTIONS = ACTIONS.filter(([a]) => !['forward', 'back', 'left', 'right'].includes(a));
+
+/** Rebinds a controller button: pick from the list (works on any device), or press the button on the controller itself. */
+function PadSlot({ action }: { action: Action }) {
+  const value = useSettings((s) => s.controls.padBindings[action]);
+  const bindPad = useSettings((s) => s.bindPad);
+  const style = useButtonStyle();
+  const connected = useDevice((d) => d.pad !== null);
+  const [listening, setListening] = useState(false);
   useEffect(() => {
-    const on = (e: GamepadEvent) => setStyle(padStyle(e.gamepad));
-    const off = () => setStyle(null);
-    addEventListener('gamepadconnected', on);
-    addEventListener('gamepaddisconnected', off);
-    return () => {
-      removeEventListener('gamepadconnected', on);
-      removeEventListener('gamepaddisconnected', off);
+    if (!listening) return;
+    let raf = 0;
+    const t0 = performance.now();
+    const base = new Set<number>();
+    const tick = () => {
+      const p = [...(navigator.getGamepads?.() ?? [])].find((x) => x?.connected);
+      if (p) {
+        // Ignore anything already held when listening began.
+        p.buttons.forEach((b, i) => {
+          if (performance.now() - t0 < 250) return void (b.pressed && base.add(i));
+          if (b.pressed && !base.has(i)) {
+            bindPad(action, i);
+            setListening(false);
+          }
+          if (!b.pressed) base.delete(i);
+        });
+      }
+      raf = requestAnimationFrame(tick);
     };
-  }, []);
-  const l = PAD_LABEL[style ?? 'xbox'];
-  const acts: [Action, string][] = [
-    ['fire', 'fire'],
-    ['dive', 'dive'],
-    ['jump', 'jump'],
-    ['slide', 'slide'],
-    ['dodge', 'dodge'],
-    ['special', 'special'],
-    ['sprint', 'sprint'],
-    ['emote', 'emote'],
-    ['talk', 'talk'],
-    ['map', 'map'],
-    ['pause', 'pause'],
-  ];
+    raf = requestAnimationFrame(tick);
+    const esc = (e: KeyboardEvent) => e.code === 'Escape' && setListening(false);
+    addEventListener('keydown', esc);
+    return () => {
+      cancelAnimationFrame(raf);
+      removeEventListener('keydown', esc);
+    };
+  }, [listening, action, bindPad]);
   return (
-    <span className="muted small">
-      {style === 'playstation'
-        ? 'PlayStation controller'
-        : style
-          ? 'Controller'
-          : 'Controller (Xbox or PlayStation)'}
-      : {acts.map(([a, n]) => `${l[a]} ${n}`).join(' · ')}
-    </span>
+    <>
+      <select className="select select--pad" value={value ?? ''} onChange={(e) => bindPad(action, e.target.value === '' ? null : Number(e.target.value))} aria-label={`Controller button for ${action}`}>
+        <option value="">Not set</option>
+        {PAD_BUTTON[style].slice(0, 16).map((n, i) => (
+          <option key={n} value={i}>
+            {n}
+          </option>
+        ))}
+      </select>
+      {connected && (
+        <button type="button" className="key" data-listening={listening} onClick={() => setListening(!listening)}>
+          {listening ? 'Press a button…' : 'Press'}
+        </button>
+      )}
+    </>
   );
 }
 
-function Controls() {
+function ControllerControls() {
+  const c = useSettings((s) => s.controls);
+  const set = useSettings((s) => s.set);
+  const pad = useDevice();
+  const style = useButtonStyle();
+  return (
+    <>
+      <p className="muted small" style={{ margin: '0 0 10px' }}>
+        {pad.pad
+          ? `Detected: ${pad.pad === 'playstation' ? 'PlayStation-style' : 'Xbox'} controller${pad.padName ? ` (${pad.padName.replace(/\(.*?Vendor.*?\)/, '').trim().slice(0, 48)})` : ''}.`
+          : 'No controller yet. Connect one (USB or Bluetooth, on a computer, phone or tablet) and press any button on it. Until then, PlayStation buttons are shown.'}
+      </p>
+      <Setting name="Button names" hint="Auto uses the controller you’re holding, and PlayStation names if it can’t tell.">
+        <Segmented
+          value={c.padStyle}
+          onChange={(v) => set('controls', { padStyle: v })}
+          label="Button names"
+          options={[
+            { value: 'auto', label: 'Auto' },
+            { value: 'playstation', label: 'PlayStation' },
+            { value: 'xbox', label: 'Xbox' },
+          ]}
+        />
+      </Setting>
+      <Setting name="Gamepad sensitivity">
+        <Slider label="Gamepad sensitivity" value={c.gamepadSensitivity} min={0.2} max={2.5} step={0.05} format={(v) => v.toFixed(2)} onChange={(v) => set('controls', { gamepadSensitivity: v })} />
+      </Setting>
+      <Setting name="Controller vibration">
+        <Toggle label="Controller vibration" checked={c.vibration} onChange={(v) => set('controls', { vibration: v })} />
+      </Setting>
+      <Setting name="Move and look" hint="The left stick moves and the right stick looks. Sticks can’t be remapped.">
+        <span className="muted small">Fixed</span>
+      </Setting>
+      <h3 className="panel__title" style={{ marginTop: 18 }}>
+        Controller buttons ({style === 'playstation' ? 'PlayStation' : 'Xbox'})
+      </h3>
+      {PAD_ACTIONS.map(([a, label]) => (
+        <Setting key={a} name={label}>
+          <PadSlot action={a} />
+        </Setting>
+      ))}
+      <div className="row" style={{ marginTop: 12 }}>
+        <Button onClick={() => set('controls', { padBindings: DEFAULT_PAD })}>Reset controller buttons</Button>
+      </div>
+    </>
+  );
+}
+
+function TouchControlsSettings() {
+  const c = useSettings((s) => s.controls);
+  const set = useSettings((s) => s.set);
+  return (
+    <>
+      <Setting name="Touch controls" hint="Auto shows them on touch screens, and hides them while you play with a controller.">
+        <Segmented value={c.touchControls} onChange={(v) => set('controls', { touchControls: v })} label="Touch controls" options={[{ value: 'auto', label: 'Auto' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }]} />
+      </Setting>
+      <Setting name="Button size" hint="Bigger buttons are easier to hit; smaller ones leave more of the screen.">
+        <Slider label="Button size" value={c.touchScale} min={0.7} max={1.5} step={0.05} format={(v) => `×${v.toFixed(2)}`} onChange={(v) => set('controls', { touchScale: v })} />
+      </Setting>
+      <Setting name="Button opacity">
+        <Slider label="Button opacity" value={c.touchOpacity} min={0.25} max={1} step={0.05} onChange={(v) => set('controls', { touchOpacity: v })} />
+      </Setting>
+      <Setting name="Vibrate on touch" hint="A short buzz when you press a button (where the phone allows it).">
+        <Toggle label="Vibrate on touch" checked={c.touchHaptics} onChange={(v) => set('controls', { touchHaptics: v })} />
+      </Setting>
+      <Setting name="Look sensitivity" hint="Dragging anywhere on the right side turns the camera.">
+        <Slider label="Camera sensitivity" value={useSettings.getState().gameplay.cameraSensitivity} min={0.3} max={2.5} step={0.05} format={(v) => `×${v.toFixed(2)}`} onChange={(v) => useSettings.getState().set('gameplay', { cameraSensitivity: v })} />
+      </Setting>
+      <div className="touch-preview" style={{ ['--ts' as string]: c.touchScale, ['--to' as string]: c.touchOpacity }} aria-hidden>
+        <span className="touch-preview__stick" />
+        <span className="touch-preview__b touch-preview__b--fire">FIRE</span>
+        <span className="touch-preview__b touch-preview__b--jump">JUMP</span>
+        <span className="touch-preview__b touch-preview__b--dive">DIVE</span>
+      </div>
+    </>
+  );
+}
+
+function KeyboardControls() {
   const c = useSettings((s) => s.controls);
   const set = useSettings((s) => s.set);
   const bind = useSettings((s) => s.bind);
@@ -354,15 +539,6 @@ function Controls() {
       <Setting name="Invert Y-axis">
         <Toggle label="Invert Y-axis" checked={c.invertY} onChange={(v) => set('controls', { invertY: v })} />
       </Setting>
-      <Setting name="Gamepad sensitivity">
-        <Slider label="Gamepad sensitivity" value={c.gamepadSensitivity} min={0.2} max={2.5} step={0.05} format={(v) => v.toFixed(2)} onChange={(v) => set('controls', { gamepadSensitivity: v })} />
-      </Setting>
-      <Setting name="Controller vibration">
-        <Toggle label="Controller vibration" checked={c.vibration} onChange={(v) => set('controls', { vibration: v })} />
-      </Setting>
-      <Setting name="Touch controls" hint="Auto shows them on touch screens.">
-        <Segmented value={c.touchControls} onChange={(v) => set('controls', { touchControls: v })} label="Touch controls" options={[{ value: 'auto', label: 'Auto' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }]} />
-      </Setting>
       <h3 className="panel__title" style={{ marginTop: 22 }}>
         Key bindings
       </h3>
@@ -376,9 +552,37 @@ function Controls() {
         </Setting>
       ))}
       <div className="row" style={{ marginTop: 12 }}>
-        <Button onClick={() => set('controls', { bindings: DEFAULT_BINDINGS })}>Reset bindings</Button>
-        <PadHint />
+        <Button onClick={() => set('controls', { bindings: DEFAULT_BINDINGS })}>Reset key bindings</Button>
       </div>
+    </>
+  );
+}
+
+type Kind = 'keyboard' | 'pad' | 'touch';
+
+/** Controls for every kind of device: pick the one you play on and change what each button does. */
+function Controls() {
+  const last = useDevice((d) => d.last);
+  const coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
+  const [kind, setKind] = useState<Kind>(last === 'pad' ? 'pad' : coarse ? 'touch' : 'keyboard');
+  return (
+    <>
+      <Segmented
+        value={kind}
+        onChange={setKind}
+        label="Device"
+        options={[
+          { value: 'keyboard', label: 'Keyboard & mouse' },
+          { value: 'pad', label: 'Controller' },
+          { value: 'touch', label: 'Touch' },
+        ]}
+      />
+      <p className="muted small" style={{ margin: '8px 0 14px' }}>
+        Every kind of device can be changed here, whichever one you’re using. The game switches to controller buttons by itself when you press one.
+      </p>
+      {kind === 'keyboard' && <KeyboardControls />}
+      {kind === 'pad' && <ControllerControls />}
+      {kind === 'touch' && <TouchControlsSettings />}
     </>
   );
 }

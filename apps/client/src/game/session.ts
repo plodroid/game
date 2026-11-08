@@ -17,11 +17,13 @@ import { leaveRoom, netHooks, useNet, type NetRoom } from '../multiplayer/net';
 import { benchmark, probeHardware, recommend } from '../settings/hardware';
 import { useSettings } from '../settings/settings';
 import { publicName, useProfile } from '../state/profile';
+import { useTutorial } from '../state/tutorial';
 import { useUi } from '../state/ui';
 import { engine, PRESET_LABEL } from './engine';
 import { MatchView } from './matchView';
 import { MenuView } from './menuView';
 import { OfflineSource, type MatchOutcome } from './source';
+import { closeWorld, openWorldFor } from './world';
 
 export const BOT_NAMES = ['Rook', 'Pixel', 'Mango', 'Nova', 'Juno', 'Kiwi', 'Echo', 'Taro', 'Zest', 'Moss', 'Vega', 'Bolt', 'Fizz', 'Lumen', 'Pico', 'Sable'];
 
@@ -34,6 +36,10 @@ export interface OfflineSetup {
   allies: number;
   /** Bots on the rival team (0–4). */
   rivals: number;
+  /** Not joinable by friends (the tutorial). */
+  private?: boolean;
+  /** The guided tutorial runs over this match. */
+  tutorial?: boolean;
 }
 
 let menuView: MenuView | null = null;
@@ -77,6 +83,10 @@ function shuffled<T>(a: readonly T[]): T[] {
   return r;
 }
 
+/** The guided tutorial: a quiet practice arena with steps, never joinable. */
+export const startTutorial = () =>
+  startOffline({ map: 'skyline', mode: 'practice', duration: 0, difficulty: 'easy', allies: 0, rivals: 4, private: true, tutorial: true });
+
 /** Re-runs the previous offline setup (results screen "Play again"). */
 export const replayOffline = () => lastSetup && startOffline(lastSetup);
 
@@ -114,9 +124,13 @@ export async function startOffline(s: OfflineSetup) {
     menuView = null;
     offline.sim = sim;
     resetLocalMods();
-    engine.setView(new MatchView(new OfflineSource(sim, 1), (o) => finish(o, 1)));
+    useTutorial.setState({ active: !!s.tutorial });
+    const source = new OfflineSource(sim, 1);
+    engine.setView(new MatchView(source, (o) => finish(o, 1)));
     ui.setPaused(false);
     ui.go('match');
+    // Friends (and the owner) can step into this match while it runs; practice and the tutorial stay private.
+    if (!practice && !s.private) void openWorldFor(source, 1);
   } catch (e) {
     console.error(e);
     ui.toast({ text: 'Couldn’t start the match. Try a lower graphics preset.', kind: 'error' });
@@ -140,6 +154,8 @@ export async function startOnline(room: NetRoom, start: MatchStart) {
 function finish(o: MatchOutcome, you: number) {
   const ui = useUi.getState();
   const profile = useProfile.getState();
+  // Guests in an open world get the results before the door closes.
+  closeWorld(15_000);
   const me = o.result.players.find((p) => p.id === you);
   const before = { xpBefore: profile.xp, levelBefore: levelInfo(profile.xp).level, coins: 0 };
   // Offline progress is local; online progress comes from the server-awarded XP.
@@ -156,6 +172,8 @@ function finish(o: MatchOutcome, you: number) {
 
 export function leaveMatch() {
   const ui = useUi.getState();
+  closeWorld();
+  useTutorial.setState({ active: false });
   if (currentOnline) leaveRoom();
   showMenu();
   ui.setPaused(false);

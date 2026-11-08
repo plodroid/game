@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { kindOf, MODES, SPECIALS, WEAPONS } from '@chromashift/shared';
 import { engine } from '../../game/engine';
 import { touch } from '../../game/input';
+import { useDevice } from '../../game/devices';
 import { leaveMatch } from '../../game/session';
 import { useNet } from '../../multiplayer/net';
 import { voice, useVoice } from '../../multiplayer/voice';
@@ -11,6 +12,8 @@ import { publicName, useProfile } from '../../state/profile';
 import { useHud, useUi } from '../../state/ui';
 import { useChat } from '../../state/chat';
 import { Chat } from './Chat';
+import { Roster, Spectate } from './Roster';
+import { Tutorial } from '../Tutorial';
 import { GameEmoteWheel } from '../EmoteWheel';
 import { Minimap } from './Minimap';
 import { Icon, TeamShape } from '../icons';
@@ -27,7 +30,9 @@ export function Hud() {
   const paused = useUi((s) => s.paused);
   const names = teamNames();
   const coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
-  const showTouch = touchMode === 'on' || (touchMode === 'auto' && coarse);
+  const lastDevice = useDevice((d) => d.last);
+  // A controller in your hands hides the on-screen buttons (touch brings them back).
+  const showTouch = touchMode === 'on' || (touchMode === 'auto' && coarse && lastDevice !== 'pad');
   useEffect(() => {
     touch.active = showTouch;
   }, [showTouch]);
@@ -148,6 +153,7 @@ export function Hud() {
         </div>
 
         <Minimap />
+        <Roster />
         <Chat me={{ id: you ?? 1, name: myName, team: h.myTeam }} />
 
         <div className="center-text">
@@ -169,6 +175,8 @@ export function Hud() {
       </div>
 
       {!paused && <GameEmoteWheel />}
+      {!paused && <Spectate />}
+      {!paused && <Tutorial />}
       {h.showBoard && <Scoreboard />}
       {showTouch && !paused && <TouchControls charge={h.charge} team={h.myTeam} />}
       {paused && <PauseMenu />}
@@ -393,11 +401,13 @@ function TouchControls({ charge, team }: { charge: number; team: number }) {
   const live = useVoice((v) => v.live);
   const voiceMode = useSettings((s) => s.audio.voiceMode);
 
+  const tc = useSettings((s) => s.controls);
   const btn = (bit: number, cls: string, label: ReactNode) => (
     <div
       className={`tbtn ${cls} ${down & bit ? 'is-down' : ''}`}
       onPointerDown={(e) => {
         e.stopPropagation();
+        if (tc.touchHaptics) navigator.vibrate?.(8);
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
         touch.buttons |= bit;
         setDown(touch.buttons);
@@ -418,6 +428,7 @@ function TouchControls({ charge, team }: { charge: number; team: number }) {
   return (
     <div
       className="touch"
+      style={{ ['--ts' as string]: tc.touchScale, ['--to' as string]: tc.touchOpacity }}
       onPointerDown={(e) => {
         if (e.clientX < innerWidth * 0.4 && stickId.current === null) {
           stickId.current = e.pointerId;

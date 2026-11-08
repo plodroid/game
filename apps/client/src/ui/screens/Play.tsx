@@ -9,7 +9,10 @@ import {
   type MapId,
   type ModeId,
 } from '@chromashift/shared';
-import { startOffline } from '../../game/session';
+import { startOffline, startTutorial } from '../../game/session';
+import { joinRandom } from '../../multiplayer/matchmaking';
+import { useAccount } from '../../auth/account';
+import { firebaseConfigured } from '../../env';
 import { hostFromMenu, ownHostCode } from '../../multiplayer/net';
 import { useUi } from '../../state/ui';
 import { Icon } from '../icons';
@@ -21,7 +24,22 @@ export const onlineIntent: { mode: 'join' | null } = { mode: null };
 export function Play() {
   const go = useUi((s) => s.go);
   const [code] = useState(ownHostCode);
+  const signedIn = useAccount((a) => a.status === 'signedIn');
   const items = [
+    {
+      title: 'Tutorial',
+      desc: 'New here? A guided practice with the controls for your device: move, paint, dive, climb walls and dodge.',
+      run: () => void startTutorial(),
+    },
+    ...(firebaseConfigured && signedIn
+      ? [
+          {
+            title: 'Random server',
+            desc: 'Jump into an open game near you with players of a similar skill. When it ends, tap Play again to keep going together.',
+            run: () => void joinRandom(),
+          },
+        ]
+      : []),
     { title: 'Host a game', desc: 'Friends join with your code. Runs in your browser, nothing to install.', run: () => void hostFromMenu() },
     {
       title: 'Join a game',

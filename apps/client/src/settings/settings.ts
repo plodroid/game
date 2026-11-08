@@ -50,6 +50,10 @@ export interface Settings {
     voice: number;
     voiceMode: VoiceMode;
     voiceRange: VoiceRange;
+    /** The microphone to use (a device id from the browser); empty = the system default. */
+    micId: string;
+    /** Sound and a pop-up when a message arrives or someone calls. */
+    notifySounds: boolean;
   };
   controls: {
     mouseSensitivity: number;
@@ -59,6 +63,14 @@ export interface Settings {
     vibration: boolean;
     touchControls: 'auto' | 'on' | 'off';
     bindings: Record<Action, string[]>;
+    /** Which controller button (standard layout index) does each action. */
+    padBindings: Record<Action, number | null>;
+    /** Which button names to show; auto picks from the connected controller (PlayStation if unsure). */
+    padStyle: 'auto' | 'playstation' | 'xbox';
+    /** On-screen buttons: size, see-through and buzz. */
+    touchScale: number;
+    touchOpacity: number;
+    touchHaptics: boolean;
   };
   gameplay: {
     cameraSensitivity: number;
@@ -143,6 +155,28 @@ export const DEFAULT_BINDINGS: Record<Action, string[]> = {
   view: ['KeyC'],
 };
 
+/** Standard-layout controller buttons: 0 ✕/A, 1 ○/B, 2 □/X, 3 △/Y, 4 L1, 5 R1, 6 L2, 7 R2, 8 Share, 9 Options, 10 L3, 11 R3, 12-15 D-pad. */
+export const DEFAULT_PAD: Record<Action, number | null> = {
+  forward: null,
+  back: null,
+  left: null,
+  right: null,
+  fire: 7,
+  dive: 6,
+  jump: 0,
+  slide: 1,
+  dodge: 2,
+  special: 5,
+  sprint: 10,
+  emote: 3,
+  scoreboard: 8,
+  pause: 9,
+  chat: null,
+  talk: 12,
+  map: 15,
+  view: 11,
+};
+
 export const DEFAULT_SETTINGS: Settings = {
   graphics: { preset: 'medium', ...PRESETS.medium, fpsCap: 60, showFps: false, adaptiveHints: true },
   audio: {
@@ -155,6 +189,8 @@ export const DEFAULT_SETTINGS: Settings = {
     voice: 0.9,
     voiceMode: 'ptt',
     voiceRange: 'proximity',
+    micId: '',
+    notifySounds: true,
   },
   controls: {
     mouseSensitivity: 1,
@@ -164,6 +200,11 @@ export const DEFAULT_SETTINGS: Settings = {
     vibration: true,
     touchControls: 'auto',
     bindings: DEFAULT_BINDINGS,
+    padBindings: DEFAULT_PAD,
+    padStyle: 'auto',
+    touchScale: 1,
+    touchOpacity: 0.7,
+    touchHaptics: true,
   },
   gameplay: {
     cameraSensitivity: 1,
@@ -191,6 +232,8 @@ interface SettingsStore extends Settings {
   applyPreset(p: Exclude<Preset, 'custom'>): void;
   set<K extends 'audio' | 'controls' | 'gameplay' | 'accessibility'>(section: K, patch: Partial<Settings[K]>): void;
   bind(action: Action, slot: number, code: string): void;
+  /** Puts a controller button on an action (null clears it); a button belongs to one action. */
+  bindPad(action: Action, button: number | null): void;
   reset(section?: keyof Settings): void;
   /** Overwrites from a cloud profile. */
   load(s: Partial<Settings>): void;
@@ -214,6 +257,7 @@ const merge = (s: Partial<Settings>): Settings => ({
     ...DEFAULT_SETTINGS.controls,
     ...s.controls,
     bindings: migrateBindings(s.controls?.bindings),
+    padBindings: { ...DEFAULT_PAD, ...s.controls?.padBindings },
   },
   gameplay: { ...DEFAULT_SETTINGS.gameplay, ...s.gameplay },
   accessibility: { ...DEFAULT_SETTINGS.accessibility, ...s.accessibility },
@@ -246,6 +290,13 @@ export const useSettings = create<SettingsStore>()(
           list[slot] = code;
           bindings[action] = list.filter(Boolean).slice(0, 2);
           return { controls: { ...s.controls, bindings } };
+        }),
+      bindPad: (action, button) =>
+        set((s) => {
+          const padBindings = { ...s.controls.padBindings };
+          if (button !== null) for (const a of Object.keys(padBindings) as Action[]) if (padBindings[a] === button) padBindings[a] = null;
+          padBindings[action] = button;
+          return { controls: { ...s.controls, padBindings } };
         }),
       reset: (section) =>
         set(

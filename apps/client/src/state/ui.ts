@@ -100,6 +100,7 @@ export interface BoardRow {
   paint: number;
   alive: boolean;
   you: boolean;
+  cosmetics?: Cosmetics;
 }
 
 export interface HudState {
@@ -120,6 +121,8 @@ export interface HudState {
   weapon: WeaponId;
   alive: boolean;
   respawnIn: number;
+  /** Who you're watching while you're out of the fight. */
+  spectating: { id: number; name: string; killer: boolean } | null;
   diving: boolean;
   feed: FeedItem[];
   notice: { id: number; text: string; tone: 'neutral' | 'good' | 'bad' } | null;
@@ -156,6 +159,7 @@ export const useHud = create<HudState>()(() => ({
   weapon: 'pulse',
   alive: true,
   respawnIn: 0,
+  spectating: null,
   diving: false,
   feed: [],
   notice: null,

@@ -16,12 +16,14 @@ export const LISTING_FRESH_MS = 150_000;
 interface ListingStore {
   /** The host wants this game listed. */
   wanted: boolean;
+  /** Also put it in the random-server pool (skill-matched). */
+  random: boolean;
   /** The listing is up. */
   live: boolean;
   error: string | null;
 }
 
-export const useListing = create<ListingStore>()(() => ({ wanted: false, live: false, error: null }));
+export const useListing = create<ListingStore>()(() => ({ wanted: false, random: false, live: false, error: null }));
 
 let heartbeat = 0;
 let pending = 0;
@@ -40,6 +42,8 @@ async function push() {
   const m = await accounts();
   if (!m) return;
   try {
+    // The skill rating and region are only looked up for random servers.
+    const extra = useListing.getState().random ? await import('./matchmaking').then((mm) => ({ random: true, skill: mm.mySkill(), region: mm.region() })) : {};
     await m.publishGame({
       code: s.code,
       name: s.players.find((p) => p.id === s.hostId)?.name ?? 'Host',
@@ -48,6 +52,7 @@ async function push() {
       players: Math.max(1, s.players.length),
       phase: s.phase,
       protocol: PROTOCOL_VERSION,
+      ...extra,
     });
     if (useListing.getState().wanted) useListing.setState({ live: true, error: null });
   } catch (e) {
@@ -66,6 +71,13 @@ function stopTimers() {
   pending = heartbeat = 0;
 }
 
+/** Puts the listed game in (or takes it out of) the random-server pool. */
+export function setRandom(on: boolean) {
+  useListing.setState({ random: on });
+  void import('./p2p').then((p) => p.setHostRandom(on));
+  if (useListing.getState().wanted) schedule(0);
+}
+
 /** Lists or unlists the game this tab hosts. */
 export async function setPublic(on: boolean) {
   if (on) {
@@ -77,7 +89,7 @@ export async function setPublic(on: boolean) {
   }
   const wasLive = useListing.getState().live;
   stopTimers();
-  useListing.setState({ wanted: false, live: false });
+  useListing.setState({ wanted: false, live: false, random: false });
   if (wasLive) await (await accounts())?.unpublishGame().catch(() => {});
 }
 

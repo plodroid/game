@@ -14,6 +14,7 @@ export default function Results() {
   const lobby = useNet((s) => s.lobby);
   const you = useNet((s) => s.you);
   const [shown, setShown] = useState(false);
+  const [again, setAgain] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setShown(true), 120);
     return () => clearTimeout(t);
@@ -42,6 +43,7 @@ export default function Results() {
   const levelled = after.level > before.level;
   const sorted = [...res.players].sort((a, b) => a.team - b.team || b.paint - a.paint);
   const isHost = lobby && lobby.hostId === you;
+  const random = !!lobby?.random;
 
   // The verdict sits on a field of your team's paint when you win, on ink when you lose.
   const field =
@@ -151,7 +153,29 @@ export default function Results() {
         )}
 
         <div className="row">
-          {r.online && lobby ? (
+          {r.online && lobby && random ? (
+            <>
+              {isHost ? (
+                <Button variant="primary" size="lg" onClick={() => (send(MSG.TO_LOBBY), go('lobby'))}>
+                  Next match
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="lg"
+                  disabled={again}
+                  onClick={() => {
+                    setAgain(true);
+                    send(MSG.AGAIN);
+                    go('lobby');
+                  }}
+                >
+                  {again ? 'Waiting for the next lobby…' : 'Play again?'}
+                </Button>
+              )}
+              <span className="muted small">Everyone who taps Play again moves to a new lobby together.</span>
+            </>
+          ) : r.online && lobby ? (
             isHost ? (
               <Button variant="primary" size="lg" onClick={() => (send(MSG.TO_LOBBY), go('lobby'))}>
                 Back to lobby

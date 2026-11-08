@@ -25,6 +25,14 @@ export const COMMANDS: CommandDef[] = [
   { name: 'tp', help: 'Teleport a player to another player', args: [{ name: 'player', kind: 'player' }, { name: 'to', kind: 'player' }] },
   { name: 'kill', help: 'Splat a player', args: [{ name: 'player', kind: 'player' }] },
   { name: 'reset', help: 'Reset size, speed and god mode', args: [{ name: 'player', kind: 'player', optional: true }] },
+  { name: 'players', help: 'List who is in the match', args: [] },
+  { name: 'ink', help: 'Refill a player’s ink', args: [{ name: 'player', kind: 'player', optional: true }] },
+  { name: 'special', help: 'Charge a player’s special', args: [{ name: 'player', kind: 'player', optional: true }] },
+  { name: 'hp', help: 'Set a player’s health (1 to 100)', args: [{ name: 'player', kind: 'player' }, { name: 'amount', kind: 'number' }] },
+  { name: 'slow', help: 'Slow a player down, or back to normal', args: [{ name: 'player', kind: 'player' }, { name: 'state', kind: 'onoff', optional: true }] },
+  { name: 'bring', help: 'Teleport a player to you', args: [{ name: 'player', kind: 'player' }] },
+  { name: 'goto', help: 'Teleport yourself to a player', args: [{ name: 'player', kind: 'player' }] },
+  { name: 'time', help: 'Set the seconds left in the match', args: [{ name: 'seconds', kind: 'number' }], owner: true },
   { name: 'admin', help: 'Make a player an admin in this room', args: [{ name: 'player', kind: 'player' }], owner: true },
   { name: 'deadmin', help: 'Remove a player’s admin rights', args: [{ name: 'player', kind: 'player' }], owner: true },
 ];
@@ -162,7 +170,16 @@ export function runCommand(line: string, ctx: CommandContext): CommandResult {
   if (args.length < def.args.filter((a) => !a.optional).length) return fail(`Usage: ${usageOf(def)}`);
   if (def.name === 'help') return done(COMMANDS.filter((c) => !c.owner || ctx.sender.owner).map(usageOf).join('  ·  '));
 
-  const who = targets(ctx, args[0]);
+  if (def.name === 'players')
+    return done(ctx.players.map((p) => p.name).join(', ') || 'Nobody yet.');
+  if (def.name === 'time') {
+    const secs = num(args[0]);
+    if (!ctx.sim || !(secs >= 5 && secs <= 3600)) return fail(ctx.sim ? 'Give a number of seconds from 5 to 3600.' : 'Only works during a match.');
+    if (ctx.sim.config.duration <= 0) return fail('This match has no timer.');
+    ctx.sim.timeLeft = secs;
+    return done(`${Math.round(secs)} seconds left.`);
+  }
+  const who = targets(ctx, def.name === 'goto' || def.name === 'bring' ? args[0] : args[0]);
   if (typeof who === 'string') return fail(who);
   const names = who.length === 1 ? who[0].name : `${who.length} players`;
   const simP = (pid: number): SimPlayer | undefined => ctx.sim?.byId(pid);
@@ -254,6 +271,53 @@ export function runCommand(line: string, ctx: CommandContext): CommandResult {
         p.collider.setTranslation(p.pos);
       }
       return done(`Teleported ${names} to ${to[0].name}.`);
+    }
+    case 'ink':
+    case 'special': {
+      if (!ctx.sim) return fail('Only works during a match.');
+      for (const t of who) {
+        const p = simP(t.pid);
+        if (!p?.alive) continue;
+        if (def.name === 'ink') p.ink = MAX_INK;
+        else p.charge = 1;
+      }
+      return done(`${def.name === 'ink' ? 'Refilled ink for' : 'Charged the special of'} ${names}.`);
+    }
+    case 'hp': {
+      if (!ctx.sim) return fail('Only works during a match.');
+      const v = clamp(num(args[1]), 1, MAX_HP);
+      if (!Number.isFinite(v)) return fail(`Usage: ${usageOf(def)}`);
+      for (const t of who) {
+        const p = simP(t.pid);
+        if (p?.alive) p.hp = v;
+      }
+      return done(`Set the health of ${names} to ${v}.`);
+    }
+    case 'slow': {
+      const on = args[1]?.toLowerCase();
+      if (on !== undefined && on !== 'on' && on !== 'off') return fail('Use on or off.');
+      for (const t of who) {
+        const m = modsOf(ctx, t.pid);
+        m.speed = on === 'off' ? 1 : 0.4;
+        applyToSim(ctx, t.pid);
+      }
+      ctx.modsChanged();
+      return done(`${names} ${on === 'off' ? 'is back to normal speed' : 'is slowed down'}.`);
+    }
+    case 'bring':
+    case 'goto': {
+      if (!ctx.sim) return fail('Only works during a match.');
+      const me = simP(ctx.sender.pid);
+      const them = simP(who[0].pid);
+      const mover = def.name === 'bring' ? them : me;
+      const dest = def.name === 'bring' ? me : them;
+      if (!mover?.alive || !dest?.alive) return fail('They both need to be in the arena.');
+      mover.pos.x = dest.pos.x + 1.2;
+      mover.pos.y = dest.pos.y + 0.3;
+      mover.pos.z = dest.pos.z;
+      mover.vel.x = mover.vel.y = mover.vel.z = 0;
+      mover.collider.setTranslation(mover.pos);
+      return done(def.name === 'bring' ? `Brought ${who[0].name} to you.` : `Teleported to ${who[0].name}.`);
     }
     case 'admin':
     case 'deadmin': {

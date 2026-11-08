@@ -27,6 +27,12 @@ export interface WeaponPart {
   h: number;
   d: number;
   c: 'team' | 'dark' | 'light' | 'shell';
+  /** Name shown in the modeler's outliner. */
+  n?: string;
+  /** Rotation in degrees. */
+  rx?: number;
+  ry?: number;
+  rz?: number;
 }
 
 export interface WeaponDef {
@@ -489,6 +495,8 @@ function cleanDef(raw: Record<string, unknown>): WeaponDef | null {
           x: num(p.x, -1.5, 1.5, 0), y: num(p.y, -1.5, 1.5, 0), z: num(p.z, -1.5, 1.5, 0),
           w: num(p.w, 0.005, 1.5, 0.1), h: num(p.h, 0.005, 1.5, 0.1), d: num(p.d, 0.005, 1.5, 0.1),
           c: PART_COLOURS.includes(p.c) ? p.c : 'shell',
+          ...(typeof p.n === 'string' && p.n.trim() ? { n: p.n.trim().slice(0, 24) } : {}),
+          ...(p.rx || p.ry || p.rz ? { rx: num(p.rx, -360, 360, 0), ry: num(p.ry, -360, 360, 0), rz: num(p.rz, -360, 360, 0) } : {}),
         }),
       )
     : undefined;

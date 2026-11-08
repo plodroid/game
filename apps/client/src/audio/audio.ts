@@ -4,7 +4,8 @@ import { useSettings } from '../settings/settings';
 type Bus = 'music' | 'sfx' | 'weapons' | 'ui' | 'ambient';
 export type Sfx =
   | 'shot' | 'splat' | 'drip' | 'hit' | 'hurt' | 'ko' | 'jump' | 'land' | 'dive' | 'surface' | 'swim' | 'empty'
-  | 'special' | 'ready' | 'blast' | 'spawn' | 'click' | 'hover' | 'back' | 'confirm' | 'count' | 'go' | 'time' | 'zone';
+  | 'special' | 'ready' | 'blast' | 'spawn' | 'click' | 'hover' | 'back' | 'confirm' | 'count' | 'go' | 'time' | 'zone'
+  | 'notify' | 'hangup' | 'joined';
 
 interface PlayOpts {
   at?: Vec3;
@@ -38,6 +39,9 @@ const SFX: Sfx[] = [
   'go',
   'time',
   'zone',
+  'notify',
+  'hangup',
+  'joined',
 ];
 const SHOT_BASES = ['pulse', 'arc', 'lobber', 'roller', 'dual'];
 const NOTE = (n: number) => 440 * Math.pow(2, (n - 69) / 12);
@@ -237,7 +241,7 @@ class AudioEngine {
     } else this.burst.set(name, { t, n: 1 });
     const p = o.pitch ?? 1;
     const vary = 0.94 + Math.random() * 0.12;
-    const bus: Bus = name === 'shot' ? 'weapons' : ['click', 'hover', 'back', 'confirm', 'count', 'go', 'time', 'ready'].includes(name) ? 'ui' : 'sfx';
+    const bus: Bus = name === 'shot' ? 'weapons' : ['click', 'hover', 'back', 'confirm', 'count', 'go', 'time', 'ready', 'notify', 'hangup', 'joined'].includes(name) ? 'ui' : 'sfx';
     const dest = this.out(bus, o.at, o.gain ?? 1);
     if (!dest) return;
     if (o.at && (name === 'shot' || name === 'blast' || name === 'ko')) this.onWorldSound?.(o.at, name);
@@ -352,7 +356,45 @@ class AudioEngine {
       case 'time':
         this.tone(dest, t, NOTE(57), NOTE(52), 0.7, 'sawtooth', 0.18);
         break;
+      case 'notify':
+        // A soft two-note chime for messages and invites.
+        this.tone(dest, t, NOTE(84), NOTE(84), 0.16, 'sine', 0.3);
+        this.tone(dest, t + 0.11, NOTE(91), NOTE(91), 0.28, 'sine', 0.26);
+        break;
+      case 'hangup':
+        this.tone(dest, t, NOTE(76), NOTE(76), 0.12, 'sine', 0.22);
+        this.tone(dest, t + 0.1, NOTE(69), NOTE(69), 0.22, 'sine', 0.22);
+        break;
+      case 'joined':
+        this.tone(dest, t, NOTE(72), NOTE(72), 0.1, 'sine', 0.2);
+        this.tone(dest, t + 0.08, NOTE(79), NOTE(79), 0.16, 'sine', 0.2);
+        break;
     }
+  }
+
+  private ringTimer = 0;
+
+  /** A phone ring that repeats until stopRing: loud for an incoming call, quieter while you wait for an answer. */
+  startRing(incoming = true) {
+    this.stopRing();
+    if (!this.ctx) return;
+    const burst = () => {
+      const ctx = this.ctx;
+      const dest = ctx && this.out('ui', undefined, incoming ? 1.4 : 0.55);
+      if (!ctx || !dest) return;
+      const t = ctx.currentTime + 0.02;
+      for (const o of incoming ? [0, 0.4] : [0]) {
+        this.tone(dest, t + o, NOTE(79), NOTE(79), 0.3, 'sine', 0.3);
+        this.tone(dest, t + o, NOTE(84), NOTE(84), 0.3, 'sine', 0.22);
+      }
+    };
+    burst();
+    this.ringTimer = window.setInterval(burst, incoming ? 2400 : 3200);
+  }
+
+  stopRing() {
+    clearInterval(this.ringTimer);
+    this.ringTimer = 0;
   }
 
   jingle(win: boolean) {

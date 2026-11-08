@@ -3,7 +3,7 @@ import { audio } from '../audio/audio';
 import { useAccount } from '../auth/account';
 import { isOwner } from '../auth/admin';
 import type { Note } from '../auth/social';
-import { acceptInvite, social, useSocial } from '../state/social';
+import { acceptInvite, joinFromInvite, social, useSocial } from '../state/social';
 import { useUi } from '../state/ui';
 import { AdminAccounts } from './AdminAccounts';
 import { Avatar } from './Avatar';
@@ -55,7 +55,7 @@ export function SocialBar() {
   const online = s.friendships.filter((f) => f.status === 'accepted' && s.cards[f.other]?.online).length;
   // The friends button only pings for what needs you there: new requests and messages.
   const attention = s.notes.filter(
-    (n) => !n.read && (n.type === 'friendRequest' || n.type === 'message'),
+    (n) => !n.read && (n.type === 'friendRequest' || n.type === 'message' || n.type === 'groupMessage'),
   ).length;
   const party = s.party;
 
@@ -66,7 +66,12 @@ export function SocialBar() {
     else if (n.type === 'message') {
       s.talk(n.from);
       go('social');
-    } else if (n.type === 'friendRequest') go('social');
+    } else if (n.type === 'groupMessage' && n.party) {
+      s.openGroup(n.party);
+      go('social');
+    } else if (n.type === 'gameInvite' && n.text) void joinFromInvite(n.text);
+    else if (n.type === 'call') go('social');
+    else if (n.type === 'friendRequest') go('social');
     else s.view(n.from);
   };
 
@@ -143,7 +148,13 @@ export function SocialBar() {
                           ? expired
                             ? 'invited you to a party (expired)'
                             : 'invited you to their party'
-                          : `: ${n.text ?? 'sent a message'}`}
+                          : n.type === 'gameInvite'
+                            ? 'invited you to a game. Tap to join'
+                            : n.type === 'call'
+                              ? 'called you'
+                              : n.type === 'groupMessage'
+                                ? `· ${n.text ?? 'sent a message'}`
+                                : `: ${n.text ?? 'sent a message'}`}
                   </span>
                   <span className="muted small num">
                     {n.type === 'partyInvite' && !expired ? `Expires in ${left(n.expiresAt ?? 0)}` : ago(n.createdAt)}

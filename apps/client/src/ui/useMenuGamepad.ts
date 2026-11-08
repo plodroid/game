@@ -1,17 +1,7 @@
 import { useEffect } from 'react';
 import { audio } from '../audio/audio';
-import { padStyle } from '../game/input';
+import '../game/devices';
 import { useUi } from '../state/ui';
-
-// A controller plugging in is greeted by its kind.
-addEventListener('gamepadconnected', (e) =>
-  useUi
-    .getState()
-    .toast({
-      text: `${padStyle(e.gamepad) === 'playstation' ? 'PlayStation controller' : 'Controller'} connected`,
-      kind: 'success',
-    }),
-);
 
 const FOCUSABLE =
   'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])';

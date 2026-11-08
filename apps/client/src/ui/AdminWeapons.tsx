@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { previewWeapon, WEAPON_IDS, WEAPONS, type WeaponPart } from '@chromashift/shared';
 import { saveWeaponConfig } from '../auth/firebase';
 import { dropWeaponPortraits, weaponPortrait } from '../characters/portrait';
@@ -6,6 +7,7 @@ import { useProfile } from '../state/profile';
 import { useUi } from '../state/ui';
 import { configList, useWeapons } from '../weapons/custom';
 import { Icon } from './icons';
+import { ModelEditor } from './ModelEditor';
 
 type Draft = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -27,15 +29,6 @@ const LOOK_NUMBERS: [string, string][] = [
   ['len', 'Length ×'],
   ['bulk', 'Thickness ×'],
 ];
-const PART_KEYS: [keyof WeaponPart, string][] = [
-  ['x', 'Side'],
-  ['y', 'Up'],
-  ['z', 'Forward'],
-  ['w', 'Width'],
-  ['h', 'Height'],
-  ['d', 'Length'],
-];
-
 /** A little starter model so a new gun isn't an empty screen: grip, body, barrel and sight. */
 const STARTER: WeaponPart[] = [
   { s: 'box', x: 0, y: 0.01, z: 0.03, w: 0.05, h: 0.12, d: 0.06, c: 'dark' },
@@ -57,6 +50,7 @@ export function AdminWeapons({ onClose }: { onClose: () => void }) {
   const [hours, setHours] = useState('0');
   const [busy, setBusy] = useState(false);
   const [pic, setPic] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   // The live picture: drawn from the draft as you edit it.
   useEffect(() => {
@@ -214,58 +208,18 @@ export function AdminWeapons({ onClose }: { onClose: () => void }) {
               )}
             </div>
             <div className="row admin-tools__row">
-              <button className="btn" onClick={() => setParts([...parts, { s: 'box', x: 0, y: 0.1, z: -0.1, w: 0.08, h: 0.08, d: 0.08, c: 'shell' }])}>
-                Add part
+              <button className="btn btn--primary" onClick={() => (parts.length || setParts(STARTER), setEditing(true))}>
+                {parts.length ? `Open model editor (${parts.length} parts)` : 'Model it by hand'}
               </button>
-              <button className="btn btn--ghost" onClick={() => setParts(parts.length ? [] : STARTER)}>
-                {parts.length ? 'Use the base model' : 'Model it by hand'}
-              </button>
+              {!!parts.length && (
+                <button className="btn btn--ghost" onClick={() => setParts([])}>
+                  Use the base model
+                </button>
+              )}
             </div>
-            {parts.map((p, i) => {
-              const edit = (patch: Partial<WeaponPart>) => setParts(parts.map((x, j) => (j === i ? { ...x, ...patch } : x)));
-              return (
-                <div className="admin-part" key={i}>
-                  <div className="row admin-tools__row">
-                    <select className="input" value={p.s} onChange={(e) => edit({ s: e.target.value as WeaponPart['s'] })} aria-label="Shape">
-                      {['box', 'cyl', 'sphere', 'cone', 'torus'].map((x) => (
-                        <option key={x}>{x}</option>
-                      ))}
-                    </select>
-                    <select className="input" value={p.c} onChange={(e) => edit({ c: e.target.value as WeaponPart['c'] })} aria-label="Colour">
-                      {['team', 'dark', 'light', 'shell'].map((x) => (
-                        <option key={x}>{x}</option>
-                      ))}
-                    </select>
-                    <button className="btn btn--ghost" onClick={() => setParts([...parts, { ...p, x: -p.x }])} aria-label="Mirror copy">
-                      Mirror
-                    </button>
-                    <button className="btn btn--danger" onClick={() => setParts(parts.filter((_, j) => j !== i))} aria-label="Remove part">
-                      ✕
-                    </button>
-                  </div>
-                  <div className="admin-tools__grid admin-tools__grid--6">
-                    {PART_KEYS.map(([k, label]) => (
-                      <label key={k} className="admin-field">
-                        <span className="muted small">{label}</span>
-                        <input className="input" type="number" step={0.01} value={p[k] as number} onChange={(e) => edit({ [k]: num(e.target.value) })} />
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-            {!!parts.length && (
-              <div className="admin-tools__grid">
-                <label className="admin-field">
-                  <span className="muted small">Muzzle up</span>
-                  <input className="input" type="number" step={0.01} value={d.look.muzzle?.[0] ?? 0.12} onChange={(e) => setLook('muzzle', [num(e.target.value), d.look.muzzle?.[1] ?? -0.45])} />
-                </label>
-                <label className="admin-field">
-                  <span className="muted small">Muzzle forward</span>
-                  <input className="input" type="number" step={0.01} value={d.look.muzzle?.[1] ?? -0.45} onChange={(e) => setLook('muzzle', [d.look.muzzle?.[0] ?? 0.12, num(e.target.value)])} />
-                </label>
-              </div>
-            )}
+            <p className="muted small" style={{ margin: '0 0 8px' }}>
+              The editor is a 3D view: add blocks, drag the arrows to move them, resize, rotate, and edit the name and description in its sidebar.
+            </p>
 
             <div className="row admin-tools__row admin-weapons__save">
               <button className="btn btn--primary" disabled={busy} onClick={() => void save()}>
@@ -283,6 +237,19 @@ export function AdminWeapons({ onClose }: { onClose: () => void }) {
           </div>
         )}
       </div>
+      {editing && d && createPortal(
+        <ModelEditor
+          draft={{ name: d.name, tagline: d.tagline, parts, muzzle: d.look.muzzle ?? [0.12, -0.45] }}
+          onChange={(p) => {
+            if (p.name !== undefined) set('name', p.name);
+            if (p.tagline !== undefined) set('tagline', p.tagline);
+            if (p.parts) setParts(p.parts);
+            if (p.muzzle) setLook('muzzle', p.muzzle);
+          }}
+          onClose={() => setEditing(false)}
+        />,
+        document.body,
+      )}
     </div>
   );
 }

@@ -188,7 +188,7 @@ async function joinOptions(quick = false): Promise<JoinOptions> {
 }
 
 /** Peer-to-peer hosts are other players' browsers, so they never get the account token. */
-function peerHello(): PeerHello {
+export function peerHello(): PeerHello {
   const p = useProfile.getState();
   return {
     name: publicName(p),

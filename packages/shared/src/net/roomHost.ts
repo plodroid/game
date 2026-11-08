@@ -42,6 +42,10 @@ export interface JoinAuth {
 export interface RoomHostOptions {
   code: string;
   quick?: boolean;
+  /** A skill-matched random server: after a match, only players who chose Play again stay for the next one. */
+  random?: boolean;
+  /** Disconnects a member (the host's transport closes their link). */
+  kick?: (id: string) => void;
   settings?: Partial<LobbySettings>;
   /** Persists verified results (dedicated servers with Firebase Admin). Resolves true when written. */
   record?: (result: MatchResult, xp: Record<number, number>) => Promise<boolean>;
@@ -66,6 +70,8 @@ interface Member {
   special: SpecialId;
   cosmetics: Cosmetics;
   connected: boolean;
+  /** The host's own seat in a world that adopted an offline match: its input comes from the local view. */
+  local?: boolean;
   queue: Input[];
   last: Input;
   lastSeq: number;
@@ -143,12 +149,92 @@ export class RoomHost {
   private mods = new Map<number, Mods>();
   /** Connections made admin with /admin; kept for this room only. */
   private roomAdmins = new Set<string>();
+  /** Random servers: who tapped Play again for the next match. */
+  private again = new Set<string>();
+  /** An offline match whose simulation is stepped by the host's own view; this room only mirrors it to guests. */
+  private external = false;
 
   constructor(private opts: RoomHostOptions) {
     this.code = opts.code;
     this.quick = !!opts.quick;
     this.settings = sanitizeSettings(opts.settings);
     if (this.quick) this.autoStartAt = Date.now() + 20_000;
+  }
+
+  get random() {
+    return !!this.opts.random;
+  }
+
+  /** Puts this room in or out of the random-server pool (changes what happens after a match). */
+  setRandom(on: boolean) {
+    this.opts.random = on;
+    this.pushLobby();
+  }
+
+  /**
+   * Turns a match already running on the host's device (an offline game) into a room: the simulation
+   * keeps going untouched, and guests who join take over bots as if they had been there all along.
+   */
+  adopt(sim: Simulation, client: HostClient, hostPid: number, hello: Partial<{ name: string; weapon: string; special: string; cosmetics: Partial<Cosmetics> }>, admin = false) {
+    const me = sim.byId(hostPid);
+    this.sim = sim;
+    this.external = true;
+    this.phaseNow = 'match';
+    this.nextPid = Math.max(0, ...sim.players.map((p) => p.id)) + 1;
+    this.settings = sanitizeSettings({ map: sim.config.map, mode: sim.config.mode as ModeId, duration: sim.config.duration });
+    this.roster = sim.players.map((p) => {
+      const { uid: _uid, ...info } = p.info;
+      return info;
+    });
+    const m: Member = {
+      pid: hostPid,
+      name: cleanPlayerName(hello.name ?? me?.info.name, 'Host'),
+      verified: false,
+      admin,
+      team: (me?.team ?? 0) as Team,
+      ready: true,
+      weapon: me?.info.weapon ?? 'pulse',
+      special: me?.info.special ?? 'surge',
+      cosmetics: me?.info.cosmetics ?? sanitizeCosmetics(hello.cosmetics ?? DEFAULT_COSMETICS),
+      connected: true,
+      local: true,
+      queue: [],
+      last: emptyInput(),
+      lastSeq: 0,
+      lastInputAt: Date.now(),
+      chatTokens: 4,
+      chatAt: Date.now(),
+      client,
+    };
+    this.members.set(client.id, m);
+    this.hostId = client.id;
+    this.pushLobby();
+  }
+
+  /** Before each simulation tick of an adopted match: feed in the guests' inputs. */
+  externalBefore() {
+    const sim = this.sim;
+    if (!sim || !this.external || this.phaseNow !== 'match') return;
+    const now = Date.now();
+    for (const m of this.members.values()) {
+      if (!m.connected || m.local) continue;
+      const next = m.queue.shift();
+      if (next) m.last = next;
+      else if (now - m.lastInputAt > INPUT_STALE_MS && (m.last.mx || m.last.mz || m.last.buttons)) m.last = { ...m.last, mx: 0, mz: 0, buttons: 0 };
+      sim.setInput(m.pid, m.last);
+    }
+  }
+
+  /** After each tick: send guests what happened, and finish when the match does. */
+  externalAfter(events: Parameters<typeof packEvent>[0][]) {
+    const sim = this.sim;
+    if (!sim || !this.external || this.phaseNow !== 'match' || this.finishing) return;
+    for (const e of events) {
+      const p = packEvent(e);
+      if (p) this.pending.push(p);
+    }
+    if (++this.ticks % 3 === 0 || sim.phase === 'ended') this.snapshot();
+    if (sim.phase === 'ended') void this.finish();
   }
 
   /** A real weapon; the owner's own is only for the owner. */
@@ -361,6 +447,9 @@ export class RoomHost {
       case MSG.TO_LOBBY:
         if (this.isHost(id) && this.phaseNow === 'results') this.toLobby();
         return;
+      case MSG.AGAIN:
+        if (this.random && this.phaseNow === 'results') this.again.add(id);
+        return;
       case MSG.CMD:
         void this.command(id, m, d);
         return;
@@ -479,13 +568,13 @@ export class RoomHost {
 
   tick(dtMs: number) {
     const now = Date.now();
-    if (this.phaseNow === 'lobby' && this.quick && this.autoStartAt) {
+    if (this.phaseNow === 'lobby' && (this.quick || this.random) && this.autoStartAt) {
       if (now >= this.autoStartAt && this.members.size) this.startMatch();
       else if (now - this.lastLobbyPush > 1000) this.pushLobby();
     }
     if (this.phaseNow === 'results' && this.resultsAt && now >= this.resultsAt) this.toLobby();
     const sim = this.sim;
-    if (this.phaseNow !== 'match' || !sim || this.finishing) return;
+    if (this.external || this.phaseNow !== 'match' || !sim || this.finishing) return;
     this.acc += Math.min(dtMs, 250) / 1000;
     while (this.acc >= DT) {
       for (const m of this.members.values()) {
@@ -553,8 +642,10 @@ export class RoomHost {
     };
     for (const m of this.members.values()) if (m.connected) m.client.send(MSG.END, end);
     this.phaseNow = 'results';
-    this.resultsAt = this.quick ? Date.now() + 15_000 : 0;
-    sim.dispose();
+    this.again.clear();
+    this.resultsAt = this.quick ? Date.now() + 15_000 : this.random ? Date.now() + 14_000 : 0;
+    // An adopted match is still being shown to the host by their own view; it disposes it.
+    if (!this.external) sim.dispose();
     this.sim = null;
     this.pushLobby();
   }
@@ -564,6 +655,15 @@ export class RoomHost {
     this.resultsAt = 0;
     for (const m of this.members.values()) m.ready = false;
     if (this.quick) this.autoStartAt = Date.now() + 20_000;
+    if (this.random) {
+      // Everyone who tapped Play again moves on together; the rest are let go.
+      for (const [id, m] of [...this.members]) {
+        if (this.again.has(id) || id === this.hostId) m.ready = true;
+        else this.opts.kick?.(id);
+      }
+      this.autoStartAt = this.members.size >= 2 ? Date.now() + 8_000 : 0;
+      this.again.clear();
+    }
     this.pushLobby();
   }
 
@@ -587,10 +687,11 @@ export class RoomHost {
       phase: this.phaseNow,
       hostId: this.quick ? -1 : (host?.pid ?? -1),
       quick: this.quick,
+      ...(this.random ? { random: true } : {}),
       settings: this.settings,
       players: list,
       startsIn:
-        this.quick && this.phaseNow === 'lobby' && this.autoStartAt
+        (this.quick || this.random) && this.phaseNow === 'lobby' && this.autoStartAt
           ? Math.max(0, Math.ceil((this.autoStartAt - Date.now()) / 1000))
           : undefined,
     };

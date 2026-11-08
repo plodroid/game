@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {
+  BTN,
   dirFromAngles,
   FEET_OFFSET,
   forwardXZ,
@@ -30,6 +31,7 @@ import { PaintAtlas, type PaintUniforms } from '../rendering/paintAtlas';
 import { teamColors, teamNames } from '../rendering/palette';
 import { Post } from '../rendering/post';
 import { useMods } from '../auth/admin';
+import { useWorld } from './world';
 import { prefersReducedMotion, useSettings, type GraphicsSettings } from '../settings/settings';
 import { useHud, useUi, type BoardRow, type FeedItem } from '../state/ui';
 import { useChat } from '../state/chat';
@@ -92,6 +94,10 @@ export class MatchView implements View {
   private cues: { id: number; angle: number; t: number }[] = [];
   private deathAt: Vec3 | null = null;
   private killer = -1;
+  /** The player being watched while you're out (the one who got you first, then whoever you pick). */
+  private spectateId = -1;
+  private deathT = 0;
+  private specBtns = 0;
   private ended = false;
   private swimT = 0;
   private frame = 0;
@@ -305,7 +311,8 @@ export class MatchView implements View {
     inp.emote = input.emote();
 
     // Offline matches pause for real; online they keep running.
-    const events = paused && !src.online ? [] : src.update(dt, inp);
+    // An offline match you've opened to friends keeps running, so they aren't frozen.
+    const events = paused && !src.online && useWorld.getState().guests === 0 ? [] : src.update(dt, inp);
     this.splatBudget = 6;
     if (src.consumeRepaint?.()) this.atlas.rebuildFromGrid();
     for (const e of events) this.onEvent(e);
@@ -315,8 +322,26 @@ export class MatchView implements View {
     this.fx.syncEffects(src.effects());
     this.fx.update(dt);
 
-    const target = me && me.state.alive ? me.pos : this.deathAt ?? me?.pos ?? v3();
-    if (me && !me.state.alive && this.killer >= 0) {
+    // Out of the fight: watch the player who got you, then switch between players with fire and jump.
+    let watched: ViewPlayer | undefined;
+    if (me && !me.state.alive) {
+      this.deathT += dt;
+      const others = src.players().filter((p) => p.id !== src.localId && p.state.alive);
+      const pool = [...others.filter((p) => p.info.team === me.info.team), ...others.filter((p) => p.info.team !== me.info.team)];
+      const b = inp.buttons;
+      const press = (bit: number) => (b & bit) !== 0 && (this.specBtns & bit) === 0;
+      if (pool.length && (press(BTN.FIRE) || press(BTN.JUMP))) {
+        const at = pool.findIndex((p) => p.id === this.spectateId);
+        const step = press(BTN.FIRE) ? 1 : -1;
+        this.spectateId = pool[(at + step + pool.length * 2) % pool.length].id;
+      }
+      this.specBtns = b;
+      watched = pool.find((p) => p.id === this.spectateId) ?? pool[0];
+      if (watched) this.spectateId = watched.id;
+    } else this.specBtns = 0;
+    const target = me && me.state.alive ? me.pos : (watched?.pos ?? this.deathAt ?? me?.pos ?? v3());
+    // The first moments swing the camera round to whoever got you (the kill-cam), then you can look freely.
+    if (me && !me.state.alive && this.killer >= 0 && this.deathT < 1.8 && this.spectateId === this.killer) {
       const k = src.players().find((p) => p.id === this.killer);
       if (k) {
         const want = Math.atan2(-(k.pos.x - target.x), -(k.pos.z - target.z));
@@ -476,6 +501,8 @@ export class MatchView implements View {
         if (e.id === local) {
           this.deathAt = v ? { ...v.pos } : null;
           this.killer = e.by;
+          this.spectateId = e.by >= 0 && e.by !== local ? e.by : -1;
+          this.deathT = 0;
           this.say(k ? `Splatted by ${k.info.name}` : 'Out of bounds', 'bad');
           this.cam.addShake(0.6);
         }
@@ -490,6 +517,7 @@ export class MatchView implements View {
           this.cam.snapTo(p.state.yaw);
           this.deathAt = null;
           this.killer = -1;
+          this.spectateId = -1;
           audio.play('spawn', { gain: 0.6 });
         }
         break;
@@ -702,6 +730,7 @@ export class MatchView implements View {
       voice.setNear(gains);
     }
     const board: BoardRow[] = src.players().map((p) => ({
+      cosmetics: p.info.cosmetics,
       id: p.id,
       name: p.info.name,
       team: p.info.team,
@@ -730,6 +759,10 @@ export class MatchView implements View {
       weapon: me?.info.weapon ?? 'pulse',
       alive: s?.alive ?? false,
       respawnIn: s && !s.alive ? Math.max(0, s.respawnT) : 0,
+      spectating: s && !s.alive ? (() => {
+        const w = src.players().find((p) => p.id === this.spectateId);
+        return w ? { id: w.id, name: w.info.name, killer: w.id === this.killer } : null;
+      })() : null,
       diving: !!s?.diving,
       feed: this.feed,
       notice: this.notice ? { id: this.notice.id, text: this.notice.text, tone: this.notice.tone } : null,

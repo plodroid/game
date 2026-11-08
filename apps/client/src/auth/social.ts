@@ -56,7 +56,7 @@ export interface Friendship {
 
 export interface Note {
   id: string;
-  type: 'friendRequest' | 'friendAccepted' | 'partyInvite' | 'message';
+  type: 'friendRequest' | 'friendAccepted' | 'partyInvite' | 'message' | 'groupMessage' | 'gameInvite' | 'call';
   from: string;
   fromName: string;
   party?: string;
@@ -73,15 +73,6 @@ export interface Party {
   /** Invited account id → when the invite runs out (ms). */
   invites: Record<string, number>;
   game: { code: string; at: number } | null;
-}
-
-export interface Message {
-  id: string;
-  from: string;
-  text?: string;
-  voice?: string;
-  duration?: number;
-  createdAt: number;
 }
 
 const ms = (t: unknown) => (t instanceof Timestamp ? t.toMillis() : typeof t === 'number' ? t : Date.now());
@@ -281,19 +272,58 @@ export async function setPartyGame(code: string | null) {
   await updateDoc(doc(db, 'parties', uid), { game: code ? { code, at: serverTimestamp() } : null, updatedAt: serverTimestamp() });
 }
 
-/* ---------- Messages ---------- */
+/* ---------- Conversations: direct messages and group chats ---------- */
 
-export function watchChats(on: (chats: { id: string; other: string; last?: { text: string; from: string; at: number }; updatedAt: number }[]) => void): Unsubscribe {
+export type Convo = { kind: 'dm'; other: string } | { kind: 'group'; id: string };
+
+export interface Chat {
+  id: string;
+  other: string;
+  last?: { text: string; from: string; at: number };
+  updatedAt: number;
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  owner: string;
+  members: string[];
+  names: Record<string, string>;
+  last?: { text: string; from: string; at: number };
+  updatedAt: number;
+}
+
+const lastOf = (x: Record<string, unknown>) =>
+  x.last ? { text: String((x.last as { text: unknown }).text), from: String((x.last as { from: unknown }).from), at: ms((x.last as { at: unknown }).at) } : undefined;
+
+export function watchChats(on: (chats: Chat[]) => void): Unsubscribe {
   const { db, uid } = me();
   return onSnapshot(query(collection(db, 'chats'), where('users', 'array-contains', uid)), (snap) =>
     on(
       snap.docs
         .map((d) => {
           const x = d.data();
+          return { id: d.id, other: (x.users as string[]).find((u) => u !== uid) ?? '', last: lastOf(x), updatedAt: ms(x.updatedAt) };
+        })
+        .sort((a, b) => b.updatedAt - a.updatedAt),
+    ),
+  );
+}
+
+export function watchGroups(on: (groups: Group[]) => void): Unsubscribe {
+  const { db, uid } = me();
+  return onSnapshot(query(collection(db, 'groups'), where('members', 'array-contains', uid)), (snap) =>
+    on(
+      snap.docs
+        .map((d) => {
+          const x = d.data();
           return {
             id: d.id,
-            other: (x.users as string[]).find((u) => u !== uid) ?? '',
-            last: x.last ? { text: String(x.last.text), from: String(x.last.from), at: ms(x.last.at) } : undefined,
+            name: String(x.name ?? 'Group'),
+            owner: String(x.owner ?? ''),
+            members: (x.members as string[]) ?? [],
+            names: (x.names as Record<string, string>) ?? {},
+            last: lastOf(x),
             updatedAt: ms(x.updatedAt),
           };
         })
@@ -302,9 +332,70 @@ export function watchChats(on: (chats: { id: string; other: string; last?: { tex
   );
 }
 
-export function watchMessages(other: string, on: (m: Message[]) => void): Unsubscribe {
+export const MAX_GROUP = 8;
+
+export async function createGroup(name: string, members: string[], names: Record<string, string>) {
   const { db, uid } = me();
-  return onSnapshot(query(collection(db, 'chats', pairId(uid, other), 'messages'), orderBy('createdAt', 'desc'), limit(60)), (snap) =>
+  const all = [...new Set([uid, ...members])].slice(0, MAX_GROUP);
+  const ref = doc(collection(db, 'groups'));
+  const title = name.trim().slice(0, 24) || 'Group chat';
+  await setDoc(ref, {
+    name: title,
+    owner: uid,
+    members: all,
+    names: Object.fromEntries(all.map((u) => [u, (u === uid ? myName() : (names[u] ?? 'Player')).slice(0, 24)])),
+    updatedAt: serverTimestamp(),
+    createdAt: serverTimestamp(),
+  });
+  for (const u of all) if (u !== uid) await notify(u, { type: 'groupMessage', party: ref.id, text: `added you to ${title}` }).catch(() => undefined);
+  return ref.id;
+}
+
+export async function addToGroup(g: Group, other: string, name: string) {
+  const { db } = me();
+  if (g.members.length >= MAX_GROUP) throw new Error('A group holds up to 8 people.');
+  await updateDoc(doc(db, 'groups', g.id), { members: arrayUnion(other), [`names.${other}`]: name.slice(0, 24), updatedAt: serverTimestamp() });
+  await notify(other, { type: 'groupMessage', party: g.id, text: `added you to ${g.name}` }).catch(() => undefined);
+}
+
+export async function renameGroup(g: Group, name: string) {
+  const { db } = me();
+  await updateDoc(doc(db, 'groups', g.id), { name: name.trim().slice(0, 24) || g.name, updatedAt: serverTimestamp() });
+}
+
+export async function leaveGroup(g: Group) {
+  const { db, uid } = me();
+  if (g.members.length <= 1) return void (await deleteDoc(doc(db, 'groups', g.id)));
+  await updateDoc(doc(db, 'groups', g.id), {
+    members: arrayRemove(uid),
+    [`names.${uid}`]: deleteField(),
+    // The group never loses its owner: the next member takes over.
+    ...(g.owner === uid ? { owner: g.members.find((u) => u !== uid) } : {}),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+const msgsOf = (c: Convo) => {
+  const { db, uid } = me();
+  return collection(db, c.kind === 'dm' ? 'chats' : 'groups', c.kind === 'dm' ? pairId(uid, c.other) : c.id, 'messages');
+};
+
+export interface Message {
+  id: string;
+  from: string;
+  fromName?: string;
+  text?: string;
+  voice?: string;
+  duration?: number;
+  /** A picture, as a small compressed data URL. */
+  image?: string;
+  /** A game code: the message is an invitation with a Join button. */
+  invite?: string;
+  createdAt: number;
+}
+
+export function watchMessages(c: Convo, on: (m: Message[]) => void): Unsubscribe {
+  return onSnapshot(query(msgsOf(c), orderBy('createdAt', 'desc'), limit(80)), (snap) =>
     on(
       snap.docs
         .map((d) => {
@@ -316,16 +407,168 @@ export function watchMessages(other: string, on: (m: Message[]) => void): Unsubs
   );
 }
 
-async function post(other: string, body: { text?: string; voice?: string; duration?: number }, preview: string) {
+async function post(c: Convo, body: { text?: string; voice?: string; duration?: number; image?: string; invite?: string }, preview: string) {
   const { db, uid } = me();
-  const id = pairId(uid, other);
-  await addDoc(collection(db, 'chats', id, 'messages'), { from: uid, ...body, createdAt: serverTimestamp() });
-  await setDoc(doc(db, 'chats', id), { users: id.split('_'), last: { text: preview, from: uid, at: Timestamp.now() }, updatedAt: serverTimestamp() });
-  await notify(other, { type: 'message', text: preview }).catch(() => undefined);
+  const stamp = { text: preview, from: uid, at: Timestamp.now() };
+  if (c.kind === 'dm') {
+    const id = pairId(uid, c.other);
+    await addDoc(msgsOf(c), { from: uid, ...body, createdAt: serverTimestamp() });
+    await setDoc(doc(db, 'chats', id), { users: id.split('_'), last: stamp, updatedAt: serverTimestamp() });
+    await notify(c.other, { type: body.invite ? 'gameInvite' : 'message', text: body.invite ?? preview }).catch(() => undefined);
+    return;
+  }
+  await addDoc(msgsOf(c), { from: uid, fromName: myName(), ...body, createdAt: serverTimestamp() });
+  const g = await getDoc(doc(db, 'groups', c.id));
+  await updateDoc(doc(db, 'groups', c.id), { last: { ...stamp, text: `${myName()}: ${preview}`.slice(0, 90) }, updatedAt: serverTimestamp() });
+  const x = g.data();
+  for (const u of ((x?.members as string[]) ?? []).filter((m) => m !== uid))
+    await notify(u, { type: body.invite ? 'gameInvite' : 'groupMessage', party: body.invite ? undefined : c.id, text: body.invite ?? `${String(x?.name ?? 'Group')}: ${preview}`.slice(0, 120) }).catch(() => undefined);
 }
 
-export const sendText = (other: string, text: string) => post(other, { text: text.trim().slice(0, 500) }, text.trim().slice(0, 80));
-export const sendVoice = (other: string, voice: string, duration: number) => post(other, { voice, duration: Math.min(30, Math.round(duration * 10) / 10) }, `Voice message (${Math.round(duration)}s)`);
+export const sendText = (c: Convo, text: string) => post(c, { text: text.trim().slice(0, 500) }, text.trim().slice(0, 80));
+export const sendVoice = (c: Convo, voice: string, duration: number) =>
+  post(c, { voice, duration: Math.min(30, Math.round(duration * 10) / 10) }, `Voice message (${Math.round(duration)}s)`);
+export const sendImage = (c: Convo, image: string) => post(c, { image }, 'Sent a picture');
+/** An invitation to the game this player is in or hosting: a card with a Join button. */
+export const sendInvite = (c: Convo, code: string) => post(c, { invite: code }, 'Invited you to a game');
+
+/* ---------- Typing indicators ---------- */
+
+const typingCol = (c: Convo) => {
+  const { db, uid } = me();
+  return collection(db, c.kind === 'dm' ? 'chats' : 'groups', c.kind === 'dm' ? pairId(uid, c.other) : c.id, 'typing');
+};
+
+export async function setTyping(c: Convo) {
+  const { uid } = me();
+  await setDoc(doc(typingCol(c), uid), { at: serverTimestamp() });
+}
+
+/** Account ids typing in this conversation right now (not you), live. */
+export function watchTyping(c: Convo, on: (uids: string[]) => void): Unsubscribe {
+  const { uid } = me();
+  return onSnapshot(
+    typingCol(c),
+    (snap) => on(snap.docs.filter((d) => d.id !== uid && Date.now() - ms(d.data().at) < 5000).map((d) => d.id)),
+    () => undefined,
+  );
+}
+
+/* ---------- Calls ---------- */
+
+export interface CallDoc {
+  id: string;
+  caller: string;
+  callerName: string;
+  members: string[];
+  names: Record<string, string>;
+  joined: string[];
+  declined: string[];
+  status: 'ringing' | 'active';
+  title: string;
+  /** The conversation it was started from: a pair id or a group id. */
+  chat: string;
+  kind: 'dm' | 'group';
+  createdAt: number;
+}
+
+const toCall = (id: string, x: Record<string, unknown>): CallDoc => ({
+  id,
+  caller: String(x.caller),
+  callerName: String(x.callerName ?? 'Someone'),
+  members: (x.members as string[]) ?? [],
+  names: (x.names as Record<string, string>) ?? {},
+  joined: (x.joined as string[]) ?? [],
+  declined: (x.declined as string[]) ?? [],
+  status: x.status === 'active' ? 'active' : 'ringing',
+  title: String(x.title ?? 'Call'),
+  chat: String(x.chat ?? ''),
+  kind: x.kind === 'group' ? 'group' : 'dm',
+  createdAt: ms(x.createdAt),
+});
+
+/** Calls this player is part of, live. */
+export function watchCalls(on: (calls: CallDoc[]) => void): Unsubscribe {
+  const { db, uid } = me();
+  return onSnapshot(
+    query(collection(db, 'calls'), where('members', 'array-contains', uid)),
+    (snap) => on(snap.docs.map((d) => toCall(d.id, d.data()))),
+    () => undefined,
+  );
+}
+
+export async function startCall(c: Convo, members: string[], names: Record<string, string>, title: string): Promise<CallDoc> {
+  const { db, uid } = me();
+  const all = [...new Set([uid, ...members])].slice(0, MAX_GROUP);
+  const ref = doc(collection(db, 'calls'));
+  const data = {
+    caller: uid,
+    callerName: myName(),
+    members: all,
+    names: Object.fromEntries(all.map((u) => [u, (u === uid ? myName() : (names[u] ?? 'Player')).slice(0, 24)])),
+    joined: [uid],
+    declined: [] as string[],
+    status: 'ringing',
+    title: title.slice(0, 24),
+    chat: c.kind === 'dm' ? pairId(uid, c.other) : c.id,
+    kind: c.kind,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  await setDoc(ref, data);
+  for (const u of all.filter((m) => m !== uid)) await notify(u, { type: 'call', party: ref.id, text: 'is calling you' }).catch(() => undefined);
+  return toCall(ref.id, { ...data, createdAt: Date.now() });
+}
+
+export async function answerCall(id: string) {
+  const { db, uid } = me();
+  await updateDoc(doc(db, 'calls', id), { joined: arrayUnion(uid), status: 'active', updatedAt: serverTimestamp() });
+}
+
+export async function declineCall(id: string) {
+  const { db, uid } = me();
+  await updateDoc(doc(db, 'calls', id), { declined: arrayUnion(uid), updatedAt: serverTimestamp() });
+}
+
+/** Leaves the call; the last one out closes it. */
+export async function hangUp(c: CallDoc) {
+  const { db, uid } = me();
+  const rest = c.joined.filter((u) => u !== uid);
+  if (!rest.length) return void (await deleteDoc(doc(db, 'calls', c.id)));
+  await updateDoc(doc(db, 'calls', c.id), { joined: arrayRemove(uid), updatedAt: serverTimestamp() });
+}
+
+export async function deleteCall(id: string) {
+  const { db } = me();
+  await deleteDoc(doc(db, 'calls', id));
+}
+
+/* ---------- Worlds friends can join ---------- */
+
+/** Tells friends (and the owner) which code your offline world can be joined on; null closes it. */
+export async function setJoinable(code: string | null) {
+  const { db, uid } = me();
+  await setDoc(doc(db, 'joinable', uid), { code, updatedAt: serverTimestamp() });
+}
+
+/** Friends' open worlds, live (account id → code). */
+export function watchJoinable(uids: string[], on: (codes: Record<string, string>) => void): Unsubscribe {
+  const { db } = me();
+  const codes: Record<string, string> = {};
+  const offs = uids.slice(0, 40).map((u) =>
+    onSnapshot(
+      doc(db, 'joinable', u),
+      (s) => {
+        const d = s.data();
+        if (d?.code && Date.now() - ms(d.updatedAt) < ONLINE_MS + 60_000) codes[u] = String(d.code);
+        else delete codes[u];
+        on({ ...codes });
+      },
+      () => undefined,
+    ),
+  );
+  return () => offs.forEach((f) => f());
+}
 
 /* ---------- Owner tools (the rules only let the owner account read these) ---------- */
 

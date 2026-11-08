@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   BOT_DIFFICULTIES,
   DURATION_OPTIONS,
@@ -18,13 +18,14 @@ import {
 } from '@chromashift/shared';
 import { useAccount } from '../../auth/account';
 import { firebaseConfigured } from '../../env';
-import { setPublic, useListing } from '../../multiplayer/listing';
+import { setPublic, setRandom, useListing } from '../../multiplayer/listing';
 import { HOST_CODE_KEY, leaveRoom, send, useNet } from '../../multiplayer/net';
 import { voice, useVoice } from '../../multiplayer/voice';
 import { teamNames } from '../../rendering/palette';
 import { useProfile } from '../../state/profile';
 import { useUi } from '../../state/ui';
 import { Avatar } from '../Avatar';
+import { InviteFriends } from '../InviteFriends';
 import { Icon, TeamShape } from '../icons';
 import { Button, Header, LengthDial, Segmented, Setting, Toggle, useCopy } from '../kit';
 import { DIFF_LABEL } from './Play';
@@ -48,6 +49,14 @@ function PublicSwitch() {
       >
         {signedIn ? <Toggle label="Public game" checked={listing.wanted} onChange={(on) => void setPublic(on)} /> : <Button onClick={() => go('auth')}>Sign in</Button>}
       </Setting>
+      {signedIn && listing.live && (
+        <Setting
+          name="Random server"
+          hint="Also lets the Random server button find your game. Players of a similar skill are matched to it, and after each match everyone who taps Play again moves on to the next one together."
+        >
+          <Toggle label="Random server" checked={listing.random} onChange={setRandom} />
+        </Setting>
+      )}
       {listing.error && (
         <p className="field__error" role="alert" style={{ margin: '6px 0 0' }}>
           {listing.error}
@@ -73,6 +82,8 @@ export default function Lobby() {
   const [copiedCode, copyCode] = useCopy();
   const [copiedLink, copyLink] = useCopy();
   const lobby = net.lobby;
+  const [inviting, setInviting] = useState(false);
+  const signedIn = useAccount((a) => a.status === 'signedIn');
 
   useEffect(() => {
     if (!net.room && net.status !== 'connecting') go('online');
@@ -209,6 +220,11 @@ export default function Lobby() {
           <div className="row">
             <Button onClick={() => copyCode(lobby.code)}>{copiedCode ? <Icon.check /> : <Icon.copy />} Copy code</Button>
             <Button onClick={() => copyLink(invite)}>{copiedLink ? <Icon.check /> : <Icon.copy />} Copy invite link</Button>
+            {signedIn && (
+              <Button variant="primary" onClick={() => setInviting(true)}>
+                <Icon.users size={16} /> Invite friends
+              </Button>
+            )}
           </div>
         </section>
         {kind === 'host' && firebaseConfigured && <PublicSwitch />}
@@ -293,6 +309,7 @@ export default function Lobby() {
           )}
         </div>
       </div>
+      {inviting && <InviteFriends code={lobby.code} onClose={() => setInviting(false)} />}
     </main>
   );
 }

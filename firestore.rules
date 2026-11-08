@@ -92,6 +92,21 @@ service cloud.firestore {
     function inPair(id) {
       return signedIn() && pairOf(id).size() == 2 && request.auth.uid in pairOf(id);
     }
+    // The id of a pair of accounts, the two ids in order joined by "_".
+    function pairKey(a, b) {
+      return a < b ? a + '_' + b : b + '_' + a;
+    }
+    function isMember(gid) {
+      return signedIn() && request.auth.uid in get(/databases/$(database)/documents/groups/$(gid)).data.members;
+    }
+    // A message is one of: text, a voice note, a small picture, or a game invitation.
+    function validBody(d) {
+      return (('text' in d) && d.text is string && d.text.size() >= 1 && d.text.size() <= 500)
+        || (('voice' in d) && d.voice is string && d.voice.size() <= 400000
+          && ('duration' in d) && d.duration is number && d.duration <= 31)
+        || (('image' in d) && d.image is string && d.image.size() <= 420000 && d.image.matches('^data:image/.*'))
+        || (('invite' in d) && d.invite is string && d.invite.size() >= 4 && d.invite.size() <= 12);
+    }
     function friends(id) {
       return exists(/databases/$(database)/documents/friendships/$(id))
         && get(/databases/$(database)/documents/friendships/$(id)).data.status == 'accepted';
@@ -183,7 +198,7 @@ service cloud.firestore {
       allow create: if signedIn() && request.auth.uid != uid
         && request.resource.data.keys().hasOnly(['type', 'from', 'fromName', 'party', 'text', 'createdAt', 'expiresAt', 'read'])
         && request.resource.data.from == request.auth.uid
-        && request.resource.data.type in ['friendRequest', 'friendAccepted', 'partyInvite', 'message']
+        && request.resource.data.type in ['friendRequest', 'friendAccepted', 'partyInvite', 'message', 'groupMessage', 'gameInvite', 'call']
         && validDisplayName(request.resource.data.fromName)
         && (!('text' in request.resource.data) || (request.resource.data.text is string && request.resource.data.text.size() <= 140))
         && request.resource.data.read == false;
@@ -232,15 +247,95 @@ service cloud.firestore {
       match /messages/{mid} {
         allow read: if inPair(id);
         allow create: if inPair(id) && friends(id)
-          && request.resource.data.keys().hasOnly(['from', 'text', 'voice', 'duration', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['from', 'text', 'voice', 'duration', 'image', 'invite', 'createdAt'])
           && request.resource.data.from == request.auth.uid
-          && (
-            (request.resource.data.text is string && request.resource.data.text.size() >= 1 && request.resource.data.text.size() <= 500)
-            || (request.resource.data.voice is string && request.resource.data.voice.size() <= 400000
-              && request.resource.data.duration is number && request.resource.data.duration <= 31)
-          );
+          && validBody(request.resource.data);
         allow delete: if inPair(id) && resource.data.from == request.auth.uid;
       }
+      // Who is typing: each player keeps one small note, refreshed while they type.
+      match /typing/{tid} {
+        allow read: if inPair(id);
+        allow create, update: if inPair(id) && tid == request.auth.uid
+          && request.resource.data.keys().hasOnly(['at']) && request.resource.data.at == request.time;
+        allow delete: if inPair(id) && tid == request.auth.uid;
+      }
+    }
+
+    // Group chats of up to eight friends. Members read and write; the owner renames and adds people;
+    // anyone can leave; the last one out deletes it.
+    match /groups/{gid} {
+      allow get, list: if signedIn() && request.auth.uid in resource.data.members;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['name', 'owner', 'members', 'names', 'last', 'updatedAt', 'createdAt'])
+        && request.resource.data.owner == request.auth.uid
+        && request.resource.data.members is list
+        && request.auth.uid in request.resource.data.members
+        && request.resource.data.members.size() <= 8
+        && request.resource.data.name is string && request.resource.data.name.size() >= 1 && request.resource.data.name.size() <= 24;
+      allow update: if signedIn() && request.auth.uid in resource.data.members && (
+        // Someone posted: only the preview changes.
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['last', 'updatedAt'])
+        // The owner renames the group or adds people.
+        || (request.auth.uid == resource.data.owner
+          && request.resource.data.owner == resource.data.owner
+          && request.resource.data.members.size() <= 8
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'members', 'names', 'updatedAt']))
+        // Someone leaves (only themselves), and the owner may hand the group on.
+        || (request.resource.data.members.size() < resource.data.members.size()
+          && resource.data.members.removeAll(request.resource.data.members).hasOnly([request.auth.uid])
+          && (request.resource.data.owner == resource.data.owner
+            || (request.auth.uid == resource.data.owner && request.resource.data.owner in request.resource.data.members))
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'names', 'owner', 'updatedAt']))
+      );
+      allow delete: if signedIn() && request.auth.uid in resource.data.members && resource.data.members.size() == 1;
+      match /messages/{mid} {
+        allow read: if isMember(gid);
+        allow create: if isMember(gid)
+          && request.resource.data.keys().hasOnly(['from', 'fromName', 'text', 'voice', 'duration', 'image', 'invite', 'createdAt'])
+          && request.resource.data.from == request.auth.uid
+          && request.resource.data.fromName is string && request.resource.data.fromName.size() <= 24
+          && validBody(request.resource.data);
+        allow delete: if isMember(gid) && resource.data.from == request.auth.uid;
+      }
+      match /typing/{tid} {
+        allow read: if isMember(gid);
+        allow create, update: if isMember(gid) && tid == request.auth.uid
+          && request.resource.data.keys().hasOnly(['at']) && request.resource.data.at == request.time;
+        allow delete: if isMember(gid) && tid == request.auth.uid;
+      }
+    }
+
+    // Calls: a document that rings the people in it. The voice itself goes straight between browsers.
+    // A direct call needs a friendship; a group call stays inside its group.
+    match /calls/{id} {
+      allow read: if signedIn() && request.auth.uid in resource.data.members;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['caller', 'callerName', 'members', 'names', 'joined', 'declined', 'status', 'title', 'chat', 'kind', 'createdAt', 'updatedAt'])
+        && request.resource.data.caller == request.auth.uid
+        && request.resource.data.members is list
+        && request.auth.uid in request.resource.data.members
+        && request.resource.data.members.size() <= 8
+        && request.resource.data.joined == [request.auth.uid]
+        && request.resource.data.status == 'ringing'
+        && (request.resource.data.kind == 'dm'
+          ? (request.resource.data.members.size() == 2
+            && request.resource.data.chat == pairKey(request.resource.data.members[0], request.resource.data.members[1])
+            && friends(request.resource.data.chat))
+          : (request.resource.data.kind == 'group'
+            && request.resource.data.members.hasOnly(get(/databases/$(database)/documents/groups/$(request.resource.data.chat)).data.members)));
+      allow update: if signedIn() && request.auth.uid in resource.data.members
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['joined', 'declined', 'status', 'updatedAt'])
+        && request.resource.data.joined.hasOnly(resource.data.members)
+        && request.resource.data.declined.hasOnly(resource.data.members);
+      allow delete: if signedIn() && request.auth.uid in resource.data.members;
+    }
+
+    // An offline world a friend (or the owner) can step into: the code its host listens on.
+    match /joinable/{uid} {
+      allow read: if isOwner(uid) || isAdmin() || (signedIn() && friends(pairKey(request.auth.uid, uid)));
+      allow write: if isOwner(uid) && request.resource.data.keys().hasOnly(['code', 'updatedAt'])
+        && (request.resource.data.code == null || (request.resource.data.code is string && request.resource.data.code.size() <= 12))
+        && request.resource.data.updatedAt == request.time;
     }
 
     // Where a player is playing (the code of the game they are in). Only they and the owner can see it.
@@ -273,7 +368,10 @@ service cloud.firestore {
     // a signed-in player may list one game at a time, under their own id, and remove it.
     // Holds only what the game list shows: no email, no account data.
     function validRoom(d) {
-      return d.keys().hasOnly(['code', 'name', 'map', 'mode', 'players', 'phase', 'protocol', 'updatedAt'])
+      return d.keys().hasOnly(['code', 'name', 'map', 'mode', 'players', 'phase', 'protocol', 'random', 'skill', 'region', 'updatedAt'])
+        && (!('random' in d) || d.random is bool)
+        && (!('skill' in d) || (d.skill is int && d.skill >= 0 && d.skill <= 5000))
+        && (!('region' in d) || (d.region is string && d.region.size() <= 12))
         && d.code is string && d.code.matches('^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{5}$')
         && validDisplayName(d.name)
         && d.map in ['skyline', 'core', 'float', 'docks', 'gardens', 'canyon', 'arcade']

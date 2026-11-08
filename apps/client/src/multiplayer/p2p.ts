@@ -10,6 +10,8 @@ import {
   PROTOCOL_VERSION,
   RoomHost,
   TICK_RATE,
+  type Simulation,
+  type SimEvent,
   type HostClient,
   type JoinOptions,
   type LobbySettings,
@@ -447,14 +449,26 @@ class BrowserHost {
     settings: Partial<LobbySettings> | undefined,
     hello: PeerHello,
     private onLobby?: (state: LobbyState | null) => void,
+    /** An offline match this game adopts instead of starting in a lobby. */
+    world?: { sim: Simulation; pid: number },
   ) {
-    this.room = new RoomHost({ code, settings, onLobby: (s) => this.onLobby?.(s), authorize });
+    this.room = new RoomHost({
+      code,
+      settings,
+      onLobby: (s) => this.onLobby?.(s),
+      authorize,
+      kick: (id) => {
+        const s = this.sessions.get(id);
+        if (s) this.remove(s);
+      },
+    });
     this.link = new LoopbackLink(this);
     peer.on('connection', (conn) => this.accept(conn));
     peer.on('disconnected', () => this.rejoinBroker());
     this.stopTicker = ticker(() => this.tick());
     addEventListener('pagehide', this.close);
-    this.room.join(this.link.client, hello, { admin: isOwner() });
+    if (world) this.room.adopt(world.sim, this.link.client, world.pid, hello, isOwner());
+    else this.room.join(this.link.client, hello, { admin: isOwner() });
   }
 
   private accept(conn: DataConnection) {
@@ -566,7 +580,8 @@ class BrowserHost {
     this.sessions.delete(s.id);
     const conn = s.conn;
     s.conn = null;
-    conn?.close();
+    if (conn) this.raw(conn, '~bye');
+    setTimeout(() => conn?.close(), 150);
     this.room.leave(s.id);
   }
 
@@ -629,6 +644,40 @@ async function claimCode(): Promise<{ peer: Peer; code: string }> {
   throw new P2PError('unavailable-id');
 }
 
+/** This tab's open game, so the lobby can change its random-server setting. */
+let current: BrowserHost | null = null;
+export function setHostRandom(on: boolean) {
+  current?.room.setRandom(on);
+}
+
+/** What an offline match uses to mirror itself to guests who join its world. */
+export interface World {
+  code: string;
+  /** Called by the host's view around every simulation step. */
+  tap: { before(): void; after(events: SimEvent[]): void };
+  guests(): number;
+  close(): void;
+}
+
+/**
+ * Makes a match running on this device joinable: it listens under a fresh code, and anyone who joins
+ * (a friend, or the owner) is dropped into the match in progress, taking over a bot. Nothing restarts.
+ */
+export async function openWorld(sim: Simulation, pid: number, hello: PeerHello, onGuests?: (n: number) => void): Promise<World> {
+  const code = generateRoomCode();
+  const peer = await openPeer(ID_PREFIX + code);
+  let last = 1;
+  const host = new BrowserHost(peer, code, undefined, hello, (s) => {
+    if (s && s.players.length !== last) onGuests?.((last = s.players.length));
+  }, { sim, pid });
+  return {
+    code,
+    tap: { before: () => host.room.externalBefore(), after: (e) => host.room.externalAfter(e) },
+    guests: () => Math.max(0, host.room.size - 1),
+    close: host.close,
+  };
+}
+
 /** Starts hosting in this tab. Returns the host's own seat; guests join with the code. */
 export async function host(
   hello: PeerHello,
@@ -637,7 +686,12 @@ export async function host(
 ): Promise<NetRoom> {
   // The host's tab runs the authoritative simulation, so physics must be ready before any match starts.
   const [{ peer, code }] = await Promise.all([claimCode(), initPhysics()]);
-  return new BrowserHost(peer, code, settings, hello, onLobby).link;
+  const h = new BrowserHost(peer, code, settings, hello, (s) => {
+    if (!s && current === h) current = null;
+    onLobby?.(s);
+  });
+  current = h;
+  return h.link;
 }
 
 /** Joins a game hosted in someone else's browser. */
