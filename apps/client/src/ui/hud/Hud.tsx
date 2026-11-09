@@ -9,13 +9,15 @@ import { voice, useVoice } from '../../multiplayer/voice';
 import { teamNames } from '../../rendering/palette';
 import { useSettings } from '../../settings/settings';
 import { publicName, useProfile } from '../../state/profile';
-import { useHud, useUi } from '../../state/ui';
+import { useHud, useHud2, useUi } from '../../state/ui';
 import { useChat } from '../../state/chat';
 import { Chat } from './Chat';
 import { Roster, Spectate } from './Roster';
 import { Tutorial } from '../Tutorial';
 import { GameEmoteWheel } from '../EmoteWheel';
 import { Minimap } from './Minimap';
+import { SplitHud } from '../Split';
+import { stopSplit, useSplit } from '../../game/split';
 import { Icon, TeamShape } from '../icons';
 import { Button, keyLabel, Segmented } from '../kit';
 
@@ -28,11 +30,13 @@ export function Hud() {
   const bindings = useSettings((s) => s.controls.bindings);
   const touchMode = useSettings((s) => s.controls.touchControls);
   const paused = useUi((s) => s.paused);
+  const seated = useSplit((s) => s.seated);
+  const board2 = useHud2((s) => s.showBoard);
   const names = teamNames();
   const coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
   const lastDevice = useDevice((d) => d.last);
   // A controller in your hands hides the on-screen buttons (touch brings them back).
-  const showTouch = touchMode === 'on' || (touchMode === 'auto' && coarse && lastDevice !== 'pad');
+  const showTouch = !seated && (touchMode === 'on' || (touchMode === 'auto' && coarse && lastDevice !== 'pad'));
   useEffect(() => {
     touch.active = showTouch;
   }, [showTouch]);
@@ -53,7 +57,8 @@ export function Hud() {
   return (
     <div className={`hud ${showTouch ? 'hud--touch' : ''}`}>
       {/* Only the match readout hides behind the pause menu; the menu itself must stay reachable. */}
-      <div className="hud__scale" style={{ ['--hud-scale' as string]: g.hudScale }} aria-hidden={paused}>
+      {seated && !paused && <SplitHud />}
+      <div className="hud__scale" style={{ ['--hud-scale' as string]: g.hudScale, ...(seated ? { display: 'none' } : {}) }} aria-hidden={paused}>
         <div className="hud-top">
           <div className="score">
             <TeamShape team={0} />
@@ -174,17 +179,17 @@ export function Hud() {
         {h.caption && <div className="caption">{h.caption}</div>}
       </div>
 
-      {!paused && <GameEmoteWheel />}
-      {!paused && <Spectate />}
-      {!paused && <Tutorial />}
-      {h.showBoard && <Scoreboard />}
+      {!paused && !seated && <GameEmoteWheel />}
+      {!paused && !seated && <Spectate />}
+      {!paused && !seated && <Tutorial />}
+      {(h.showBoard || (seated && board2)) && <Scoreboard />}
       {showTouch && !paused && <TouchControls charge={h.charge} team={h.myTeam} />}
       {paused && <PauseMenu />}
     </div>
   );
 }
 
-function Crosshair({ hitAt, koAt, ink, hp }: { hitAt: number; koAt: number; ink: number; hp: number }) {
+export function Crosshair({ hitAt, koAt, ink, hp }: { hitAt: number; koAt: number; ink: number; hp: number }) {
   const style = useSettings((s) => s.gameplay.crosshair);
   const hits = useSettings((s) => s.gameplay.hitIndicators);
   const ref = useRef<SVGSVGElement>(null);
@@ -281,6 +286,7 @@ function Scoreboard() {
 }
 
 function PauseMenu() {
+  const seated = useSplit((s) => s.seated);
   const setPaused = useUi((s) => s.setPaused);
   const go = useUi((s) => s.go);
   const online = useHud((s) => s.net !== 'local');
@@ -315,6 +321,11 @@ function PauseMenu() {
           Settings
         </Button>
         <VoiceControls />
+        {seated && (
+          <Button size="lg" block onClick={() => stopSplit()}>
+            End split screen
+          </Button>
+        )}
         {hosting && <p className="muted small">You’re hosting: leaving ends the game for everyone.</p>}
         <Button size="lg" block variant="danger" onClick={() => leaveMatch()}>
           {hosting ? 'End game' : 'Leave match'}

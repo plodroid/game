@@ -18,23 +18,25 @@ export class Post {
     private scene: THREE.Scene,
     private camera: THREE.Camera,
     g: GraphicsSettings,
+    /** Share of the screen width this view covers (0.5 for one side of split screen). */
+    private share = 1,
   ) {
     const wantFxaa = g.antiAliasing === 'fxaa';
     if (!g.postProcessing || (!g.bloom && !wantFxaa && !g.ambientOcclusion)) return;
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-    const rt = new THREE.WebGLRenderTarget(size.x, size.y, {
+    const rt = new THREE.WebGLRenderTarget(Math.max(1, Math.round(size.x * share)), size.y, {
       type: THREE.HalfFloatType,
       samples: g.antiAliasing === 'msaa' ? 4 : 0,
     });
     const c = new EffectComposer(renderer, rt);
     c.addPass(new RenderPass(scene, camera));
     if (g.ambientOcclusion) {
-      const ao = new GTAOPass(scene, camera, size.x, size.y);
+      const ao = new GTAOPass(scene, camera, Math.round(size.x * share), size.y);
       ao.output = GTAOPass.OUTPUT.Default;
       ao.blendIntensity = 0.8;
       c.addPass(ao);
     }
-    if (g.bloom) c.addPass(new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.32, 0.5, 0.88));
+    if (g.bloom) c.addPass(new UnrealBloomPass(new THREE.Vector2((size.x * share) / 2, size.y / 2), 0.32, 0.5, 0.88));
     c.addPass(new OutputPass());
     if (wantFxaa) {
       this.fxaa = new ShaderPass(FXAAShader);
@@ -53,8 +55,9 @@ export class Post {
     const s = this.renderer.getSize(new THREE.Vector2());
     const pr = this.renderer.getPixelRatio();
     this.composer.setPixelRatio(pr);
-    this.composer.setSize(s.x, s.y);
-    this.fxaa?.material.uniforms.resolution.value.set(1 / (s.x * pr), 1 / (s.y * pr));
+    const w = Math.max(1, Math.round(s.x * this.share));
+    this.composer.setSize(w, s.y);
+    this.fxaa?.material.uniforms.resolution.value.set(1 / (w * pr), 1 / (s.y * pr));
   }
 
   /** Compiles the scene's shaders for where they'll really be drawn (the composer's buffer, or the screen). */

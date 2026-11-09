@@ -164,7 +164,7 @@ function sendTrack() {
     for (const s of r.call.peerConnection?.getSenders() ?? []) if (s.track?.kind === 'audio' && s.track !== track) void s.replaceTrack(track);
 }
 
-const inApp = typeof navigator !== 'undefined' && /Electron/i.test(navigator.userAgent);
+const inApp = typeof navigator !== 'undefined' && (/Electron/i.test(navigator.userAgent) || !!(window as unknown as { __CHROMASHIFT_DESKTOP__?: boolean }).__CHROMASHIFT_DESKTOP__);
 
 function listen(stream: MediaStream) {
   const c = audioCtx();

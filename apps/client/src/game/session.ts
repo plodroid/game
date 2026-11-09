@@ -6,6 +6,7 @@ import {
   Simulation,
   SPECIAL_IDS,
   publicWeapons,
+  MAX_PLAYERS,
   type BotDifficulty,
   type MapId,
   type MatchStart,
@@ -18,12 +19,14 @@ import { benchmark, probeHardware, recommend } from '../settings/hardware';
 import { useSettings } from '../settings/settings';
 import { publicName, useProfile } from '../state/profile';
 import { useTutorial } from '../state/tutorial';
-import { useUi } from '../state/ui';
+import { useHud2, useUi } from '../state/ui';
+import { p2Name, useP2 } from '../state/p2';
 import { engine, PRESET_LABEL } from './engine';
 import { MatchView } from './matchView';
 import { MenuView } from './menuView';
 import { OfflineSource, type MatchOutcome } from './source';
-import { closeWorld, openWorldFor } from './world';
+import { input2, setSplitAllowed, splitHooks, useSplit } from './split';
+import { closeWorld, openWorldFor, useWorld } from './world';
 
 export const BOT_NAMES = ['Rook', 'Pixel', 'Mango', 'Nova', 'Juno', 'Kiwi', 'Echo', 'Taro', 'Zest', 'Moss', 'Vega', 'Bolt', 'Fizz', 'Lumen', 'Pico', 'Sable'];
 
@@ -104,7 +107,13 @@ export async function startOffline(s: OfflineSetup) {
     const names = shuffled(BOT_NAMES);
     const weapons = shuffled(publicWeapons());
     const practice = s.mode === 'practice';
-    let id = 2;
+    // Split screen: player 2 plays on the same team, so they take one ally seat and the bots start after them.
+    const split = useSplit.getState().on;
+    if (split) {
+      const q = useP2.getState();
+      players.push({ id: 2, name: p2Name(), team: 0, weapon: q.weapon, special: q.special, bot: false, cosmetics: q.cosmetics });
+    }
+    let id = split ? 3 : 2;
     const addBot = (team: 0 | 1, i: number) =>
       players.push({
         id: id++,
@@ -117,7 +126,7 @@ export async function startOffline(s: OfflineSetup) {
         dummy: practice && team === 1,
         cosmetics: botLook(id),
       });
-    for (let i = 0; i < Math.min(3, s.allies); i++) addBot(0, i);
+    for (let i = 0; i < Math.min(3, Math.max(0, s.allies - (split ? 1 : 0))); i++) addBot(0, i);
     for (let i = 0; i < Math.min(4, practice ? 4 : s.rivals); i++) addBot(1, i);
     const sim = new Simulation({ map: s.map, mode: s.mode, duration: practice ? 0 : s.duration, seed: (Math.random() * 2 ** 31) | 0 }, players);
     currentOnline = false;
@@ -126,7 +135,9 @@ export async function startOffline(s: OfflineSetup) {
     resetLocalMods();
     useTutorial.setState({ active: !!s.tutorial });
     const source = new OfflineSource(sim, 1);
-    engine.setView(new MatchView(source, (o) => finish(o, 1)));
+    const view = new MatchView(source, (o) => finish(o, 1));
+    engine.setView(view);
+    if (split) view.addSeat(2, input2, useHud2);
     ui.setPaused(false);
     ui.go('match');
     // Friends (and the owner) can step into this match while it runs, practice included; only the tutorial stays private.
@@ -188,3 +199,43 @@ netHooks.onLeftMatch = () => {
 export function inOnlineRoom() {
   return !!useNet.getState().room;
 }
+
+/*
+ * Split screen. Two controllers connected and Options pressed: player 2 gets the other half of the
+ * screen. In a running offline match they take a bot's seat (the bot leaves, as when a friend
+ * joins); from the menu, the next match simply starts with both of them.
+ */
+function joinSplitMatch() {
+  const v = engine.view;
+  const sim = offline.sim;
+  if (!(v instanceof MatchView) || !sim || currentOnline || v.seats.length > 1) return;
+  if (useWorld.getState().guests > 0) {
+    useUi.getState().toast({ text: 'Split screen can start once your friends have left the world.', kind: 'warn' });
+    return void useSplit.setState({ on: false });
+  }
+  const bot = sim.players.find((p) => p.info.bot && p.team === 0) ?? sim.players.find((p) => p.info.bot);
+  if (!bot && sim.players.length >= MAX_PLAYERS) {
+    useUi.getState().toast({ text: 'No room for a second player in this match.', kind: 'warn' });
+    return void useSplit.setState({ on: false });
+  }
+  const id = bot ? bot.id : Math.max(...sim.players.map((p) => p.id)) + 1;
+  const team = bot ? bot.team : 0;
+  if (bot) sim.removePlayer(bot.id);
+  const q = useP2.getState();
+  sim.addPlayer({ id, name: p2Name(), team, weapon: q.weapon, special: q.special, bot: false, cosmetics: q.cosmetics });
+  v.addSeat(id, input2, useHud2);
+  useUi.getState().toast({ text: `Split screen on. ${p2Name()} joined your team.`, kind: 'success' });
+}
+
+/** Player 2 leaves the match; a bot covers their seat. */
+function leaveSplitMatch() {
+  const v = engine.view;
+  if (!(v instanceof MatchView) || v.seats.length < 2) return;
+  const id = v.seats[1].localId;
+  v.removeSeat();
+  offline.sim?.setBot(id, 'normal');
+}
+
+splitHooks.start = joinSplitMatch;
+splitHooks.stop = leaveSplitMatch;
+setSplitAllowed(() => !useTutorial.getState().active && !(currentOnline && engine.view?.kind === 'match'));

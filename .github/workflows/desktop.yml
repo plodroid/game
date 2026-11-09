@@ -1,0 +1,37 @@
+# Builds the Windows desktop app (a Tauri shell around the live site) and attaches the installer to a release.
+# The app loads https://plodroid.github.io/game/, so site updates reach it without a new installer.
+name: Build Windows app
+
+on:
+  workflow_dispatch:
+  push:
+    paths: ['apps/desktop/**', '.github/workflows/desktop.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+      - run: npm ci
+      - name: Build the installer
+        working-directory: apps/desktop
+        run: npx tauri build --bundles nsis
+      - name: Publish CHROMASHIFT-Setup.exe
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe CHROMASHIFT-Setup.exe
+          gh release view desktop >/dev/null 2>&1 || gh release create desktop --title "Windows app" --notes "Run CHROMASHIFT-Setup.exe on Windows 10 or 11."
+          gh release upload desktop CHROMASHIFT-Setup.exe --clobber

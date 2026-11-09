@@ -43,6 +43,10 @@ export class InputManager {
   private lookX = 0;
   private lookY = 0;
   locked = false;
+  /** Which controller slot this player uses; -1 means the first one connected. */
+  padIndex = -1;
+  /** Touch controls belong to player 1 only. */
+  touchOK = true;
   /** Set during matches: a click on the canvas captures the mouse. */
   wantsLock = false;
   /** Keyboard play without pointer lock (embedded browsers that refuse it). */
@@ -227,8 +231,18 @@ export class InputManager {
     return useSettings.getState().controls.bindings[a]?.includes(code) ?? false;
   }
 
+  /** True while this player's controller is connected. */
+  hasPad() {
+    return !!this.pad();
+  }
+
   private pad(): Gamepad | null {
-    for (const p of navigator.getGamepads?.() ?? []) if (p && p.connected) return p;
+    const all = navigator.getGamepads?.() ?? [];
+    if (this.padIndex >= 0) {
+      const p = all[this.padIndex];
+      return p && p.connected ? p : null;
+    }
+    for (const p of all) if (p && p.connected) return p;
     return null;
   }
 
@@ -283,7 +297,7 @@ export class InputManager {
         z = pz;
       }
     }
-    if (touch.active && (touch.mx || touch.mz)) {
+    if (this.touchOK && touch.active && (touch.mx || touch.mz)) {
       x = touch.mx;
       z = touch.mz;
     }
@@ -314,7 +328,7 @@ export class InputManager {
       yaw -= rx * Math.abs(rx) * g;
       pitch -= ry * Math.abs(ry) * g * 0.75;
     }
-    if (touch.active) {
+    if (this.touchOK && touch.active) {
       yaw -= touch.lookX * 0.005 * cam;
       pitch -= touch.lookY * 0.005 * cam;
       touch.lookX = touch.lookY = 0;
@@ -327,7 +341,7 @@ export class InputManager {
   buttons(): number {
     let b = 0;
     for (const [a, bit] of Object.entries(ACTION_BTN) as [Action, number][]) if (this.held(a) || this.pressed(a)) b |= bit;
-    if (touch.active) b |= touch.buttons;
+    if (this.touchOK && touch.active) b |= touch.buttons;
     if (this.emoteSlot >= 0) b |= BTN.EMOTE;
     return b;
   }

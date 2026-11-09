@@ -48,6 +48,12 @@ export interface FrameInput {
   consume(): void;
 }
 
+/** One more local player's input for this frame. */
+export interface LocalInput {
+  id: number;
+  input: FrameInput;
+}
+
 export interface MatchOutcome {
   result: MatchResult;
   xp: number;
@@ -68,7 +74,8 @@ export interface MatchSource {
   timeLeft(): number;
   score(): [number, number];
   holders(): number[];
-  update(dt: number, input: FrameInput): SimEvent[];
+  /** `extra`: more players on this same device (split screen), each with their own input. */
+  update(dt: number, input: FrameInput, extra?: LocalInput[]): SimEvent[];
   outcome(): MatchOutcome | null;
   ping(): number | null;
   /** True once after the paint grid was replaced wholesale (late join / reconnect). */
@@ -103,7 +110,7 @@ export class OfflineSource implements MatchSource {
     return this.sim.config;
   }
 
-  update(dt: number, inp: FrameInput): SimEvent[] {
+  update(dt: number, inp: FrameInput, extra: LocalInput[] = []): SimEvent[] {
     const sim = this.sim;
     this.acc = Math.min(this.acc + dt, 0.2);
     const out: SimEvent[] = [];
@@ -132,6 +139,11 @@ export class OfflineSource implements MatchSource {
         buttons: inp.buttons,
         emote: inp.emote,
       });
+      for (const x of extra) {
+        const i = x.input;
+        sim.setInput(x.id, { seq: this.seq, mx: i.mx, mz: i.mz, yaw: i.yaw, pitch: i.pitch, aimYaw: i.aimYaw, aimPitch: i.aimPitch, buttons: i.buttons, emote: i.emote });
+        i.consume();
+      }
       inp.consume();
       sim.step();
       const stepEvents = sim.drainEvents();

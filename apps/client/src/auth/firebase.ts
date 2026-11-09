@@ -88,7 +88,7 @@ interface UserDoc {
  * identifier, so each username maps to an address on the project's own auth domain. Nothing is
  * ever sent there; a real email, if the player gives one, is kept separately and privately.
  */
-const loginId = (name: string) => (name.includes('@') ? name.trim() : `${usernameKey(name)}@players.${env.firebase.authDomain ?? 'chromashift.firebaseapp.com'}`);
+export const loginId = (name: string) => (name.includes('@') ? name.trim() : `${usernameKey(name)}@players.${env.firebase.authDomain ?? 'chromashift.firebaseapp.com'}`);
 
 export async function start() {
   app = initializeApp({ ...env.firebase });

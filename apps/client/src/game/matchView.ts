@@ -38,8 +38,38 @@ import { useChat } from '../state/chat';
 import { proximityGain, voice, useVoice } from '../multiplayer/voice';
 import { ThirdPersonCamera } from './camera';
 import { engine, type View } from './engine';
-import { touch } from './input';
+import { touch, type InputManager } from './input';
+import { optionsStartsSplit, splitAt, useSplit } from './split';
 import type { FrameInput, MatchOutcome, MatchSource, ViewPlayer } from './source';
+
+/** Layer for the name tags of the players on this device, so each screen can hide its own. */
+const TAG_LAYER = 20;
+
+/** One player on this device: their own camera, controller, readout and corner of the screen. */
+export class Seat {
+  deathAt: Vec3 | null = null;
+  killer = -1;
+  /** The player being watched while you're out (the one who got you first, then whoever you pick). */
+  spectateId = -1;
+  deathT = 0;
+  specBtns = 0;
+  swimT = 0;
+  hurt: { id: number; angle: number; t: number }[] = [];
+  cues: { id: number; angle: number; t: number }[] = [];
+  notice: { id: number; text: string; tone: 'neutral' | 'good' | 'bad'; t: number } | null = null;
+  caption: { text: string; t: number } | null = null;
+  post!: Post;
+  readonly frame: FrameInput;
+  constructor(
+    readonly index: number,
+    readonly localId: number,
+    readonly input: InputManager,
+    readonly hud: typeof useHud,
+    readonly cam: ThirdPersonCamera,
+  ) {
+    this.frame = { mx: 0, mz: 0, yaw: 0, pitch: 0, aimYaw: 0, aimPitch: 0, buttons: 0, consume: () => input.consume() };
+  }
+}
 
 /** Shows only the arms and weapon of a rig (for the first-person view), or everything again. */
 function firstPersonRig(rig: Rig, on: boolean) {
@@ -66,6 +96,7 @@ interface CharView {
   fp?: boolean;
 }
 
+const tmpSize = new THREE.Vector2();
 const tmp = new THREE.Vector3(), tmp2 = v3(), camDir = v3(), aimPt = v3(), muz = v3(), fwd = v3(), right = v3();
 const KILL_CAUSE: Record<string, string> = { fall: 'fell', special: 'special' };
 
@@ -73,12 +104,15 @@ const KILL_CAUSE: Record<string, string> = { fall: 'fell', special: 'special' };
 export class MatchView implements View {
   readonly kind = 'match';
   private scene = new THREE.Scene();
-  private cam: ThirdPersonCamera;
+  /** The players on this device: one normally, two in split screen. */
+  readonly seats: Seat[] = [];
+  private get cam() {
+    return this.seats[0].cam;
+  }
   private atlas: PaintAtlas;
   private env: Environment;
   private fx: Effects;
   private mapGroup: THREE.Group;
-  private post: Post;
   private chars = new Map<number, CharView>();
   private colors: [THREE.Color, THREE.Color];
   private uniforms: PaintUniforms;
@@ -90,20 +124,8 @@ export class MatchView implements View {
   private lastCount = -1;
   private minuteWarned = false;
   private splatBudget = 0;
-  private hurt: { id: number; angle: number; t: number }[] = [];
-  private cues: { id: number; angle: number; t: number }[] = [];
-  private deathAt: Vec3 | null = null;
-  private killer = -1;
-  /** The player being watched while you're out (the one who got you first, then whoever you pick). */
-  private spectateId = -1;
-  private deathT = 0;
-  private specBtns = 0;
   private ended = false;
-  private swimT = 0;
   private frame = 0;
-  private notice: { id: number; text: string; tone: 'neutral' | 'good' | 'bad'; t: number } | null = null;
-  private caption: { text: string; t: number } | null = null;
-  private input: FrameInput;
   /** Scratch camera for intro/outro shots (a camera so lookAt aims -Z like the real one). */
   private shot = new THREE.PerspectiveCamera();
 
@@ -115,7 +137,8 @@ export class MatchView implements View {
     const r = engine.renderer;
     const map = source.world.map;
     this.colors = teamColors();
-    this.cam = new ThirdPersonCamera(engine.aspect, Math.max(200, g.drawDistance * 1.6));
+    const cam0 = new ThirdPersonCamera(engine.aspect, Math.max(200, g.drawDistance * 1.6));
+    this.seats.push(new Seat(0, source.localId, engine.input, useHud, cam0));
     this.atlas = new PaintAtlas(r, source.world.grid, g.paintQuality);
     this.atlas.rebuildFromGrid();
     this.uniforms = {
@@ -143,15 +166,15 @@ export class MatchView implements View {
     this.scene.add(this.mapGroup);
     this.fx = new Effects(this.scene, g.particles, this.colors);
     this.buildDecor();
-    this.post = new Post(r, this.scene, this.cam.camera, g);
+    this.buildPosts(g);
     r.shadowMap.autoUpdate = false;
     r.shadowMap.needsUpdate = true;
 
     const me = source.players().find((p) => p.id === source.localId);
     if (me) this.cam.snapTo(me.state.yaw);
-    this.input = { mx: 0, mz: 0, yaw: 0, pitch: 0, aimYaw: 0, aimPitch: 0, buttons: 0, consume: () => engine.input.consume() };
     engine.input.onPause = () => {
-      if (this.source.phase() !== 'ended') useUi.getState().setPaused(true);
+      // The Options press that started split screen must not also pause the match.
+      if (this.source.phase() !== 'ended' && performance.now() - splitAt.t > 500 && !optionsStartsSplit()) useUi.getState().setPaused(true);
     };
     // Take control straight away: keys work now, and the mouse is captured while the click
     // that started the match still counts as a gesture (otherwise on the first key or click).
@@ -162,7 +185,9 @@ export class MatchView implements View {
     engine.input.onChat = () => useChat.getState().setOpen(true);
     engine.input.onTalk = (down) => void voice.talk(down);
     engine.input.onMap = () => useHud.setState((h) => ({ bigMap: !h.bigMap }));
-    engine.input.onView = () => (this.cam.firstPerson = !this.cam.firstPerson);
+    engine.input.onView = () => {
+      if (this.seats.length === 1) this.cam.firstPerson = !this.cam.firstPerson;
+    };
     audio.startMusic('match');
     audio.startAmbient(map.theme.indoor ? 'hum' : 'wind');
     audio.onWorldSound = (at, kind) => this.worldCue(at, kind);
@@ -232,12 +257,10 @@ export class MatchView implements View {
     this.scene.add(rig.root);
     const me = this.source.players().find((p) => p.id === this.source.localId);
     const friendly = me ? me.info.team === v.info.team : false;
-    let tag: Tag | null = null;
-    if (v.id !== this.source.localId) {
-      tag = nameTag(v.info.name, v.info.admin ? new THREE.Color(0xffffff) : this.colors[v.info.team], friendly);
-      rig.root.add(tag.sprite);
-      tag.sprite.position.y = 2.28;
-    }
+    // Every player gets a tag; the ones on this device show it only to each other (see updateCharacters).
+    const tag = nameTag(v.info.name, v.info.admin ? new THREE.Color(0xffffff) : this.colors[v.info.team], friendly);
+    rig.root.add(tag.sprite);
+    tag.sprite.position.y = 2.28;
     // Blob shadow on the cheapest preset (no shadow maps).
     if (g.shadowQuality === 0) {
       const blob = new THREE.Mesh(new THREE.CircleGeometry(0.42, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false }));
@@ -254,31 +277,35 @@ export class MatchView implements View {
     return this.source.players().find((p) => p.id === this.source.localId);
   }
 
-  update(dt: number) {
-    const ui = useUi.getState();
-    const settings = useSettings.getState();
-    const src = this.source;
-    const me = this.me();
-    const input = engine.input;
-    input.pollPad();
-    const playing = src.phase() === 'playing';
-    const paused = ui.paused;
+  private meOf(seat: Seat): ViewPlayer | undefined {
+    return this.source.players().find((p) => p.id === seat.localId);
+  }
+  private seatOf(id: number): Seat | undefined {
+    return this.seats.find((s) => s.localId === id);
+  }
 
+  /** Reads one player's controls for this frame and turns them into the input the simulation takes. */
+  private readSeat(seat: Seat, dt: number, paused: boolean) {
+    const src = this.source;
+    const me = this.meOf(seat);
+    const input = seat.input;
+    const cam = seat.cam;
+    input.pollPad();
     if (!paused) {
       const l = input.look(dt);
-      this.cam.yaw += l.yaw;
-      this.cam.pitch += l.pitch;
+      cam.yaw += l.yaw;
+      cam.pitch += l.pitch;
     }
 
     // Crosshair-corrected aim: fire from the muzzle towards whatever the screen centre points at.
-    const inp = this.input;
-    inp.yaw = this.cam.yaw;
-    inp.pitch = this.cam.pitch;
-    inp.aimYaw = this.cam.yaw;
-    inp.aimPitch = this.cam.pitch;
+    const inp = seat.frame;
+    inp.yaw = cam.yaw;
+    inp.pitch = cam.pitch;
+    inp.aimYaw = cam.yaw;
+    inp.aimPitch = cam.pitch;
     if (me && me.state.alive) {
-      const cp = this.cam.camera.position;
-      dirFromAngles(camDir, this.cam.yaw, this.cam.pitch);
+      const cp = cam.camera.position;
+      dirFromAngles(camDir, cam.yaw, cam.pitch);
       const hit = src.world.raycast(cp, camDir, 120);
       let dist = hit ? hit.dist : 80;
       for (const o of src.players()) {
@@ -292,7 +319,7 @@ export class MatchView implements View {
       aimPt.x = cp.x + camDir.x * dist;
       aimPt.y = cp.y + camDir.y * dist;
       aimPt.z = cp.z + camDir.z * dist;
-      muzzle(muz, me.state.pos, this.cam.yaw, WEAPONS[me.info.weapon], me.state.shots);
+      muzzle(muz, me.state.pos, cam.yaw, WEAPONS[me.info.weapon], me.state.shots);
       tmp2.x = aimPt.x - muz.x;
       tmp2.y = aimPt.y - muz.y;
       tmp2.z = aimPt.z - muz.z;
@@ -303,16 +330,29 @@ export class MatchView implements View {
       }
     }
     const stick = input.stick();
-    input.wantsLock = !paused;
-    const active = !paused && (input.locked || input.engaged || touch.active || !!navigator.getGamepads?.()?.some((p) => p?.connected));
+    let active: boolean;
+    if (seat.index === 0) {
+      input.wantsLock = !paused;
+      active = !paused && (input.locked || input.engaged || touch.active || !!navigator.getGamepads?.()?.some((p) => p?.connected));
+    } else active = !paused && input.hasPad();
     inp.mx = active ? stick.x : 0;
     inp.mz = active ? stick.z : 0;
     inp.buttons = active ? input.buttons() : 0;
     inp.emote = input.emote();
+  }
+
+  update(dt: number) {
+    const ui = useUi.getState();
+    const src = this.source;
+    const playing = src.phase() === 'playing';
+    const paused = ui.paused;
+
+    for (const seat of this.seats) this.readSeat(seat, dt, paused);
 
     // Offline matches pause for real; online they keep running.
     // An offline match you've opened to friends keeps running, so they aren't frozen.
-    const events = paused && !src.online && useWorld.getState().guests === 0 ? [] : src.update(dt, inp);
+    const extra = this.seats.slice(1).map((x) => ({ id: x.localId, input: x.frame }));
+    const events = paused && !src.online && useWorld.getState().guests === 0 ? [] : src.update(dt, this.seats[0].frame, extra);
     this.splatBudget = 6;
     if (src.consumeRepaint?.()) this.atlas.rebuildFromGrid();
     for (const e of events) this.onEvent(e);
@@ -322,42 +362,8 @@ export class MatchView implements View {
     this.fx.syncEffects(src.effects());
     this.fx.update(dt);
 
-    // Out of the fight: watch the player who got you, then switch between players with fire and jump.
-    let watched: ViewPlayer | undefined;
-    if (me && !me.state.alive) {
-      this.deathT += dt;
-      const others = src.players().filter((p) => p.id !== src.localId && p.state.alive);
-      const pool = [...others.filter((p) => p.info.team === me.info.team), ...others.filter((p) => p.info.team !== me.info.team)];
-      const b = inp.buttons;
-      const press = (bit: number) => (b & bit) !== 0 && (this.specBtns & bit) === 0;
-      if (pool.length && (press(BTN.FIRE) || press(BTN.JUMP))) {
-        const at = pool.findIndex((p) => p.id === this.spectateId);
-        const step = press(BTN.FIRE) ? 1 : -1;
-        this.spectateId = pool[(at + step + pool.length * 2) % pool.length].id;
-      }
-      this.specBtns = b;
-      watched = pool.find((p) => p.id === this.spectateId) ?? pool[0];
-      if (watched) this.spectateId = watched.id;
-    } else this.specBtns = 0;
-    const target = me && me.state.alive ? me.pos : (watched?.pos ?? this.deathAt ?? me?.pos ?? v3());
-    // The first moments swing the camera round to whoever got you (the kill-cam), then you can look freely.
-    if (me && !me.state.alive && this.killer >= 0 && this.deathT < 1.8 && this.spectateId === this.killer) {
-      const k = src.players().find((p) => p.id === this.killer);
-      if (k) {
-        const want = Math.atan2(-(k.pos.x - target.x), -(k.pos.z - target.z));
-        let d = want - this.cam.yaw;
-        d = Math.atan2(Math.sin(d), Math.cos(d));
-        this.cam.yaw += d * (1 - Math.exp(-3 * dt));
-      }
-    }
-    const reduced = prefersReducedMotion();
-    this.cam.update(dt, src.world, target, {
-      smoothing: settings.gameplay.cameraSmoothing,
-      diving: !!me?.state.diving,
-      fast: !reduced && !!me && (me.state.swimming || me.state.surgeT > 0),
-      shake: reduced ? 0 : settings.gameplay.cameraShake,
-    });
-    if (!reduced && me) this.cinematic(me);
+    for (const seat of this.seats) this.follow(seat, dt);
+    const me = this.me();
     const c = this.cam.camera;
     audio.setListener(c.position, this.cam.yaw);
     if (me && !this.ended) this.localAudio(dt, me);
@@ -373,19 +379,64 @@ export class MatchView implements View {
     this.hudT -= dt;
     if (this.hudT <= 0) {
       this.hudT = 1 / 15;
-      this.pushHud(me);
+      this.pushHud();
     }
     if (playing && src.config.duration > 0) audio.setIntensity(src.timeLeft() < 30 ? 1 : 0);
+  }
+
+  /** One player's camera: follows them, or watches someone while they're out. */
+  private follow(seat: Seat, dt: number) {
+    const src = this.source;
+    const settings = useSettings.getState();
+    const me = this.meOf(seat);
+    const cam = seat.cam;
+    // Out of the fight: watch the player who got you, then switch between players with fire and jump.
+    let watched: ViewPlayer | undefined;
+    if (me && !me.state.alive) {
+      seat.deathT += dt;
+      const others = src.players().filter((p) => p.id !== seat.localId && p.state.alive);
+      const pool = [...others.filter((p) => p.info.team === me.info.team), ...others.filter((p) => p.info.team !== me.info.team)];
+      const b = seat.frame.buttons;
+      const press = (bit: number) => (b & bit) !== 0 && (seat.specBtns & bit) === 0;
+      if (pool.length && (press(BTN.FIRE) || press(BTN.JUMP))) {
+        const at = pool.findIndex((p) => p.id === seat.spectateId);
+        const step = press(BTN.FIRE) ? 1 : -1;
+        seat.spectateId = pool[(at + step + pool.length * 2) % pool.length].id;
+      }
+      seat.specBtns = b;
+      watched = pool.find((p) => p.id === seat.spectateId) ?? pool[0];
+      if (watched) seat.spectateId = watched.id;
+    } else seat.specBtns = 0;
+    const target = me && me.state.alive ? me.pos : (watched?.pos ?? seat.deathAt ?? me?.pos ?? v3());
+    // The first moments swing the camera round to whoever got you (the kill-cam), then you can look freely.
+    if (me && !me.state.alive && seat.killer >= 0 && seat.deathT < 1.8 && seat.spectateId === seat.killer) {
+      const k = src.players().find((p) => p.id === seat.killer);
+      if (k) {
+        const want = Math.atan2(-(k.pos.x - target.x), -(k.pos.z - target.z));
+        let d = want - cam.yaw;
+        d = Math.atan2(Math.sin(d), Math.cos(d));
+        cam.yaw += d * (1 - Math.exp(-3 * dt));
+      }
+    }
+    const reduced = prefersReducedMotion();
+    if (this.seats.length > 1) cam.firstPerson = false;
+    cam.update(dt, src.world, target, {
+      smoothing: settings.gameplay.cameraSmoothing,
+      diving: !!me?.state.diving,
+      fast: !reduced && !!me && (me.state.swimming || me.state.surgeT > 0),
+      shake: reduced ? 0 : settings.gameplay.cameraShake,
+    });
+    if (!reduced && me) this.cinematic(me, seat);
   }
 
   /**
    * Intro: an establishing shot above the arena that eases down to your shoulder by "GO".
    * Outro: a slow pull-back while "TIME!" shows. Overlays the gameplay camera each frame.
    */
-  private cinematic(me: ViewPlayer) {
+  private cinematic(me: ViewPlayer, seat: Seat) {
     const src = this.source;
     const ph = src.phase();
-    const cam = this.cam.camera;
+    const cam = seat.cam.camera;
     const smooth = (x: number) => x * x * (3 - 2 * x);
     if (ph === 'intro') {
       const e = smooth(1 - Math.min(1, Math.max(0, (src.phaseT() - 0.5) / (INTRO_TIME - 0.5))));
@@ -420,9 +471,9 @@ export class MatchView implements View {
     if (!ch) return;
     if (s.diving !== ch.wasDiving) audio.play(s.diving ? 'dive' : 'surface', { gain: 0.6 });
     if (s.swimming && Math.hypot(s.vel.x, s.vel.z) > 2) {
-      this.swimT -= dt;
-      if (this.swimT <= 0) {
-        this.swimT = 0.11;
+      this.seats[0].swimT -= dt;
+      if (this.seats[0].swimT <= 0) {
+        this.seats[0].swimT = 0.11;
         audio.play('swim', { gain: 0.5 });
       }
     }
@@ -433,7 +484,6 @@ export class MatchView implements View {
   private onEvent(e: SimEvent) {
     const src = this.source;
     const me = this.me();
-    const local = src.localId;
     switch (e.t) {
       case 'paint': {
         this.atlas.stamp(e, e.r, e.team, e.kind);
@@ -451,29 +501,34 @@ export class MatchView implements View {
           dirFromAngles(tmp2, e.yaw, e.pitch);
           this.fx.muzzle(tmp, tmp2, c.team);
         }
-        audio.play('shot', { at: e, weapon: e.w, gain: e.id === local ? 0.8 : 0.9 });
-        if (e.id === local) {
+        audio.play('shot', { at: e, weapon: e.w, gain: this.seatOf(e.id) ? 0.8 : 0.9 });
+        {
+          const st = this.seatOf(e.id);
           const kind = WEAPONS[e.w]?.kind;
-          if (kind === 'burst' || kind === 'lobber') this.cam.addShake(0.25);
-          engine.input.rumble(kind === 'burst' ? 0.6 : 0.15, 60);
+          if (st) {
+            if (kind === 'burst' || kind === 'lobber') st.cam.addShake(0.25);
+            st.input.rumble(kind === 'burst' ? 0.6 : 0.15, 60);
+          }
         }
         break;
       }
       case 'hit': {
         const victim = src.players().find((p) => p.id === e.id);
         this.chars.get(e.id)?.anim.hit();
-        if (e.id === local && victim) {
+        const hurtSeat = this.seatOf(e.id);
+        if (hurtSeat && victim) {
           audio.play('hurt', { gain: 0.8 });
           const by = src.players().find((p) => p.id === e.by);
           if (by) {
-            const a = Math.atan2(-(by.pos.x - victim.pos.x), -(by.pos.z - victim.pos.z)) - this.cam.yaw;
-            this.hurt.push({ id: this.feedId++, angle: Math.atan2(Math.sin(a), Math.cos(a)), t: performance.now() });
+            const a = Math.atan2(-(by.pos.x - victim.pos.x), -(by.pos.z - victim.pos.z)) - hurtSeat.cam.yaw;
+            hurtSeat.hurt.push({ id: this.feedId++, angle: Math.atan2(Math.sin(a), Math.cos(a)), t: performance.now() });
           }
-          this.cam.addShake(Math.min(0.5, e.dmg / 120));
-          engine.input.rumble(Math.min(1, e.dmg / 80), 120);
+          hurtSeat.cam.addShake(Math.min(0.5, e.dmg / 120));
+          hurtSeat.input.rumble(Math.min(1, e.dmg / 80), 120);
         }
-        if (e.by === local && e.id !== local) {
-          useHud.setState({ hitAt: performance.now() });
+        const hitSeat = this.seatOf(e.by);
+        if (hitSeat && e.id !== e.by) {
+          hitSeat.hud.setState({ hitAt: performance.now() });
           audio.play('hit', { gain: 0.7 });
         }
         break;
@@ -494,17 +549,19 @@ export class MatchView implements View {
           });
           this.feed = this.feed.slice(0, 5);
         }
-        if (e.by === local && e.id !== local) {
-          useHud.setState({ koAt: performance.now() });
-          this.say(`Splatted ${v?.info.name ?? ''}`, 'good');
+        const koSeat = this.seatOf(e.by);
+        if (koSeat && e.id !== e.by) {
+          koSeat.hud.setState({ koAt: performance.now() });
+          this.say(`Splatted ${v?.info.name ?? ''}`, 'good', koSeat);
         }
-        if (e.id === local) {
-          this.deathAt = v ? { ...v.pos } : null;
-          this.killer = e.by;
-          this.spectateId = e.by >= 0 && e.by !== local ? e.by : -1;
-          this.deathT = 0;
-          this.say(k ? `Splatted by ${k.info.name}` : 'Out of bounds', 'bad');
-          this.cam.addShake(0.6);
+        const deadSeat = this.seatOf(e.id);
+        if (deadSeat) {
+          deadSeat.deathAt = v ? { ...v.pos } : null;
+          deadSeat.killer = e.by;
+          deadSeat.spectateId = e.by >= 0 && e.by !== deadSeat.localId ? e.by : -1;
+          deadSeat.deathT = 0;
+          this.say(k ? `Splatted by ${k.info.name}` : 'Out of bounds', 'bad', deadSeat);
+          deadSeat.cam.addShake(0.6);
         }
         break;
       }
@@ -513,11 +570,12 @@ export class MatchView implements View {
         c?.anim.spawned();
         const p = src.players().find((x) => x.id === e.id);
         if (p) this.fx.ring({ x: p.pos.x, y: p.pos.y - FEET_OFFSET, z: p.pos.z }, p.info.team, 2.5, 0.5);
-        if (e.id === local && p) {
-          this.cam.snapTo(p.state.yaw);
-          this.deathAt = null;
-          this.killer = -1;
-          this.spectateId = -1;
+        const spawnSeat = this.seatOf(e.id);
+        if (spawnSeat && p) {
+          spawnSeat.cam.snapTo(p.state.yaw);
+          spawnSeat.deathAt = null;
+          spawnSeat.killer = -1;
+          spawnSeat.spectateId = -1;
           audio.play('spawn', { gain: 0.6 });
         }
         break;
@@ -526,22 +584,31 @@ export class MatchView implements View {
         const p = src.players().find((x) => x.id === e.id);
         audio.play('special', { at: e, gain: 0.9 });
         if (p) this.fx.ring(e, p.info.team, SPECIALS[e.s].radius || 2.5, 0.6);
-        if (e.id === local) this.say(SPECIALS[e.s].name, 'good');
-        else if (p && me && p.info.team !== me.info.team) this.caption = { text: `Rival ${SPECIALS[e.s].name}`, t: 2 };
+        {
+          const st = this.seatOf(e.id);
+          if (st) this.say(SPECIALS[e.s].name, 'good', st);
+          else if (p && me && p.info.team !== me.info.team) for (const x of this.seats) x.caption = { text: `Rival ${SPECIALS[e.s].name}`, t: 2 };
+        }
         break;
       }
       case 'blast': {
         this.fx.ring(e, e.team, e.r, 0.35 + e.r * 0.04);
         this.fx.burst(e, e.team, 8 + e.r * 6, 3 + e.r, 0.08);
         if (e.r > 1) audio.play('blast', { at: e, gain: Math.min(1, e.r / 4) });
-        if (me && Math.hypot(me.pos.x - e.x, me.pos.z - e.z) < e.r * 2) this.cam.addShake(Math.min(0.5, e.r / 10));
+        for (const st of this.seats) {
+          const m = this.meOf(st);
+          if (m && Math.hypot(m.pos.x - e.x, m.pos.z - e.z) < e.r * 2) st.cam.addShake(Math.min(0.5, e.r / 10));
+        }
         break;
       }
       case 'empty':
         this.chars.get(e.id)?.anim.empty();
-        if (e.id === local) {
-          audio.play('empty', { gain: 0.8 });
-          useHud.setState({ lowInkAt: performance.now() });
+        {
+          const st = this.seatOf(e.id);
+          if (st) {
+            audio.play('empty', { gain: 0.8 });
+            st.hud.setState({ lowInkAt: performance.now() });
+          }
         }
         break;
       case 'zone': {
@@ -565,11 +632,12 @@ export class MatchView implements View {
     }
   }
 
-  private say(text: string, tone: 'neutral' | 'good' | 'bad') {
-    this.notice = { id: this.feedId++, text, tone, t: 2.2 };
+  /** A line in the middle of the screen: for one player, or for everyone on this device. */
+  private say(text: string, tone: 'neutral' | 'good' | 'bad', only?: Seat) {
+    for (const s of only ? [only] : this.seats) s.notice = { id: this.feedId++, text, tone, t: 2.2 };
   }
   private capt(text: string) {
-    if (useSettings.getState().accessibility.subtitles) this.caption = { text, t: 2 };
+    if (useSettings.getState().accessibility.subtitles) for (const s of this.seats) s.caption = { text, t: 2 };
   }
 
   /** Off-screen loud sounds become edge indicators when "visual audio" is on. */
@@ -578,8 +646,9 @@ export class MatchView implements View {
     const c = this.cam.camera.position;
     if (Math.hypot(at.x - c.x, at.z - c.z) < 3) return;
     const a = Math.atan2(-(at.x - c.x), -(at.z - c.z)) - this.cam.yaw;
-    this.cues.push({ id: this.feedId++, angle: Math.atan2(Math.sin(a), Math.cos(a)), t: performance.now() });
-    if (this.cues.length > 6) this.cues.shift();
+    const cues = this.seats[0].cues;
+    cues.push({ id: this.feedId++, angle: Math.atan2(Math.sin(a), Math.cos(a)), t: performance.now() });
+    if (cues.length > 6) cues.shift();
   }
 
   private updateCharacters(dt: number) {
@@ -596,7 +665,8 @@ export class MatchView implements View {
       root.position.set(v.pos.x, v.pos.y - FEET_OFFSET, v.pos.z);
       const speed = Math.hypot(s.vel.x, s.vel.z);
       // Face the aim while shooting or idle, the travel direction while running.
-      const faceAim = s.firing || s.sinceFire < 0.7 || speed < 1 || v.id === src.localId;
+      const seat = this.seatOf(v.id);
+      const faceAim = s.firing || s.sinceFire < 0.7 || speed < 1 || !!seat;
       let want = faceAim ? s.aimYaw : Math.atan2(-s.vel.x, -s.vel.z);
       if (s.climbing) want = s.yaw;
       let d = want - c.yaw;
@@ -648,25 +718,31 @@ export class MatchView implements View {
       if (c.tag) {
         // Teammates always show; rivals show when in sight (walls hide them) and not lurking in paint.
         const teamInd = useSettings.getState().gameplay.teamIndicators;
-        const dist = this.cam.camera.position.distanceTo(root.position);
+        // The players on this device see each other's tags (never their own); everyone else's follow the usual rules.
+        const viewer = seat ? (this.seats[seat.index ? 0 : 1]?.cam.camera.position ?? camPos) : camPos;
+        const dist = viewer.distanceTo(root.position);
         const close = enemy ? dist < 34 : true;
-        c.tag.sprite.visible = s.alive && (enemy ? revealed || (!hidden && close) : teamInd);
+        if (seat) c.tag.sprite.layers.set(TAG_LAYER + seat.index);
+        c.tag.sprite.visible = s.alive && (seat ? this.seats.length > 1 : enemy ? revealed || (!hidden && close) : teamInd);
         // Up close a tag would fill the screen: nearer than 7 m it shrinks to hold a steady size.
         const k = Math.min(1, dist / 7);
         c.tag.sprite.scale.set(1.75 * k, 0.7 * k, 1);
-        (c.tag.sprite.material as THREE.SpriteMaterial).depthTest = !revealed && enemy;
+        (c.tag.sprite.material as THREE.SpriteMaterial).depthTest = !seat && !revealed && enemy;
         const hp = Math.round(Math.max(0, s.hp) / 5) * 5, talking = !!speaking[v.id];
         if (hp !== c.tag.hp || talking !== c.tag.talking) c.tag.draw(hp, talking);
       }
       // Hide our own model if the camera is squeezed into it.
-      if (v.id === src.localId) {
+      if (seat) {
         // First person: from the eyes you see only your arms and weapon; diving and dying go back to third person.
-        const fp = this.cam.firstPerson && s.alive && !s.diving;
+        // (Not in split screen: the other player must still see your whole body.)
+        const split = this.seats.length > 1;
+        const fp = !split && seat.cam.firstPerson && s.alive && !s.diving;
         if (fp !== !!c.fp) {
           c.fp = fp;
           firstPersonRig(c.rig, fp);
         }
-        if (!fp) c.rig.body.visible = c.rig.body.visible && this.cam.camera.position.distanceTo(root.position) > 1.1;
+        if (split) c.rig.body.visible = true;
+        else if (!fp) c.rig.body.visible = c.rig.body.visible && seat.cam.camera.position.distanceTo(root.position) > 1.1;
       }
       c.wasDiving = s.diving;
       c.wasGrounded = s.grounded;
@@ -679,19 +755,22 @@ export class MatchView implements View {
       }
   }
 
-  private pushHud(me: ViewPlayer | undefined) {
+  private pushHud() {
     const src = this.source;
     const now = performance.now();
-    this.hurt = this.hurt.filter((h) => now - h.t < 900);
-    this.cues = this.cues.filter((h) => now - h.t < 1200);
-    if (this.notice) {
-      this.notice.t -= 1 / 15;
-      if (this.notice.t <= 0) this.notice = null;
+    for (const seat of this.seats) {
+      seat.hurt = seat.hurt.filter((h) => now - h.t < 900);
+      seat.cues = seat.cues.filter((h) => now - h.t < 1200);
+      if (seat.notice) {
+        seat.notice.t -= 1 / 15;
+        if (seat.notice.t <= 0) seat.notice = null;
+      }
+      if (seat.caption) {
+        seat.caption.t -= 1 / 15;
+        if (seat.caption.t <= 0) seat.caption = null;
+      }
     }
-    if (this.caption) {
-      this.caption.t -= 1 / 15;
-      if (this.caption.t <= 0) this.caption = null;
-    }
+    const me = this.me();
     const phase = src.phase();
     const countdown = phase === 'intro' ? Math.ceil(src.phaseT() - 0.5) : 0;
     if (phase === 'intro' && countdown !== this.lastCount && countdown > 0 && countdown <= 3) {
@@ -729,50 +808,111 @@ export class MatchView implements View {
       }
       voice.setNear(gains);
     }
-    const board: BoardRow[] = src.players().map((p) => ({
-      cosmetics: p.info.cosmetics,
-      id: p.id,
-      name: p.info.name,
-      team: p.info.team,
-      bot: p.info.bot,
-      weapon: p.info.weapon,
-      kills: p.stats.kills,
-      deaths: p.stats.deaths,
-      assists: p.stats.assists,
-      paint: Math.round(p.stats.paint),
-      alive: p.state.alive,
-      you: p.id === src.localId,
-    }));
-    const s = me?.state;
-    useHud.setState({
-      phase,
-      countdown,
-      timeLeft: tl,
-      score: src.score(),
-      holders: [...src.holders()],
-      myTeam: me?.info.team ?? 0,
-      hp: s?.hp ?? 0,
-      ink: s?.ink ?? 0,
-      charge: s?.charge ?? 0,
-      special: me?.info.special ?? 'surge',
-      surge: s?.surgeT ?? 0,
-      weapon: me?.info.weapon ?? 'pulse',
-      alive: s?.alive ?? false,
-      respawnIn: s && !s.alive ? Math.max(0, s.respawnT) : 0,
-      spectating: s && !s.alive ? (() => {
-        const w = src.players().find((p) => p.id === this.spectateId);
-        return w ? { id: w.id, name: w.info.name, killer: w.id === this.killer } : null;
-      })() : null,
-      diving: !!s?.diving,
-      feed: this.feed,
-      notice: this.notice ? { id: this.notice.id, text: this.notice.text, tone: this.notice.tone } : null,
-      caption: this.caption?.text ?? null,
-      hurt: this.hurt.map(({ id, angle }) => ({ id, angle })),
-      cues: this.cues.map(({ id, angle }) => ({ id, angle })),
-      board,
-      ping: src.ping(),
-      net: src.online ? (src.ping() == null ? 'lost' : (src.ping() ?? 0) > 180 ? 'poor' : 'good') : 'local',
-    });
+    for (const seat of this.seats) {
+      const board: BoardRow[] = src.players().map((p) => ({
+        cosmetics: p.info.cosmetics,
+        id: p.id,
+        name: p.info.name,
+        team: p.info.team,
+        bot: p.info.bot,
+        weapon: p.info.weapon,
+        kills: p.stats.kills,
+        deaths: p.stats.deaths,
+        assists: p.stats.assists,
+        paint: Math.round(p.stats.paint),
+        alive: p.state.alive,
+        you: p.id === seat.localId,
+      }));
+      const mine = this.meOf(seat);
+      const s = mine?.state;
+      seat.hud.setState({
+        active: true,
+        mode: src.config.mode,
+        untimed: src.config.duration === 0,
+        phase,
+        countdown,
+        timeLeft: tl,
+        score: src.score(),
+        holders: [...src.holders()],
+        myTeam: mine?.info.team ?? 0,
+        hp: s?.hp ?? 0,
+        ink: s?.ink ?? 0,
+        charge: s?.charge ?? 0,
+        special: mine?.info.special ?? 'surge',
+        surge: s?.surgeT ?? 0,
+        weapon: mine?.info.weapon ?? 'pulse',
+        alive: s?.alive ?? false,
+        respawnIn: s && !s.alive ? Math.max(0, s.respawnT) : 0,
+        spectating: s && !s.alive ? (() => {
+          const w = src.players().find((p) => p.id === seat.spectateId);
+          return w ? { id: w.id, name: w.info.name, killer: w.id === seat.killer } : null;
+        })() : null,
+        diving: !!s?.diving,
+        feed: this.feed,
+        notice: seat.notice ? { id: seat.notice.id, text: seat.notice.text, tone: seat.notice.tone } : null,
+        caption: seat.caption?.text ?? null,
+        hurt: seat.hurt.map(({ id, angle }) => ({ id, angle })),
+        cues: seat.cues.map(({ id, angle }) => ({ id, angle })),
+        board,
+        ping: src.ping(),
+        net: src.online ? (src.ping() == null ? 'lost' : (src.ping() ?? 0) > 180 ? 'poor' : 'good') : 'local',
+      });
+    }
+  }
+
+  /** One post-processing chain per player (each covers half the screen in split screen). */
+  private buildPosts(g: GraphicsSettings) {
+    const share = 1 / this.seats.length;
+    for (const seat of this.seats) {
+      seat.post?.dispose();
+      seat.post = new Post(engine.renderer, this.scene, seat.cam.camera, g, share);
+    }
+    this.layoutSeats();
+  }
+
+  /** Aspect ratios and which name tags each camera can see. */
+  private layoutSeats() {
+    const share = 1 / this.seats.length;
+    for (const seat of this.seats) {
+      const cam = seat.cam.camera;
+      cam.aspect = (engine.aspect * share);
+      cam.updateProjectionMatrix();
+      cam.layers.set(0);
+      for (const o of this.seats) if (o !== seat) cam.layers.enable(TAG_LAYER + o.index);
+    }
+  }
+
+  /** Split screen on: a second player (already added to the simulation) gets their own camera and side. */
+  addSeat(localId: number, input: InputManager, hud: typeof useHud) {
+    if (this.seats.length > 1) return;
+    const g = useSettings.getState().graphics;
+    const cam = new ThirdPersonCamera(engine.aspect / 2, Math.max(200, g.drawDistance * 1.6));
+    const seat = new Seat(1, localId, input, hud, cam);
+    const p = this.source.players().find((x) => x.id === localId);
+    if (p) cam.snapTo(p.state.yaw);
+    this.seats.push(seat);
+    this.cam.firstPerson = false;
+    input.onPause = () => {
+      if (this.source.phase() !== 'ended' && performance.now() - splitAt.t > 500 && !optionsStartsSplit()) useUi.getState().setPaused(true);
+    };
+    input.onScoreboard = (open) => hud.setState({ showBoard: open });
+    input.onMap = () => hud.setState((h) => ({ bigMap: !h.bigMap }));
+    hud.setState({ active: true, showBoard: false });
+    this.buildPosts(g);
+    for (const s of this.seats) s.post.warm();
+    useSplit.setState({ seated: true });
+  }
+
+  /** Split screen off: back to one player filling the screen. */
+  removeSeat() {
+    const seat = this.seats[1];
+    if (!seat) return;
+    this.seats.length = 1;
+    seat.post.dispose();
+    seat.input.onPause = seat.input.onScoreboard = seat.input.onMap = null;
+    seat.hud.setState({ active: false, showBoard: false });
+    useSplit.setState({ seated: false });
+    this.buildPosts(useSettings.getState().graphics);
   }
 
   render(dt: number) {
@@ -781,29 +921,44 @@ export class MatchView implements View {
     // First frame: compile every shader the match can use (effects and paint included), so none
     // compiles mid-match and stalls a frame.
     if (this.frame === 0) {
-      this.post.warm();
+      this.seats[0].post.warm();
       this.atlas.warm();
     }
     this.frame++;
     // Shadow maps refresh less often on lower presets.
     if (q > 0 && this.frame % (q >= 3 ? 1 : q === 2 ? 2 : 3) === 0) r.shadowMap.needsUpdate = true;
     this.atlas.flush();
-    this.post.render(dt);
+    if (this.seats.length === 1) {
+      this.seats[0].post.render(dt);
+      return;
+    }
+    // Split screen: the world above (paint, effects, characters, shadows) was updated once; each
+    // player's camera now draws that same scene into its own half of the one canvas.
+    const size = r.getSize(tmpSize);
+    const w = size.x / this.seats.length;
+    r.setScissorTest(true);
+    this.seats.forEach((seat, i) => {
+      r.setViewport(i * w, 0, w, size.y);
+      r.setScissor(i * w, 0, w, size.y);
+      seat.post.render(dt);
+    });
+    r.setScissorTest(false);
+    r.setViewport(0, 0, size.x, size.y);
   }
 
   resize() {
-    this.cam.camera.aspect = engine.aspect;
-    this.cam.camera.updateProjectionMatrix();
-    this.post.setSize();
+    this.layoutSeats();
+    for (const s of this.seats) s.post.setSize();
   }
 
   applyGraphics(g: GraphicsSettings) {
     const r = engine.renderer;
-    this.post.dispose();
-    this.post = new Post(r, this.scene, this.cam.camera, g);
+    this.buildPosts(g);
     this.scene.fog = new THREE.Fog(this.source.world.map.theme.fog, g.drawDistance * 0.3, g.drawDistance);
-    this.cam.camera.far = Math.max(200, g.drawDistance * 1.6);
-    this.cam.camera.updateProjectionMatrix();
+    for (const s of this.seats) {
+      s.cam.camera.far = Math.max(200, g.drawDistance * 1.6);
+      s.cam.camera.updateProjectionMatrix();
+    }
     const sun = this.env.sun;
     sun.castShadow = g.shadowQuality > 0;
     if (sun.castShadow && sun.shadow.mapSize.x !== g.shadowResolution) {
@@ -820,17 +975,18 @@ export class MatchView implements View {
   }
 
   /** What the minimap draws: the map and who's where. Rivals only appear while they're in sight. */
-  radar() {
+  radar(seatIndex = 0) {
     const src = this.source;
-    const me = src.players().find((p) => p.id === src.localId);
+    const seat = this.seats[seatIndex] ?? this.seats[0];
+    const me = src.players().find((p) => p.id === seat.localId);
     return {
       map: src.world.map,
-      yaw: this.cam.yaw,
+      yaw: seat.cam.yaw,
       colors: this.colors,
       players: src.players().map((v) => {
         const c = this.chars.get(v.id);
         const ally = !!me && v.info.team === me.info.team;
-        return { id: v.id, x: v.pos.x, z: v.pos.z, team: v.info.team, name: v.info.name, me: v.id === src.localId, alive: v.state.alive, seen: ally || !!c?.tag?.sprite.visible };
+        return { id: v.id, x: v.pos.x, z: v.pos.z, team: v.info.team, name: v.info.name, me: v.id === seat.localId, alive: v.state.alive, seen: ally || !!c?.tag?.sprite.visible };
       }),
     };
   }
@@ -851,6 +1007,7 @@ export class MatchView implements View {
     engine.input.engaged = false;
     engine.input.unlock();
     useHud.setState({ active: false, showBoard: false });
+    if (this.seats[1]) this.removeSeat();
     for (const c of this.chars.values()) c.rig.dispose();
     this.fx.dispose();
     this.env.dispose();
@@ -866,7 +1023,7 @@ export class MatchView implements View {
         (m.material as THREE.Material | undefined)?.dispose?.();
       });
     this.atlas.dispose();
-    this.post.dispose();
+    for (const s of this.seats) s.post.dispose();
     this.source.dispose();
     engine.renderer.shadowMap.autoUpdate = true;
   }

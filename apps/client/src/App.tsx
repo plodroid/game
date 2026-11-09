@@ -14,6 +14,8 @@ import { useMenuGamepad } from './ui/useMenuGamepad';
 import { SocialBar } from './ui/SocialBar';
 import { CallUi } from './ui/CallUi';
 import { useSocial } from './state/social';
+import { useSplit } from './game/split';
+import { Player2Panel, SplitPrompt } from './ui/Split';
 
 const Online = lazy(() => import('./ui/screens/Online'));
 const Lobby = lazy(() => import('./ui/screens/Lobby'));
@@ -48,6 +50,7 @@ export function App({ webgl2 }: { webgl2: boolean }) {
   const [failed, setFailed] = useState<string | null>(null);
   const a11y = useSettings((s) => s.accessibility);
   const status = useAccount((s) => s.status);
+  const split = useSplit((s) => s.on);
   // Everyone signs in before playing; builds without accounts configured skip the gate.
   const gated = firebaseConfigured && status !== 'signedIn';
   useMenuGamepad(screen !== 'match' || paused);
@@ -102,13 +105,15 @@ export function App({ webgl2 }: { webgl2: boolean }) {
     );
 
   const showSettingsOverMatch = screen === 'settings' && paused;
+  // Split screen in the menu: player 1's menu keeps the left half, player 2 gets the right.
+  const splitMenu = split && !gated && screen !== 'match' && !showSettingsOverMatch;
   const Current = gated ? (status === 'loading' ? null : Auth) : screen === 'match' ? null : SCREENS[screen];
   return (
     <>
       {!gated && (screen === 'match' || showSettingsOverMatch) && <Hud />}
       {Current && (
         <Suspense fallback={null}>
-          <div key={gated ? 'gate' : screen} style={{ position: 'absolute', inset: 0, zIndex: showSettingsOverMatch ? 35 : undefined }}>
+          <div key={gated ? 'gate' : screen} style={{ position: 'absolute', inset: splitMenu ? '0 50% 0 0' : 0, zIndex: showSettingsOverMatch ? 35 : undefined, ...(splitMenu ? { transform: 'translateZ(0)', overflow: 'hidden' } : {}) }}>
             <Current />
           </div>
         </Suspense>
@@ -129,7 +134,9 @@ export function App({ webgl2 }: { webgl2: boolean }) {
           </div>
         </div>
       )}
-      {!gated && screen !== 'match' && <SocialBar />}
+      {splitMenu && <Player2Panel />}
+      {!gated && screen !== 'match' && !splitMenu && <SocialBar />}
+      {!gated && <SplitPrompt />}
       <Viewing />
       <Toasts />
       {!gated && <CallUi />}

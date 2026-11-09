@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CHROMASHIFT</title>
+    <style>
+      html, body { height: 100%; margin: 0; }
+      body { display: grid; place-items: center; background: #120f17; color: #f3eef7; font: 16px/1.5 system-ui, sans-serif; text-align: center; }
+      h1 { font-size: 28px; letter-spacing: 0.04em; margin: 0 0 8px; }
+      p { margin: 0; color: #b8adc4; }
+      .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #ff4f9a; margin-right: 8px; animation: pulse 1.2s ease-in-out infinite; }
+      @keyframes pulse { 50% { opacity: 0.3; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>CHROMASHIFT</h1>
+      <p id="msg"><span class="dot"></span>Starting…</p>
+      <p id="sub"></p>
+    </main>
+    <script>
+      // The app is a window onto the published game, so every update reaches it without reinstalling.
+      // The game's service worker caches it, so once it has loaded here it also starts offline.
+      var GAME = 'https://plodroid.github.io/game/';
+      var seen = false;
+      try { seen = localStorage.getItem('chromashift:loaded') === '1'; } catch (e) {}
+      function go() {
+        try { localStorage.setItem('chromashift:loaded', '1'); } catch (e) {}
+        location.replace(GAME);
+      }
+      function check() {
+        var c = new AbortController();
+        var t = setTimeout(function () { c.abort(); }, 6000);
+        fetch(GAME, { mode: 'no-cors', cache: 'no-store', signal: c.signal })
+          .then(function () { clearTimeout(t); go(); })
+          .catch(function () {
+            clearTimeout(t);
+            // Played before: the cached game opens without the internet.
+            if (seen) return go();
+            document.getElementById('msg').innerHTML = '<span class="dot"></span>Can’t reach the game. Trying again…';
+            document.getElementById('sub').textContent = 'The first launch needs the internet; after that it also starts offline.';
+            setTimeout(check, 4000);
+          });
+      }
+      check();
+    </script>
+  </body>
+</html>

@@ -4,7 +4,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/dev-dist/**', 'node_modules/**', 'playwright-report/**', 'test-results/**', 'apps/mobile/android/**'] },
+  { ignores: ['**/dist/**', '**/dev-dist/**', 'node_modules/**', 'playwright-report/**', 'test-results/**', 'apps/mobile/android/**', 'apps/desktop/src-tauri/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

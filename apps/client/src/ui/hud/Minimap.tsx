@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MapDef } from '@chromashift/shared';
+import { useSplit } from '../../game/split';
 import { engine } from '../../game/engine';
 import type { MatchView } from '../../game/matchView';
-import { useHud } from '../../state/ui';
+import { useHud, useHud2 } from '../../state/ui';
 
 const PAD = 8;
 
@@ -49,8 +50,9 @@ function drawLayout(map: MapDef, size: number, colors: string[]) {
 }
 
 /** The minimap: the arena and everyone you can see, with their names. M makes it bigger. */
-export function Minimap() {
-  const big = useHud((h) => h.bigMap);
+export function Minimap({ seat = 0 }: { seat?: number }) {
+  // Split screen: each player has their own, a little smaller.
+  const big = (seat ? useHud2 : useHud)((h) => h.bigMap);
   const ref = useRef<HTMLCanvasElement>(null);
   // Sized to the screen, so a phone held sideways keeps room for its touch buttons.
   const [vh, setVh] = useState(() => Math.min(innerWidth, innerHeight));
@@ -59,7 +61,9 @@ export function Minimap() {
     addEventListener('resize', on);
     return () => removeEventListener('resize', on);
   }, []);
-  const size = big ? Math.min(340, Math.round(vh * 0.8)) : Math.min(190, Math.round(vh * 0.3));
+  const seated = useSplit((x) => x.seated);
+  const half = seated ? 0.62 : 1;
+  const size = Math.round(half * (big ? Math.min(340, Math.round(vh * 0.8)) : Math.min(190, Math.round(vh * 0.3))));
   useEffect(() => {
     const cv = ref.current;
     if (!cv) return;
@@ -76,7 +80,7 @@ export function Minimap() {
       last = t;
       const view = engine.view?.kind === 'match' ? (engine.view as MatchView) : null;
       if (!view) return;
-      const r = view.radar();
+      const r = view.radar(seat);
       const colors = r.colors.map((c) => `#${c.getHexString()}`);
       if (!layout || mapId !== r.map.id) {
         layout = drawLayout(r.map, px, colors);
@@ -121,6 +125,6 @@ export function Minimap() {
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [size]);
+  }, [size, seat]);
   return <canvas ref={ref} className="minimap" data-big={big} style={{ width: size, height: size }} aria-hidden />;
 }

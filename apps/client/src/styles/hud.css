@@ -951,3 +951,229 @@
   height: 44px;
   font-size: 1.3rem;
 }
+
+/* ---- Split screen: one canvas, two halves --------------------------------------------------- */
+.split {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.seat {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  overflow: hidden;
+  /* A transform makes this the box that the readout's positions are measured from. */
+  transform: translateZ(0);
+}
+.seat--0 {
+  left: 0;
+}
+.seat--1 {
+  right: 0;
+}
+.split__line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 2px);
+  width: 4px;
+  background: var(--night);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.split__top {
+  top: calc(10px + var(--safe-t));
+  transform: translateX(-50%) scale(0.82);
+  transform-origin: top center;
+}
+.split__meter {
+  position: absolute;
+  top: calc(62px + var(--safe-t));
+  left: 50%;
+  width: min(300px, 36vw);
+  transform: translateX(-50%);
+}
+.seat__tag {
+  position: absolute;
+  top: calc(12px + var(--safe-t));
+  left: calc(14px + var(--safe-l));
+  padding: 3px 10px;
+  background: var(--night);
+  color: var(--on-night);
+  font-weight: 800;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.seat--1 .seat__tag {
+  left: auto;
+  right: calc(14px + var(--safe-r));
+}
+.seat .loadout {
+  left: calc(14px + var(--safe-l));
+  bottom: calc(14px + var(--safe-b));
+  transform: scale(0.85);
+  transform-origin: left bottom;
+}
+.seat .minimap {
+  top: calc(80px + var(--safe-t));
+  right: calc(12px + var(--safe-r));
+}
+.seat .spectate {
+  position: absolute;
+  left: 50%;
+  bottom: calc(84px + var(--safe-b));
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  background: var(--night);
+  white-space: nowrap;
+}
+.seat .center-text {
+  top: 30%;
+}
+.seat .notice {
+  font-size: clamp(1.4rem, 4.4vh, 2.4rem);
+}
+.seat .countdown {
+  font-size: clamp(3.4rem, 14vh, 7rem);
+}
+
+/* The corner prompt that offers split screen. */
+.splitprompt {
+  position: fixed;
+  right: calc(16px + var(--safe-r));
+  bottom: calc(16px + var(--safe-b));
+  z-index: 60;
+  display: flex;
+  align-items: stretch;
+  background: var(--night);
+  color: var(--on-night);
+  box-shadow: 0 14px 34px -10px rgba(0, 0, 0, 0.7);
+  animation: enter 260ms var(--ease-out) both;
+  pointer-events: auto;
+}
+.splitprompt__go {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.splitprompt__go b {
+  display: block;
+  font-weight: 800;
+}
+.splitprompt__go small {
+  color: var(--on-night-2);
+}
+.splitprompt__pads {
+  display: flex;
+  gap: 3px;
+}
+.splitprompt__pads i {
+  width: 18px;
+  height: 28px;
+  background: var(--team-a);
+  border-radius: 9px 9px 12px 12px;
+}
+.splitprompt__pads i + i {
+  background: var(--team-b);
+}
+.splitprompt__x {
+  width: 30px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 0;
+  color: var(--on-night-2);
+  cursor: pointer;
+  font-size: 1.2rem;
+}
+
+/* Player 2's half of the menu. */
+.p2 {
+  position: absolute;
+  inset: 0 0 0 50%;
+  z-index: 5;
+  padding: clamp(14px, 3vh, 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  background: var(--night);
+  color: var(--on-night);
+  border-left: 4px solid var(--team-b);
+  pointer-events: auto;
+}
+.p2__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 6px;
+}
+.p2__head h2 {
+  margin: 0;
+  font-stretch: 70%;
+  font-weight: 900;
+  font-size: 2rem;
+  line-height: 1;
+}
+.p2__head small {
+  color: var(--on-night-2);
+  letter-spacing: 0.1em;
+}
+.p2__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border-left: 5px solid transparent;
+  font-weight: 700;
+}
+.p2__row[data-on='true'] {
+  background: rgba(255, 255, 255, 0.14);
+  border-left-color: var(--gold);
+}
+.p2__val {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.p2__val b {
+  min-width: 7ch;
+  text-align: center;
+}
+.p2__val button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.12);
+  color: inherit;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+.p2__login {
+  display: grid;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.p2__err {
+  color: #ff8a8f;
+}
+.p2__hint {
+  margin-top: auto;
+  color: var(--on-night-2);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}

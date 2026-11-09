@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { audio } from '../audio/audio';
 import '../game/devices';
 import { useUi } from '../state/ui';
+import { useSplit } from '../game/split';
 
 const FOCUSABLE =
   'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])';
@@ -23,8 +24,11 @@ export function useMenuGamepad(enabled: boolean) {
     };
     const tick = (t: number) => {
       raf = requestAnimationFrame(tick);
-      const pad = [...(navigator.getGamepads?.() ?? [])].find((p) => p?.connected);
-      if (!pad) return;
+      // In split screen this menu belongs to player 1's controller; player 2 has their own panel.
+      const sp = useSplit.getState();
+      const all = navigator.getGamepads?.() ?? [];
+      const pad = sp.on ? all[sp.a] : [...all].find((p) => p?.connected);
+      if (!pad || !pad.connected) return;
       const pressed = (i: number) => !!pad.buttons[i]?.pressed;
       const edge = (i: number) => pressed(i) && !prev.has(i);
       const ax = pad.axes[0] ?? 0,

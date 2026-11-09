@@ -3,7 +3,7 @@ import { Icon } from './icons';
 import { Button, Segmented } from './kit';
 
 // The installers are too big for the site itself (Pages caps files at 100 MB), so they live in GitHub Releases.
-const WINDOWS = 'https://github.com/plodroid/game/releases/latest/download/CHROMASHIFT-Setup.exe';
+const WINDOWS = 'https://github.com/plodroid/game/releases/download/desktop/CHROMASHIFT-Setup.exe';
 const ANDROID = 'https://github.com/plodroid/game/releases/download/android/CHROMASHIFT.apk';
 
 type Platform = 'windows' | 'android';
@@ -13,7 +13,7 @@ export function InstallApp() {
   const [open, setOpen] = useState(false);
   const ua = navigator.userAgent;
   const [platform, setPlatform] = useState<Platform>(/Android/i.test(ua) ? 'android' : 'windows');
-  const inApp = /Electron/i.test(ua) || /; wv\)/.test(ua) || matchMedia('(display-mode: standalone)').matches;
+  const inApp = /Electron/i.test(ua) || !!(window as unknown as { __CHROMASHIFT_DESKTOP__?: boolean }).__CHROMASHIFT_DESKTOP__ || /; wv\)/.test(ua) || matchMedia('(display-mode: standalone)').matches;
   if (inApp) return null;
   return (
     <>

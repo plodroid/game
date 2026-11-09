@@ -4,6 +4,7 @@ import { syncPaletteCss } from '../rendering/palette';
 import { PRESETS, useSettings, type GraphicsSettings, type Preset } from '../settings/settings';
 import { useHud, useUi } from '../state/ui';
 import { InputManager } from './input';
+import { registerPrimary, useSplit } from './split';
 
 export interface View {
   readonly kind: 'menu' | 'match';
@@ -37,6 +38,9 @@ class Engine {
   private hinted = false;
   private lost = false;
   private reported = false;
+  /** Automatic resolution scale (1 = full): lowered while the frame rate is short, raised back when it recovers. */
+  private dyn = 1;
+  private calm = 0;
 
   init(stage: HTMLElement) {
     this.stage = stage;
@@ -57,6 +61,7 @@ class Engine {
     this.renderer = r;
     this.applyPixelRatio(g);
     this.input.attach(r.domElement);
+    registerPrimary(this.input);
     addEventListener('resize', this.onResize);
     r.domElement.addEventListener('webglcontextlost', this.onLost, false);
     r.domElement.addEventListener('webglcontextrestored', this.onRestored, false);
@@ -98,7 +103,7 @@ class Engine {
     if (!r) return;
     let pr = Math.min(devicePixelRatio || 1, 2) * g.renderScale;
     if (g.maxHeight > 0 && innerHeight * pr > g.maxHeight) pr = g.maxHeight / innerHeight;
-    r.setPixelRatio(Math.max(0.35, pr));
+    r.setPixelRatio(Math.max(0.35, pr * this.dyn));
     r.setSize(innerWidth, innerHeight, false);
     r.shadowMap.enabled = g.shadowQuality > 0;
   }
@@ -142,8 +147,40 @@ class Engine {
       this.fpsT = t;
       useHud.setState({ fps: this.fps });
       this.adaptiveCheck(cap);
+      this.dynamicResolution(cap);
     }
   };
+
+  /**
+   * Keeps the frame rate up on weak machines without touching the chosen preset: the desktop app
+   * (and split screen, which draws twice the view) quietly lowers the render resolution while it
+   * runs short of its target, and raises it again once there is room. Shadows, effects and
+   * textures stay as the player set them, so a low-end PC can still run Ultra.
+   */
+  private dynamicResolution(cap: number) {
+    const desktop = !!(window as unknown as { __CHROMASHIFT_DESKTOP__?: boolean }).__CHROMASHIFT_DESKTOP__;
+    const on = (desktop || useSplit.getState().seated) && this.view?.kind === 'match' && !useUi.getState().paused && !document.hidden;
+    if (!on) {
+      if (this.dyn !== 1) {
+        this.dyn = 1;
+        this.onResize();
+      }
+      return;
+    }
+    const target = Math.min(cap || 60, 60);
+    let next = this.dyn;
+    if (this.fps < target * 0.86) {
+      next = Math.max(0.5, this.dyn - 0.1);
+      this.calm = 0;
+    } else if (this.fps >= target * 0.97 && this.dyn < 1 && ++this.calm >= 6) {
+      next = Math.min(1, this.dyn + 0.05);
+      this.calm = 0;
+    }
+    if (next !== this.dyn) {
+      this.dyn = next;
+      this.onResize();
+    }
+  }
 
   /** Suggests (never forces) a lower preset after sustained low frame rates in a match. */
   private adaptiveCheck(cap: number) {

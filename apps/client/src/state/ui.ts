@@ -141,7 +141,7 @@ export interface HudState {
   bigMap: boolean;
 }
 
-export const useHud = create<HudState>()(() => ({
+const initialHud: HudState = {
   active: false,
   phase: 'intro',
   countdown: 0,
@@ -175,4 +175,8 @@ export const useHud = create<HudState>()(() => ({
   net: 'local',
   lowInkAt: 0,
   bigMap: false,
-}));
+};
+
+export const useHud = create<HudState>()(() => ({ ...initialHud }));
+/** Player 2's readout in split screen. */
+export const useHud2 = create<HudState>()(() => ({ ...initialHud }));

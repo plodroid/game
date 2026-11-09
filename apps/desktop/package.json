@@ -1,48 +1,15 @@
 {
   "name": "@chromashift/desktop",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "CHROMASHIFT as a desktop app: the live game in its own window, updated with the site.",
-  "main": "main.cjs",
+  "description": "CHROMASHIFT as a desktop app (Tauri): the live game in its own light window, updated with the site.",
   "scripts": {
-    "start": "electron .",
-    "pack": "electron-builder --win nsis"
-  },
-  "build": {
-    "appId": "game.chromashift.desktop",
-    "productName": "CHROMASHIFT",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "main.cjs",
-      "offline.html",
-      {
-        "from": "../client/public",
-        "to": ".",
-        "filter": [
-          "pwa-512x512.png"
-        ]
-      }
-    ],
-    "win": {
-      "target": "nsis",
-      "icon": "../client/public/pwa-512x512.png"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "CHROMASHIFT",
-      "artifactName": "CHROMASHIFT-Setup.${ext}"
-    },
-    "electronVersion": "45.2.3"
+    "start": "tauri dev",
+    "pack": "tauri build --bundles nsis",
+    "tauri": "tauri"
   },
   "devDependencies": {
-    "electron": "^45.2.3",
-    "electron-builder": "^26.18.0"
+    "@tauri-apps/cli": "^2.12.4"
   },
   "author": "CHROMASHIFT"
 }
