@@ -10,7 +10,9 @@ import './state/maps'; // loads the player's own maps so every screen can play t
 import { useUi } from './state/ui';
 import { useUpdates } from './updates';
 
-createRoot(document.getElementById('root')!).render(<App webgl2={webgl2Available()} />);
+// The page the Windows app opens in the browser to sign in with Google (see auth/desktopGoogle.ts).
+if (new URLSearchParams(location.search).has('desktopAuth')) void import('./auth/desktopGoogle').then((m) => m.runDesktopAuthPage());
+else createRoot(document.getElementById('root')!).render(<App webgl2={webgl2Available()} />);
 
 // Dev-only handle for debugging in the console; stripped from production builds.
 if (import.meta.env.DEV)

@@ -3,6 +3,8 @@
 // memory than a full browser engine. The game itself loads from the published site.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod bridge;
+
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 /// Marks the page as the desktop app (the game turns on its automatic resolution scaling) and adds F11 fullscreen.
@@ -23,6 +25,7 @@ const GPU_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProt
 --disable-background-timer-throttling --disable-backgrounding-occluded-windows";
 
 fn main() {
+    bridge::start();
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(w) = app.get_webview_window("main") {

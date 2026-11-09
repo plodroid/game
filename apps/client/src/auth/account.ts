@@ -93,6 +93,7 @@ export function describeAuthError(e: unknown): string {
     'auth/credential-already-in-use': 'That Google account is already linked to another player.',
     'auth/provider-already-linked': 'A Google account is already linked.',
     'auth/no-such-provider': 'No Google account is linked.',
+    DESKTOP_BRIDGE: 'Couldn’t open your browser for Google sign-in. Use your username and password, or try again.',
     NO_LINKED_ACCOUNT: 'That Google account isn’t linked to a CHROMASHIFT account. Sign in with your username, then link Google from your profile.',
     'auth/weak-password': 'Choose a stronger password.',
     'auth/invalid-email': 'Enter a valid email address.',

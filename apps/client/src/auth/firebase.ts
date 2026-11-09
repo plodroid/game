@@ -10,9 +10,11 @@ import {
   GoogleAuthProvider,
   indexedDBLocalPersistence,
   initializeAuth,
+  linkWithCredential,
   linkWithPopup,
   onAuthStateChanged,
   reauthenticateWithCredential,
+  signInWithCredential,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut as fbSignOut,
@@ -43,6 +45,7 @@ import {
   type Firestore,
   type SetOptions,
 } from 'firebase/firestore';
+import { desktopGoogleCredential, isDesktopApp } from './desktopGoogle';
 import { levelInfo, sanitizeCosmetics, STARTING_COINS, usernameKey, validateDisplayName, validateEmail, validatePassword, validateUsername, type Cosmetics } from '@chromashift/shared';
 import { env } from '../env';
 import { settingsSnapshot, useSettings, type Settings } from '../settings/settings';
@@ -286,7 +289,8 @@ export async function signIn(name: string, password: string) {
  * create accounts, so a Google account that isn't linked to one is turned away.
  */
 export async function signInLinkedGoogle() {
-  const res = await signInWithPopup(auth, google());
+  // The Windows app signs in through the browser (Google refuses embedded windows).
+  const res = isDesktopApp() ? await signInWithCredential(auth, await desktopGoogleCredential()) : await signInWithPopup(auth, google());
   if (getAdditionalUserInfo(res)?.isNewUser) {
     await res.user.delete().catch(() => fbSignOut(auth));
     throw Object.assign(new Error('NO_LINKED_ACCOUNT'), { code: 'NO_LINKED_ACCOUNT' });
@@ -296,7 +300,8 @@ export async function signInLinkedGoogle() {
 /** Links a Google account as a way back in, for a forgotten password. */
 export async function linkGoogle() {
   if (!user) throw new Error('Not signed in');
-  await linkWithPopup(user, google());
+  if (isDesktopApp()) await linkWithCredential(user, await desktopGoogleCredential());
+  else await linkWithPopup(user, google());
   await user.reload();
   useAccount.setState((s) => ({ user: s.user && { ...s.user, google: true } }));
 }
