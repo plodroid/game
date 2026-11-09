@@ -12,7 +12,6 @@ import {
 import { startOffline, startTutorial } from '../../game/session';
 import { joinRandom } from '../../multiplayer/matchmaking';
 import { useAccount } from '../../auth/account';
-import { isOwner } from '../../auth/admin';
 import { firebaseConfigured } from '../../env';
 import { hostFromMenu, ownHostCode } from '../../multiplayer/net';
 import { useUi } from '../../state/ui';
@@ -28,8 +27,6 @@ export function Play() {
   const go = useUi((s) => s.go);
   const [code] = useState(ownHostCode);
   const [maps, setMaps] = useState(false);
-  useAccount((a) => a.user?.uid); // re-check the owner when the account changes
-  const owner = isOwner();
   const signedIn = useAccount((a) => a.status === 'signedIn');
   const items = [
     {
@@ -61,8 +58,7 @@ export function Play() {
       run: () => void startOffline({ map: MAP_IDS[Math.floor(Math.random() * MAP_IDS.length)], mode: 'turf', duration: 180, difficulty: 'normal', allies: 3, rivals: 4 }),
     },
     { title: 'Custom Match', desc: 'Pick the map, mode, length and every bot slot.', run: () => go('custom') },
-    // The map editor is an owner tool, like the weapon editor.
-    ...(owner ? [{ title: 'Map editor', desc: 'Build maps in 3D, then edit, play or delete them.', run: () => setMaps(true) }] : []),
+    { title: 'Maps', desc: 'Build your own maps in 3D (keep three presets), or play maps others made public.', run: () => setMaps(true) },
   ];
   return (
     <main className="screen" data-pig="magenta">
@@ -82,7 +78,7 @@ export function Play() {
           </button>
         ))}
       </div>
-      {maps && owner && <MyMaps onClose={() => setMaps(false)} />}
+      {maps && <MyMaps onClose={() => setMaps(false)} />}
       {code && (
         <section className="col code-note" aria-label="Your game code">
           <span className="code-note__label">Your game code</span>
@@ -95,7 +91,9 @@ export function Play() {
 }
 
 export function Custom() {
-  const mine = useMaps((s) => s.maps);
+  const presets = useMaps((s) => s.presets);
+  const publics = useMaps((s) => s.publics);
+  const mine = [...publics, ...presets];
   const [map, setMap] = useState<MapId>('skyline');
   // A map deleted while chosen falls back to the first one.
   const chosen = MAPS[map] ? map : 'skyline';
@@ -111,7 +109,30 @@ export function Custom() {
       <div className="col--wide stagger">
         <section className="panel">
           <Setting name="Map" hint={MAPS[chosen].description}>
-            <Segmented value={chosen} onChange={setMap} label="Map" options={[...MAP_IDS, ...mine.map((m) => m.id)].map((m) => ({ value: m, label: MAPS[m].name }))} />
+            <Segmented value={chosen} onChange={setMap} label="Map" options={MAP_IDS.map((m) => ({ value: m as MapId, label: MAPS[m].name }))} />
+            {mine.length > 0 && (
+              <select className="input" style={{ marginTop: 8 }} aria-label="Player-made maps" value={mine.some((m) => m.id === chosen) ? chosen : ''} onChange={(e) => e.target.value && setMap(e.target.value)}>
+                <option value="">Player-made maps…</option>
+                {publics.length > 0 && (
+                  <optgroup label="Public maps">
+                    {publics.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {presets.length > 0 && (
+                  <optgroup label="My presets">
+                    {presets.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            )}
           </Setting>
           <Setting name="Mode" hint={MODES[mode].description}>
             <Segmented

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import type { WeaponPart } from '@chromashift/shared';
+import { Help, toolForKey, typing, useUndo } from './editorKit';
 import { Icon } from './icons';
 
 /*
@@ -56,13 +57,15 @@ export function ModelEditor({ draft, onChange, onClose }: { draft: ModelDraft; o
   const [sel, setSel] = useState(draft.parts.length ? 0 : -1);
   const [mode, setMode] = useState<Mode>('translate');
   const [snap, setSnap] = useState(true);
+  const [help, setHelp] = useState(false);
   const parts = draft.parts;
+  const history = useUndo({ name: draft.name, tagline: draft.tagline, parts: draft.parts, muzzle: draft.muzzle }, (v) => onChange(v));
   /** The latest props, for the 3D side to read without re-creating the scene. */
   const live = useRef({ parts, sel, onChange });
   live.current = { parts, sel, onChange };
   const muzzle = useRef(draft.muzzle);
   muzzle.current = draft.muzzle;
-  const api = useRef<{ sync(): void; frame(): void; setMode(m: Mode): void; setSnap(on: boolean): void } | null>(null);
+  const api = useRef<{ sync(): void; frame(): void; focusSel(): void; setMode(m: Mode): void; setSnap(on: boolean): void } | null>(null);
 
   // The scene is built once; props flow in through `sync`.
   useEffect(() => {
@@ -176,7 +179,7 @@ export function ModelEditor({ draft, onChange, onClose }: { draft: ModelDraft; o
       const r = renderer.domElement.getBoundingClientRect();
       ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
       const hit = ray.intersectObjects(meshes, false)[0];
-      if (hit) setSel(hit.object.userData.i as number);
+      setSel(hit ? (hit.object.userData.i as number) : -1);
     };
     renderer.domElement.addEventListener('pointerdown', pd);
     renderer.domElement.addEventListener('pointerup', pu);
@@ -208,6 +211,14 @@ export function ModelEditor({ draft, onChange, onClose }: { draft: ModelDraft; o
       frame: () => {
         camera.position.set(0.62, 0.42, 0.78);
         orbit.target.copy(target);
+        orbit.update();
+      },
+      focusSel: () => {
+        const m = meshes[live.current.sel];
+        if (!m) return;
+        const d = camera.position.clone().sub(orbit.target);
+        orbit.target.copy(m.position);
+        camera.position.copy(m.position).add(d.setLength(Math.min(1.2, Math.max(0.35, d.length()))));
         orbit.update();
       },
       setMode: (m) => tc.setMode(m),
@@ -262,17 +273,37 @@ export function ModelEditor({ draft, onChange, onClose }: { draft: ModelDraft; o
   };
   const cur = parts[sel];
 
-  // Keyboard: W / E / R switch tools, Delete removes the selected shape, Ctrl+D copies it.
+  // Keyboard, as in Blockbench: V move, S resize, R rotate. Ctrl+Z / Ctrl+Y undo and redo, Ctrl+D copies,
+  // F zooms to the part, arrows nudge it, Delete removes it, Esc deselects.
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'SELECT') return;
-      if (e.code === 'KeyW') setMode('translate');
-      else if (e.code === 'KeyE') setMode('rotate');
-      else if (e.code === 'KeyR') setMode('scale');
+      if (typing(e) || help) return;
+      const tool = toolForKey(e);
+      const mod = e.ctrlKey || e.metaKey;
+      if (tool) setMode(tool);
       else if (e.code === 'Delete' || e.code === 'Backspace') remove();
-      else if (e.code === 'KeyD' && (e.ctrlKey || e.metaKey)) {
+      else if (e.code === 'Escape') setSel(-1);
+      else if (e.code === 'KeyF' && !mod) api.current?.focusSel();
+      else if (e.code === 'KeyZ' && mod) {
+        e.preventDefault();
+        if (e.shiftKey) history.redo();
+        else history.undo();
+      } else if (e.code === 'KeyY' && mod) {
+        e.preventDefault();
+        history.redo();
+      } else if (e.code === 'KeyD' && mod) {
         e.preventDefault();
         duplicate();
+      } else if (e.key === '?' || e.code === 'F1') {
+        e.preventDefault();
+        setHelp(true);
+      } else if (e.code.startsWith('Arrow') && cur) {
+        e.preventDefault();
+        const step = e.shiftKey ? 0.02 : 0.005;
+        const dx = e.code === 'ArrowLeft' ? -step : e.code === 'ArrowRight' ? step : 0;
+        const dz = e.code === 'ArrowUp' ? -step : e.code === 'ArrowDown' ? step : 0;
+        if (e.altKey) set({ y: round(cur.y + (e.code === 'ArrowUp' ? step : e.code === 'ArrowDown' ? -step : 0)) });
+        else set({ x: round(cur.x + dx), z: round(cur.z + dz) });
       }
     };
     addEventListener('keydown', key);
@@ -287,16 +318,29 @@ export function ModelEditor({ draft, onChange, onClose }: { draft: ModelDraft; o
         </button>
         <strong className="me__title">Model editor</strong>
         <span className="me__tools" role="toolbar" aria-label="Tools">
-          {(['translate', 'rotate', 'scale'] as Mode[]).map((m, i) => (
-            <button key={m} className="btn btn--sm" aria-pressed={mode === m} data-on={mode === m} onClick={() => setMode(m)} title={`${m} (${'WER'[i]})`}>
-              {m === 'translate' ? 'Move' : m === 'rotate' ? 'Rotate' : 'Resize'}
+          {([['translate', 'Move', 'V'], ['scale', 'Resize', 'S'], ['rotate', 'Rotate', 'R']] as [Mode, string, string][]).map(([m, label, k]) => (
+            <button key={m} className="btn btn--sm" aria-pressed={mode === m} data-on={mode === m} onClick={() => setMode(m)} title={`${label} (${k})`}>
+              {label}
+              <kbd>{k}</kbd>
             </button>
           ))}
           <button className="btn btn--sm" aria-pressed={snap} data-on={snap} onClick={() => setSnap(!snap)} title="Snap to a grid">
             Snap
           </button>
+          <button className="btn btn--sm" disabled={!history.canUndo} onClick={history.undo} title="Undo (Ctrl+Z)">
+            Undo
+          </button>
+          <button className="btn btn--sm" disabled={!history.canRedo} onClick={history.redo} title="Redo (Ctrl+Y)">
+            Redo
+          </button>
+          <button className="btn btn--sm" disabled={!cur} onClick={() => api.current?.focusSel()} title="Zoom to the selected part (F)">
+            Focus
+          </button>
           <button className="btn btn--sm" onClick={() => api.current?.frame()} title="Reset the camera">
             Reset view
+          </button>
+          <button className="btn btn--sm" onClick={() => setHelp(true)} title="How to use the editor (?)">
+            Help
           </button>
         </span>
       </header>
@@ -334,7 +378,7 @@ export function ModelEditor({ draft, onChange, onClose }: { draft: ModelDraft; o
             </button>
           </div>
           <p className="muted small" style={{ margin: 8 }}>
-            Drag the arrows to move a part (red side, green up, blue forward). W move · E rotate · R resize · Delete removes. Scroll to zoom, drag empty space to turn the view.
+            Click a part to select it, then drag its coloured arrows. Press Help for a quick guide.
           </p>
         </aside>
 
@@ -405,6 +449,35 @@ export function ModelEditor({ draft, onChange, onClose }: { draft: ModelDraft; o
           )}
         </aside>
       </div>
+      <div className="me__hint" role="status">
+        {mode === 'translate' ? 'Move: drag an arrow to slide the selected part. Red = side to side, green = up and down, blue = forwards and back.' : mode === 'scale' ? 'Resize: drag a coloured square to make the selected part bigger or smaller.' : 'Rotate: drag a ring to turn the selected part.'}
+      </div>
+      {help && (
+        <Help
+          title="How to model a weapon"
+          steps={[
+            <>Press a shape on the left (<b>Block</b>, <b>Cylinder</b>, <b>Sphere</b>…) to add a part to the gun.</>,
+            <>Click a part, then drag the coloured arrows to move it. Pick <b>Resize</b> or <b>Rotate</b> at the top to change its size or turn it.</>,
+            <>Use the right-hand panel for exact numbers, the part&rsquo;s name and its colour. <b>Team paint</b> parts take the player&rsquo;s colour.</>,
+            <>The orange arrow in the view marks where shots come out: set it with <b>Muzzle up</b> and <b>Muzzle forward</b>.</>,
+            <>Press <b>Done</b> when finished, then save the weapon.</>,
+          ]}
+          keys={[
+            ['V', 'Move'],
+            ['S', 'Resize'],
+            ['R', 'Rotate'],
+            ['F', 'Zoom to selection'],
+            ['Ctrl+Z', 'Undo'],
+            ['Ctrl+Y', 'Redo'],
+            ['Ctrl+D', 'Copy part'],
+            ['Delete', 'Remove part'],
+            ['Esc', 'Deselect'],
+            ['Arrows', 'Nudge (Shift = more, Alt = up/down)'],
+            ['?', 'This help'],
+          ]}
+          onClose={() => setHelp(false)}
+        />
+      )}
     </div>
   );
 }

@@ -669,12 +669,17 @@ export async function openWorld(sim: Simulation, pid: number, hello: PeerHello, 
   let last = 1;
   const host = new BrowserHost(peer, code, undefined, hello, (s) => {
     if (s && s.players.length !== last) onGuests?.((last = s.players.length));
+    // The host has no lobby screen to join voice from, so it joins the mesh here: otherwise guests can't hear it, and it can't hear them.
+    if (s && s.players.length > 1) void import('./voice').then(({ voice }) => voice.join(code, pid, s.players.filter((p) => !p.bot && p.connected && p.id !== pid).map((p) => p.id)));
   }, { sim, pid });
   return {
     code,
     tap: { before: () => host.room.externalBefore(), after: (e) => host.room.externalAfter(e) },
     guests: () => Math.max(0, host.room.size - 1),
-    close: host.close,
+    close: () => {
+      host.close();
+      void import('./voice').then(({ voice }) => voice.leave());
+    },
   };
 }
 

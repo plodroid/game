@@ -615,3 +615,32 @@ export async function checkAdminJoin(code: string) {
   const d = (await getDoc(doc(db, 'adminJoin', code))).data();
   return !!d?.at && Date.now() - (d.at as Timestamp).toMillis() < 60_000;
 }
+
+/* ---------- Maps ---------- */
+
+/** The maps the owner published: everyone can read and play them. Each is a map's JSON text. */
+export async function loadPublicMaps(): Promise<string[]> {
+  const snap = await getDocs(collection(db, 'publicMaps'));
+  return snap.docs.map((d) => String(d.data().json));
+}
+
+/** Owner only (the rules refuse anyone else). */
+export async function savePublicMap(id: string, name: string, json: string) {
+  await setDoc(doc(db, 'publicMaps', id), { json, name, updatedAt: serverTimestamp() });
+}
+
+export async function deletePublicMap(id: string) {
+  await deleteDoc(doc(db, 'publicMaps', id));
+}
+
+/** This player's saved presets (up to three), or null when none were ever saved. */
+export async function loadMapPresets(): Promise<string[] | null> {
+  if (!user) return null;
+  const d = (await getDoc(doc(db, 'mapPresets', user.uid))).data();
+  return d && Array.isArray(d.maps) ? (d.maps as string[]) : null;
+}
+
+export async function saveMapPresets(maps: string[]) {
+  if (!user) return;
+  await setDoc(doc(db, 'mapPresets', user.uid), { maps: maps.slice(0, 3), updatedAt: serverTimestamp() });
+}

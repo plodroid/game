@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { BUILTIN_LOOKS, CUSTOM_LIMITS, MAPS, type CustomBlock, type CustomMap, type MaterialId } from '@chromashift/shared';
 import { Icon } from './icons';
+import { Help, toolForKey, typing, useUndo } from './editorKit';
 import { Num } from './ModelEditor';
 
 /*
@@ -42,13 +43,20 @@ const LIST: Record<Kind, 'blocks' | 'spawns' | 'pads' | 'zones'> = { block: 'blo
 
 export function MapEditor({
   map,
-  onSave,
+  presets,
+  onSavePreset,
+  onPublish,
   onPlay,
   onClose,
 }: {
   map: CustomMap;
-  /** Returns false when the map was refused. */
-  onSave: (m: CustomMap) => boolean;
+  /** How many of the player's preset slots are used, and how many they have. */
+  presets: { used: number; max: number };
+  /** Saves a preset; returns the saved map, or a message saying why not. */
+  onSavePreset: (m: CustomMap) => CustomMap | string;
+  /** Owner only: publishes the map for everyone. Returns a message on failure, null on success. */
+  onPublish?: (m: CustomMap) => Promise<string | null>;
+  /** Plays the map as it is now, saved or not. */
   onPlay: (m: CustomMap) => void;
   onClose: () => void;
 }) {
@@ -59,11 +67,13 @@ export function MapEditor({
   const [mode, setMode] = useState<Mode>('translate');
   const [snap, setSnap] = useState(true);
   const [note, setNote] = useState('');
+  const [help, setHelp] = useState(false);
+  const history = useUndo(draft, setDraft);
   const dirty = useMemo(() => JSON.stringify(draft) !== saved, [draft, saved]);
 
   const live = useRef({ draft, sel, setDraft, setSel });
   live.current = { draft, sel, setDraft, setSel };
-  const api = useRef<{ sync(): void; frame(): void; focus(): [number, number]; setMode(m: Mode): void; setSnap(on: boolean): void } | null>(null);
+  const api = useRef<{ sync(): void; frame(): void; focusSel(): void; focus(): [number, number]; setMode(m: Mode): void; setSnap(on: boolean): void } | null>(null);
 
   useEffect(() => {
     const el = host.current!;
@@ -272,7 +282,7 @@ export function MapEditor({
       const r = renderer.domElement.getBoundingClientRect();
       ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
       const hit = ray.intersectObjects(pickable, true)[0];
-      if (!hit) return;
+      if (!hit) return live.current.setSel(null);
       let o: THREE.Object3D | null = hit.object;
       while (o && !o.userData.key) o = o.parent;
       if (!o) return;
@@ -325,6 +335,15 @@ export function MapEditor({
     api.current = {
       sync,
       frame: home,
+      focusSel: () => {
+        const s = live.current.sel;
+        const o = s ? objs.get(key(s.k, s.i)) : undefined;
+        if (!o) return;
+        const d = camera.position.clone().sub(orbit.target);
+        orbit.target.copy(o.position);
+        camera.position.copy(o.position).add(d.setLength(Math.min(40, Math.max(10, d.length()))));
+        orbit.update();
+      },
       focus: () => [Math.round(orbit.target.x), Math.round(orbit.target.z)],
       setMode: (m) => tc.setMode(m),
       setSnap: (on) => {
@@ -396,35 +415,69 @@ export function MapEditor({
   };
 
   const save = () => {
-    if (!onSave(draft)) return setNote('That map couldn’t be saved.');
+    const r = onSavePreset(draft);
+    if (typeof r === 'string') return setNote(r);
+    setDraft(r);
+    setSaved(JSON.stringify(r));
+    setNote('Saved as a preset.');
+  };
+  const publish = async () => {
+    if (!onPublish) return;
+    setNote('Publishing…');
+    const why = await onPublish(draft);
+    if (why) return setNote(why);
     setSaved(JSON.stringify(draft));
-    setNote('Saved.');
+    setNote('Published for everyone.');
   };
   const close = () => {
     if (dirty && !window.confirm('Leave without saving your changes?')) return;
     onClose();
   };
 
-  // Keyboard: W / E / R switch tools, Delete removes the selection, Ctrl+D copies it, Ctrl+S saves.
+  // Keyboard, as in Blockbench: V move, S resize, R rotate. Ctrl+Z / Ctrl+Y undo and redo, Ctrl+D copies,
+  // Ctrl+S saves, F zooms to the selection, arrows nudge, Delete removes, Esc deselects.
   useEffect(() => {
     const keys = (e: KeyboardEvent) => {
-      const t = (e.target as HTMLElement)?.tagName;
-      if (t === 'INPUT' || t === 'SELECT' || t === 'TEXTAREA') return;
-      if (e.code === 'KeyW') setMode('translate');
-      else if (e.code === 'KeyE') setMode('rotate');
-      else if (e.code === 'KeyR') setMode('scale');
+      if (typing(e) || help) return;
+      const tool = toolForKey(e);
+      const mod = e.ctrlKey || e.metaKey;
+      if (tool) setMode(tool);
       else if (e.code === 'Delete' || e.code === 'Backspace') remove();
-      else if (e.code === 'KeyD' && (e.ctrlKey || e.metaKey)) {
+      else if (e.code === 'Escape') setSel(null);
+      else if (e.code === 'KeyF' && !mod) api.current?.focusSel();
+      else if (e.code === 'KeyZ' && mod) {
+        e.preventDefault();
+        if (e.shiftKey) history.redo();
+        else history.undo();
+      } else if (e.code === 'KeyY' && mod) {
+        e.preventDefault();
+        history.redo();
+      } else if (e.code === 'KeyD' && mod) {
         e.preventDefault();
         duplicate();
-      } else if (e.code === 'KeyS' && (e.ctrlKey || e.metaKey)) {
+      } else if (e.code === 'KeyS' && mod) {
         e.preventDefault();
         save();
+      } else if (e.key === '?' || e.code === 'F1') {
+        e.preventDefault();
+        setHelp(true);
+      } else if (e.code.startsWith('Arrow') && cur && sel) {
+        e.preventDefault();
+        const step = e.shiftKey ? 2 : 0.5;
+        const dx = e.code === 'ArrowLeft' ? -step : e.code === 'ArrowRight' ? step : 0;
+        const dz = e.code === 'ArrowUp' ? -step : e.code === 'ArrowDown' ? step : 0;
+        if (e.altKey) patch({ y: n('y') + (e.code === 'ArrowUp' ? step : e.code === 'ArrowDown' ? -step : 0) });
+        else patch({ x: n('x') + dx, z: n('z') + dz });
       }
     };
     addEventListener('keydown', keys);
     return () => removeEventListener('keydown', keys);
   });
+
+  // An undo can remove the selected item; never keep pointing at nothing.
+  useEffect(() => {
+    if (sel && sel.i >= draft[LIST[sel.k]].length) setSel(null);
+  }, [draft, sel]);
 
   const cur = sel ? (draft[LIST[sel.k]][sel.i] as unknown as Record<string, number | string | boolean | undefined>) : undefined;
   const blockCur = sel?.k === 'block' ? draft.blocks[sel.i] : undefined;
@@ -446,32 +499,41 @@ export function MapEditor({
           Map editor{dirty ? ' •' : ''} <span className="muted small">{note}</span>
         </strong>
         <span className="me__tools" role="toolbar" aria-label="Tools">
-          {(['translate', 'rotate', 'scale'] as Mode[]).map((m, i) => (
-            <button key={m} className="btn btn--sm" aria-pressed={mode === m} data-on={mode === m} onClick={() => setMode(m)} title={`${m} (${'WER'[i]})`}>
-              {m === 'translate' ? 'Move' : m === 'rotate' ? 'Turn' : 'Resize'}
+          {([['translate', 'Move', 'V'], ['scale', 'Resize', 'S'], ['rotate', 'Rotate', 'R']] as [Mode, string, string][]).map(([m, label, k]) => (
+            <button key={m} className="btn btn--sm" aria-pressed={mode === m} data-on={mode === m} onClick={() => setMode(m)} title={`${label} (${k})`}>
+              {label}
+              <kbd>{k}</kbd>
             </button>
           ))}
           <button className="btn btn--sm" aria-pressed={snap} data-on={snap} onClick={() => setSnap(!snap)} title="Snap to a grid">
             Snap
           </button>
+          <button className="btn btn--sm" disabled={!history.canUndo} onClick={history.undo} title="Undo (Ctrl+Z)">
+            Undo
+          </button>
+          <button className="btn btn--sm" disabled={!history.canRedo} onClick={history.redo} title="Redo (Ctrl+Y)">
+            Redo
+          </button>
+          <button className="btn btn--sm" disabled={!sel} onClick={() => api.current?.focusSel()} title="Zoom to the selected item (F)">
+            Focus
+          </button>
           <button className="btn btn--sm" onClick={() => api.current?.frame()}>
             Reset view
           </button>
-          <button className="btn btn--sm btn--primary" onClick={save}>
-            Save
+          <button className="btn btn--sm" onClick={() => setHelp(true)} title="How to use the editor (?)">
+            Help
           </button>
-          <button
-            className="btn btn--sm"
-            onClick={() => {
-              if (onSave(draft)) {
-                setSaved(JSON.stringify(draft));
-                onPlay(draft);
-              }
-            }}
-            title="Save and play this map against bots"
-          >
-            Save &amp; play
+          <button className="btn btn--sm" onClick={() => onPlay(draft)} title="Play this map against bots right now">
+            Play
           </button>
+          <button className="btn btn--sm btn--primary" onClick={save} title={`Keep this map as one of your ${presets.max} presets (Ctrl+S)`}>
+            Save preset ({presets.used}/{presets.max})
+          </button>
+          {onPublish && (
+            <button className="btn btn--sm btn--primary" onClick={() => void publish()} title="Make this map public: everyone can play it">
+              Publish
+            </button>
+          )}
         </span>
       </header>
 
@@ -517,7 +579,7 @@ export function MapEditor({
             </button>
           </div>
           <p className="muted small" style={{ margin: 8 }}>
-            Build one team’s half: the yellow lines cross at the centre, and mirrored items get a faint copy turned 180° around it for the other team. Drag the arrows to move (red side, green up, blue forward). W move · E turn · R resize · Delete removes · Ctrl+S saves. Scroll to zoom, drag empty space to turn the view.
+            Click an item to select it. The yellow lines mark the centre: mirrored items get a faint copy on the other side for the other team. Press Help for a quick guide.
           </p>
         </aside>
 
@@ -623,6 +685,37 @@ export function MapEditor({
           )}
         </aside>
       </div>
+      <div className="me__hint" role="status">
+        {mode === 'translate' ? 'Move: drag an arrow to slide the selected item. Red = side to side, green = up and down, blue = forwards and back.' : mode === 'scale' ? 'Resize: drag a coloured square to make the selected item bigger or smaller.' : 'Rotate: drag a ring to turn the selected item.'}
+      </div>
+      {help && (
+        <Help
+          title="How to build a map"
+          steps={[
+            <>Press <b>Block</b>, <b>Ramp</b> or <b>Floor</b> on the left to add something. It appears in the middle of your view.</>,
+            <>Click it, then drag the coloured arrows to move it. Pick <b>Resize</b> or <b>Rotate</b> at the top to change its size or turn it.</>,
+            <>Type exact numbers in the right-hand panel if you like. Choose a material, and tick <b>Mirror</b> so the other team gets a matching copy.</>,
+            <>Add <b>Spawns</b> (where each team starts), <b>Jump pads</b> and <b>Zones</b> (the area teams fight over).</>,
+            <>Press <b>Play</b> to try it against bots. <b>Save preset</b> keeps it for later (you have {presets.max} slots).</>,
+            ...(onPublish ? [<>As the owner, <b>Publish</b> makes the map public for everyone.</>] : []),
+          ]}
+          keys={[
+            ['V', 'Move'],
+            ['S', 'Resize'],
+            ['R', 'Rotate'],
+            ['F', 'Zoom to selection'],
+            ['Ctrl+Z', 'Undo'],
+            ['Ctrl+Y', 'Redo'],
+            ['Ctrl+D', 'Copy item'],
+            ['Ctrl+S', 'Save preset'],
+            ['Delete', 'Remove item'],
+            ['Esc', 'Deselect'],
+            ['Arrows', 'Nudge (Shift = more, Alt = up/down)'],
+            ['?', 'This help'],
+          ]}
+          onClose={() => setHelp(false)}
+        />
+      )}
     </div>
   );
 }
