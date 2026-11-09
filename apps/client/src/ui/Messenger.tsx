@@ -9,6 +9,7 @@ import { convoKey, iAmTyping, isUnread, joinFromInvite, markConvoRead, social, u
 import { useUi } from '../state/ui';
 import { Avatar } from './Avatar';
 import { Icon } from './icons';
+import { convertMedia, mediaKind } from './media';
 
 const MAX_VOICE = 30;
 
@@ -25,21 +26,6 @@ const short = (t: number) => {
   const d = new Date(t);
   return d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 };
-
-/** Shrinks a picture to something small enough to keep inside a message (about 100 KB). */
-async function compressImage(file: File): Promise<string> {
-  const bmp = await createImageBitmap(file);
-  for (const [max, q] of [[960, 0.72], [800, 0.6], [640, 0.5]] as const) {
-    const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
-    const c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round(bmp.width * k));
-    c.height = Math.max(1, Math.round(bmp.height * k));
-    c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
-    const url = c.toDataURL('image/jpeg', q);
-    if (url.length < 380_000) return url;
-  }
-  throw new Error('That picture is too large.');
-}
 
 /** Records a short voice note as compressed audio (Opus), small enough to keep with the message. */
 function useRecorder(onDone: (dataUrl: string, seconds: number) => void) {
@@ -351,16 +337,20 @@ function Thread({ convo }: { convo: Convo }) {
     stick.current = true;
   };
 
+  // Pictures, sounds and videos of almost any type: converted to PNG, MP3 and MP4 before sending.
   const pick = async (f: File | undefined) => {
     if (!f) return;
-    // Some systems report no type for valid pictures (webp, heic); the decoder is the real check.
     setSending(true);
+    const kind = mediaKind(f);
+    if (kind === 'video' || kind === 'audio') toast({ text: 'Converting…', kind: 'info' });
     try {
-      const url = await compressImage(f);
-      await social((x) => x.sendImage(convo, url));
+      const out = await convertMedia(f);
+      if (out.kind === 'image') await social((x) => x.sendImage(convo, out.url));
+      else if (out.kind === 'audio') await social((x) => x.sendVoice(convo, out.url, out.duration));
+      else await social((x) => x.sendVideo(convo, out.url));
       stick.current = true;
     } catch (e) {
-      toast({ text: e instanceof Error && e.message === 'That picture is too large.' ? e.message : 'Couldn’t read that picture. Try a JPG or PNG.', kind: 'error' });
+      toast({ text: e instanceof Error ? e.message : 'Couldn’t send that file.', kind: 'error' });
     }
     setSending(false);
   };
@@ -467,7 +457,7 @@ function Thread({ convo }: { convo: Convo }) {
             send();
           }}
         >
-          <input ref={file} type="file" accept="image/*" hidden onChange={(e) => (void pick(e.target.files?.[0]), (e.target.value = ''))} />
+          <input ref={file} type="file" accept="image/*,audio/*,video/*,.heic,.heif,.mkv,.mov,.avi,.flac,.m4a,.opus,.wma" hidden onChange={(e) => (void pick(e.target.files?.[0]), (e.target.value = ''))} />
           {voice.recording ? (
             <>
               <span className="rec2">
@@ -479,7 +469,7 @@ function Thread({ convo }: { convo: Convo }) {
             </>
           ) : (
             <>
-              <button type="button" className="round-btn round-btn--sm" aria-label="Send a picture" disabled={sending} onClick={() => file.current?.click()}>
+              <button type="button" className="round-btn round-btn--sm" aria-label="Send a picture, sound or video" disabled={sending} onClick={() => file.current?.click()}>
                 <Icon.image size={18} />
               </button>
               <input
@@ -523,12 +513,13 @@ function Bubble({ m, mine, first, last, group, name, onZoom }: { m: Message; min
   return (
     <div className="msg" data-mine={mine} data-first={first} data-last={last}>
       {group && !mine && first && <span className="msg__name small">{name}</span>}
-      <div className="bubble2" data-kind={m.invite ? 'invite' : m.image ? 'image' : m.voice ? 'voice' : 'text'}>
+      <div className="bubble2" data-kind={m.invite ? 'invite' : m.image || m.video ? 'image' : m.voice ? 'voice' : 'text'}>
         {m.image && (
           <button className="bubble2__img" onClick={() => onZoom(m.image!)} aria-label="Open picture">
             <img src={m.image} alt="Sent picture" loading="lazy" />
           </button>
         )}
+        {m.video && <video className="bubble2__video" src={m.video} controls playsInline preload="metadata" />}
         {m.voice && <VoiceNote src={m.voice} duration={m.duration ?? 0} />}
         {m.invite && (
           <span className="invite">

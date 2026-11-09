@@ -17,9 +17,12 @@ export function Roster() {
   const speaking = useVoice((v) => v.speaking);
   const muted = useVoice((v) => v.muted);
   const colors = teamColors().map((c) => `#${c.getHexString()}`);
+  const peers = useVoice((v) => v.peers);
+  const active = useVoice((v) => v.active);
+  // Everyone in the server who can talk: real players on voice, never bots, whatever their team.
   const rows = board
-    .filter((b) => b.team === myTeam || (speaking[b.id] && !b.you))
-    .sort((a, b) => Number(b.you) - Number(a.you) || a.team - b.team || a.id - b.id)
+    .filter((b) => !b.bot && (b.you ? active : peers.includes(b.id)))
+    .sort((a, b) => Number(b.you) - Number(a.you) || Number(myTeam === b.team) - Number(myTeam === a.team) || a.team - b.team || a.id - b.id)
     .slice(0, 8);
   if (!rows.length) return null;
   return (

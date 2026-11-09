@@ -113,6 +113,20 @@ export class OnlineSource implements MatchSource {
       this.view.push(view);
     }
     this.offs.push(room.onMessage(MSG.SNAP, (s: Snapshot) => this.onSnap(s)));
+    // Someone joined the running match, or a bot left for them.
+    this.offs.push(
+      room.onMessage(MSG.ROSTER, (r: { players: MatchStart['players'] }) => {
+        const ids = new Set(r.players.map((p) => p.id));
+        for (const id of [...this.remotes.keys()]) if (!ids.has(id)) this.remotes.delete(id);
+        for (const info of r.players) {
+          if (info.id === this.localId || this.remotes.has(info.id)) continue;
+          const view: ViewPlayer = { id: info.id, info, state: createPlayerState(info), pos: v3(), stats: { kills: 0, deaths: 0, assists: 0, paint: 0, specials: 0 } };
+          this.remotes.set(info.id, { view, buf: [] });
+        }
+        this.view.length = 0;
+        this.view.push(this.localView, ...[...this.remotes.values()].map((x) => x.view));
+      }),
+    );
     this.offs.push(
       room.onMessage(MSG.SYNC, (s: { rle: number[] }) => {
         this.world.grid.decode(s.rle);

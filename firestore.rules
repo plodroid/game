@@ -103,8 +103,9 @@ service cloud.firestore {
     function validBody(d) {
       return (('text' in d) && d.text is string && d.text.size() >= 1 && d.text.size() <= 500)
         || (('voice' in d) && d.voice is string && d.voice.size() <= 400000
-          && ('duration' in d) && d.duration is number && d.duration <= 31)
+          && ('duration' in d) && d.duration is number && d.duration <= 91)
         || (('image' in d) && d.image is string && d.image.size() <= 420000 && d.image.matches('^data:image/.*'))
+        || (('video' in d) && d.video is string && d.video.size() <= 700000 && d.video.matches('^data:video/.*'))
         || (('invite' in d) && d.invite is string && d.invite.size() >= 4 && d.invite.size() <= 12);
     }
     function friends(id) {
@@ -247,7 +248,7 @@ service cloud.firestore {
       match /messages/{mid} {
         allow read: if inPair(id);
         allow create: if inPair(id) && friends(id)
-          && request.resource.data.keys().hasOnly(['from', 'text', 'voice', 'duration', 'image', 'invite', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['from', 'text', 'voice', 'duration', 'image', 'video', 'invite', 'createdAt'])
           && request.resource.data.from == request.auth.uid
           && validBody(request.resource.data);
         allow delete: if inPair(id) && resource.data.from == request.auth.uid;
@@ -291,7 +292,7 @@ service cloud.firestore {
       match /messages/{mid} {
         allow read: if isMember(gid);
         allow create: if isMember(gid)
-          && request.resource.data.keys().hasOnly(['from', 'fromName', 'text', 'voice', 'duration', 'image', 'invite', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['from', 'fromName', 'text', 'voice', 'duration', 'image', 'video', 'invite', 'createdAt'])
           && request.resource.data.from == request.auth.uid
           && request.resource.data.fromName is string && request.resource.data.fromName.size() <= 24
           && validBody(request.resource.data);

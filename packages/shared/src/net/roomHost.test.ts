@@ -103,3 +103,32 @@ describe('RoomHost', () => {
     room.dispose();
   });
 });
+
+describe('joining a running match', () => {
+  it('a friend replaces a bot with their own weapon; the owner is added on top and nobody is replaced', () => {
+    vi.useFakeTimers();
+    const room = new RoomHost({ code: 'ABCDE', settings: { botFill: true } });
+    const a = seat('a');
+    room.join(a.client, { name: 'Ann' });
+    room.message('a', MSG.START, null);
+    const sim = (room as unknown as { sim: { players: { id: number; info: { bot: boolean; weapon: string; name: string; admin?: boolean } }[] } }).sim;
+    const bots = sim.players.filter((p) => p.info.bot).length;
+    const total = sim.players.length;
+
+    const f = seat('f');
+    room.join(f.client, { name: 'Fay', weapon: 'roller' });
+    expect(sim.players.length).toBe(total);
+    expect(sim.players.filter((p) => p.info.bot).length).toBe(bots - 1);
+    const fay = sim.players.find((p) => p.info.name === 'Fay')!;
+    expect(fay.info.weapon).toBe('roller');
+    expect(fay.info.admin).toBeUndefined();
+    // Players already in the match are told about the new roster.
+    expect(a.inbox.some(([t]) => t === MSG.ROSTER)).toBe(true);
+
+    const o = seat('o');
+    room.join(o.client, { name: 'Owner' }, { uid: 'u1', username: 'Owner', admin: true });
+    expect(sim.players.length).toBe(total + 1);
+    expect(sim.players.filter((p) => p.info.bot).length).toBe(bots - 1);
+    expect(sim.players.find((p) => p.info.name === 'Owner')!.info.admin).toBe(true);
+  });
+});

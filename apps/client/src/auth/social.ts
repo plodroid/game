@@ -389,6 +389,8 @@ export interface Message {
   duration?: number;
   /** A picture, as a small compressed data URL. */
   image?: string;
+  /** A short clip, as an MP4 (or WebM where the browser can't make MP4) data URL. */
+  video?: string;
   /** A game code: the message is an invitation with a Join button. */
   invite?: string;
   createdAt: number;
@@ -407,7 +409,7 @@ export function watchMessages(c: Convo, on: (m: Message[]) => void): Unsubscribe
   );
 }
 
-async function post(c: Convo, body: { text?: string; voice?: string; duration?: number; image?: string; invite?: string }, preview: string) {
+async function post(c: Convo, body: { text?: string; voice?: string; duration?: number; image?: string; video?: string; invite?: string }, preview: string) {
   const { db, uid } = me();
   const stamp = { text: preview, from: uid, at: Timestamp.now() };
   if (c.kind === 'dm') {
@@ -427,8 +429,9 @@ async function post(c: Convo, body: { text?: string; voice?: string; duration?: 
 
 export const sendText = (c: Convo, text: string) => post(c, { text: text.trim().slice(0, 500) }, text.trim().slice(0, 80));
 export const sendVoice = (c: Convo, voice: string, duration: number) =>
-  post(c, { voice, duration: Math.min(30, Math.round(duration * 10) / 10) }, `Voice message (${Math.round(duration)}s)`);
+  post(c, { voice, duration: Math.min(90, Math.round(duration * 10) / 10) }, `Voice message (${Math.round(duration)}s)`);
 export const sendImage = (c: Convo, image: string) => post(c, { image }, 'Sent a picture');
+export const sendVideo = (c: Convo, video: string) => post(c, { video }, 'Sent a video');
 /** An invitation to the game this player is in or hosting: a card with a Join button. */
 export const sendInvite = (c: Convo, code: string) => post(c, { invite: code }, 'Invited you to a game');
 

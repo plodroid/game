@@ -37,6 +37,8 @@ export const MSG = {
   GRANT: 'grant',
   /** A random-server player says they want another match: client → host. */
   AGAIN: 'again',
+  /** Who is in the running match changed (someone joined, a bot left): host to clients { players }. */
+  ROSTER: 'roster',
 } as const;
 
 export const CHAT_MAX = 120;

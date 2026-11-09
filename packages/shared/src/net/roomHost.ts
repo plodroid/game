@@ -529,35 +529,33 @@ export class RoomHost {
   /** Late joiners take over a bot on the emptier team (or a fresh slot), then get a full paint sync. */
   private joinRunning(m: Member) {
     const sim = this.sim!;
-    const bot =
-      sim.players.find((p) => p.info.bot && p.team === m.team && !this.ownerOf(p.id)) ??
-      sim.players.find((p) => p.info.bot && !this.ownerOf(p.id));
-    if (bot) {
-      m.pid = bot.id;
-      m.team = bot.team;
-      m.weapon = bot.weapon;
-      m.special = bot.special;
-      bot.info.name = m.name;
-      bot.info.uid = m.uid;
-      bot.info.admin = m.admin || undefined;
-      sim.setBot(bot.id, null);
-    } else if (sim.players.length < MAX_PLAYERS || m.admin) {
-      sim.addPlayer({
-        id: m.pid,
-        name: m.name,
-        team: m.team,
-        weapon: m.weapon,
-        special: m.special,
-        bot: false,
-        cosmetics: m.cosmetics,
-        uid: m.uid,
-        ...(m.admin ? { admin: true } : {}),
-      });
-    } else return;
+    // A player takes a bot's seat: the bot leaves and the player arrives with their own look and weapon.
+    // The owner is added on top instead, so the match stays exactly as it is.
+    if (!m.admin) {
+      const bot =
+        sim.players.find((p) => p.info.bot && p.team === m.team && !this.ownerOf(p.id)) ??
+        sim.players.find((p) => p.info.bot && !this.ownerOf(p.id));
+      if (bot) {
+        m.team = bot.team;
+        sim.removePlayer(bot.id);
+      } else if (sim.players.length >= MAX_PLAYERS) return;
+    }
+    sim.addPlayer({
+      id: m.pid,
+      name: m.name,
+      team: m.team,
+      weapon: m.weapon,
+      special: m.special,
+      bot: false,
+      cosmetics: m.cosmetics,
+      uid: m.uid,
+      ...(m.admin ? { admin: true } : {}),
+    });
     this.roster = sim.players.map((p) => {
       const { uid: _uid, ...info } = p.info;
       return info;
     });
+    for (const o of this.members.values()) if (o !== m && o.connected) o.client.send(MSG.ROSTER, { players: this.roster });
     m.lastInputAt = Date.now();
     m.client.send(MSG.MATCH, { config: sim.config, players: this.roster, you: m.pid, mapDef: customMapData(sim.config.map) } satisfies MatchStart);
     m.client.send(MSG.SYNC, { rle: sim.world.grid.encode() });

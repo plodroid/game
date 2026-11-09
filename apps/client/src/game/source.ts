@@ -107,6 +107,11 @@ export class OfflineSource implements MatchSource {
     const sim = this.sim;
     this.acc = Math.min(this.acc + dt, 0.2);
     const out: SimEvent[] = [];
+    // Players who joined (and bots who left for them) while the match was running.
+    if (this.view.length !== sim.players.length || this.view.some((v, i) => v.id !== sim.players[i]?.id)) {
+      this.view = sim.players.map((p) => this.view.find((v) => v.id === p.id) ?? { id: p.id, info: p.info, state: p, pos: { ...p.pos }, stats: p.stats });
+      for (const v of this.view) if (!this.prev.has(v.id)) this.prev.set(v.id, { ...v.state.pos });
+    }
     while (this.acc >= DT) {
       for (const p of sim.players) {
         const q = this.prev.get(p.id) ?? v3();
