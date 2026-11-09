@@ -6,6 +6,7 @@ import './styles/social.css';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { webgl2Available } from './settings/hardware';
+import './state/maps'; // loads the player's own maps so every screen can play them
 import { useUi } from './state/ui';
 import { useUpdates } from './updates';
 

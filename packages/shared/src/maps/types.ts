@@ -78,4 +78,6 @@ export interface MapDef {
   props: PropDef[];
 }
 
-export type MapId = 'skyline' | 'core' | 'float' | 'docks' | 'gardens' | 'canyon' | 'arcade';
+export type BuiltinMapId = 'skyline' | 'core' | 'float' | 'docks' | 'gardens' | 'canyon' | 'arcade';
+/** A built-in map, or a player-made one ("c-…"). */
+export type MapId = string;

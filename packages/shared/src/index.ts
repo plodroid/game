@@ -7,6 +7,7 @@ export * from './config/modes';
 export * from './config/cosmetics';
 export * from './maps';
 export * from './maps/builder';
+export * from './maps/custom';
 export * from './world/paint';
 export * from './world/world';
 export * from './sim/player';

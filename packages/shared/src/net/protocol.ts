@@ -3,6 +3,7 @@ import type { Cosmetics } from '../config/cosmetics';
 import type { BotDifficulty, ModeId } from '../config/modes';
 import { SPECIAL_IDS, type SpecialId } from '../config/specials';
 import { WEAPON_IDS, type WeaponId } from '../config/weapons';
+import type { CustomMap } from '../maps/custom';
 import type { MapId } from '../maps';
 import type { Effect } from '../sim/combat';
 import type { SimEvent } from '../sim/events';
@@ -107,6 +108,8 @@ export interface MatchStart {
   config: MatchConfig;
   players: Omit<PlayerInfo, 'uid'>[];
   you: number;
+  /** The map's data when it is a player-made one, so guests can build it too. */
+  mapDef?: CustomMap;
 }
 
 export interface MatchEnd {

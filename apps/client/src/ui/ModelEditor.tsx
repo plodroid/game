@@ -42,7 +42,7 @@ export interface ModelDraft {
   muzzle: [number, number];
 }
 
-function Num({ label, value, step = 0.01, onChange }: { label: string; value: number; step?: number; onChange: (v: number) => void }) {
+export function Num({ label, value, step = 0.01, onChange }: { label: string; value: number; step?: number; onChange: (v: number) => void }) {
   return (
     <label className="me-num">
       <span>{label}</span>

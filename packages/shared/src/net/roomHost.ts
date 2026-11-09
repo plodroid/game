@@ -3,7 +3,8 @@ import { botLook, DEFAULT_COSMETICS, sanitizeCosmetics, type Cosmetics } from '.
 import { BOT_DIFFICULTIES, DURATION_OPTIONS, MODES, type ModeId } from '../config/modes';
 import { SPECIAL_IDS, type SpecialId } from '../config/specials';
 import { publicWeapons, WEAPON_IDS, WEAPONS, type WeaponId } from '../config/weapons';
-import { MAP_IDS } from '../maps';
+import { MAPS } from '../maps';
+import { customMapData } from '../maps/custom';
 import { emptyInput, type Input, type PlayerInfo } from '../sim/player';
 import { Simulation, type MatchResult } from '../sim/simulation';
 import { xpForMatch } from '../progression';
@@ -114,7 +115,7 @@ export function sanitizeSettings(s: Partial<LobbySettings> | undefined, base?: L
     botDifficulty: 'normal',
   };
   return {
-    map: MAP_IDS.includes(s?.map as never) ? s!.map! : d.map,
+    map: typeof s?.map === 'string' && MAPS[s.map] ? s.map : d.map,
     mode: PLAYABLE.includes(s?.mode as never) ? s!.mode! : d.mode,
     duration: DURATION_OPTIONS.includes(Number(s?.duration)) ? Number(s!.duration) : d.duration,
     botFill: typeof s?.botFill === 'boolean' ? s.botFill : d.botFill,
@@ -518,6 +519,7 @@ export class RoomHost {
           config: this.sim.config,
           players: this.roster,
           you: m.pid,
+          mapDef: customMapData(this.sim.config.map),
         } satisfies MatchStart);
     }
     this.pushLobby();
@@ -557,7 +559,7 @@ export class RoomHost {
       return info;
     });
     m.lastInputAt = Date.now();
-    m.client.send(MSG.MATCH, { config: sim.config, players: this.roster, you: m.pid } satisfies MatchStart);
+    m.client.send(MSG.MATCH, { config: sim.config, players: this.roster, you: m.pid, mapDef: customMapData(sim.config.map) } satisfies MatchStart);
     m.client.send(MSG.SYNC, { rle: sim.world.grid.encode() });
   }
 

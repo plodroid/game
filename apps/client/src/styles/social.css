@@ -1012,3 +1012,13 @@
     order: -1;
   }
 }
+
+.me-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 8px;
+}
+.me-check input {
+  width: auto;
+}

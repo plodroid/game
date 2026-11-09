@@ -16,6 +16,8 @@ import { firebaseConfigured } from '../../env';
 import { hostFromMenu, ownHostCode } from '../../multiplayer/net';
 import { useUi } from '../../state/ui';
 import { Icon } from '../icons';
+import { MyMaps } from '../MyMaps';
+import { useMaps } from '../../state/maps';
 import { Button, Header, LengthDial, Segmented, Setting } from '../kit';
 
 export const DIFF_LABEL: Record<BotDifficulty, string> = { easy: 'Easy', normal: 'Normal', hard: 'Hard', expert: 'Expert' };
@@ -24,6 +26,7 @@ export const onlineIntent: { mode: 'join' | null } = { mode: null };
 export function Play() {
   const go = useUi((s) => s.go);
   const [code] = useState(ownHostCode);
+  const [maps, setMaps] = useState(false);
   const signedIn = useAccount((a) => a.status === 'signedIn');
   const items = [
     {
@@ -55,6 +58,7 @@ export function Play() {
       run: () => void startOffline({ map: MAP_IDS[Math.floor(Math.random() * MAP_IDS.length)], mode: 'turf', duration: 180, difficulty: 'normal', allies: 3, rivals: 4 }),
     },
     { title: 'Custom Match', desc: 'Pick the map, mode, length and every bot slot.', run: () => go('custom') },
+    { title: 'Map editor', desc: 'Build your own maps in 3D, then edit, play or delete them.', run: () => setMaps(true) },
   ];
   return (
     <main className="screen" data-pig="magenta">
@@ -74,6 +78,7 @@ export function Play() {
           </button>
         ))}
       </div>
+      {maps && <MyMaps onClose={() => setMaps(false)} />}
       {code && (
         <section className="col code-note" aria-label="Your game code">
           <span className="code-note__label">Your game code</span>
@@ -86,7 +91,10 @@ export function Play() {
 }
 
 export function Custom() {
+  const mine = useMaps((s) => s.maps);
   const [map, setMap] = useState<MapId>('skyline');
+  // A map deleted while chosen falls back to the first one.
+  const chosen = MAPS[map] ? map : 'skyline';
   const [mode, setMode] = useState<ModeId>('turf');
   const [duration, setDuration] = useState(180);
   const [difficulty, setDifficulty] = useState<BotDifficulty>('normal');
@@ -98,8 +106,8 @@ export function Custom() {
       <Header title="Custom Match" sub="Offline against bots. Nothing here needs an internet connection." />
       <div className="col--wide stagger">
         <section className="panel">
-          <Setting name="Map" hint={MAPS[map].description}>
-            <Segmented value={map} onChange={setMap} label="Map" options={MAP_IDS.map((m) => ({ value: m, label: MAPS[m].name }))} />
+          <Setting name="Map" hint={MAPS[chosen].description}>
+            <Segmented value={chosen} onChange={setMap} label="Map" options={[...MAP_IDS, ...mine.map((m) => m.id)].map((m) => ({ value: m, label: MAPS[m].name }))} />
           </Setting>
           <Setting name="Mode" hint={MODES[mode].description}>
             <Segmented
@@ -132,11 +140,11 @@ export function Custom() {
           )}
         </section>
         <div className="row" style={{ marginTop: 16 }}>
-          <Button variant="primary" size="lg" onClick={() => void startOffline({ map, mode, duration, difficulty, allies, rivals })}>
+          <Button variant="primary" size="lg" onClick={() => void startOffline({ map: chosen, mode, duration, difficulty, allies, rivals })}>
             <Icon.play size={16} /> Start match
           </Button>
           <span className="muted small">
-            {practice ? 'Practice: four training targets, no timer.' : `${1 + allies} vs ${rivals} · ${MODES[mode].name} · ${MAPS[map].name}${duration ? '' : ' · no time limit'}`}
+            {practice ? 'Practice: four training targets, no timer.' : `${1 + allies} vs ${rivals} · ${MODES[mode].name} · ${MAPS[chosen].name}${duration ? '' : ' · no time limit'}`}
           </span>
         </div>
       </div>

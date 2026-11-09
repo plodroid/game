@@ -7,6 +7,7 @@ import {
   GameWorld,
   hash2,
   MAPS,
+  registerCustomMap,
   MSG,
   muzzle,
   packInput,
@@ -94,6 +95,8 @@ export class OnlineSource implements MatchSource {
     private room: NetRoom,
     start: MatchStart,
   ) {
+    // A player-made map arrives with the match; build it before the world needs it.
+    if (start.mapDef) registerCustomMap(start.mapDef);
     this.config = start.config;
     this.localId = start.you;
     this.world = new GameWorld(MAPS[this.config.map]);
