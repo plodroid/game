@@ -41,6 +41,10 @@ class Engine {
   /** Automatic resolution scale (1 = full): lowered while the frame rate is short, raised back when it recovers. */
   private dyn = 1;
   private calm = 0;
+  private slow = 0;
+  private since = 0;
+  /** The highest scale worth trying again (a level that failed soon after being raised is not retried). */
+  private ceiling = 1;
 
   init(stage: HTMLElement) {
     this.stage = stage;
@@ -159,25 +163,36 @@ class Engine {
    */
   private dynamicResolution(cap: number) {
     const desktop = !!(window as unknown as { __CHROMASHIFT_DESKTOP__?: boolean }).__CHROMASHIFT_DESKTOP__;
-    const on = (desktop || useSplit.getState().seated) && this.view?.kind === 'match' && !useUi.getState().paused && !document.hidden;
-    if (!on) {
-      if (this.dyn !== 1) {
+    const inMatch = (desktop || useSplit.getState().seated) && this.view?.kind === 'match';
+    // Pausing or covering the window changes nothing; only leaving the match restores full resolution.
+    if (!inMatch || useUi.getState().paused || document.hidden) {
+      if (!inMatch && this.dyn !== 1) {
         this.dyn = 1;
+        this.ceiling = 1;
         this.onResize();
       }
       return;
     }
+    // Every change resizes the canvas, which can flicker and costs a hitch, so changes are rare:
+    // down a step after the frame rate has stayed short for a few seconds, and back up only after a
+    // long calm stretch (and never again for a level that just failed).
     const target = Math.min(cap || 60, 60);
     let next = this.dyn;
-    if (this.fps < target * 0.86) {
-      next = Math.max(0.5, this.dyn - 0.1);
+    this.since++;
+    if (this.fps < target * 0.8) {
+      this.slow++;
       this.calm = 0;
-    } else if (this.fps >= target * 0.97 && this.dyn < 1 && ++this.calm >= 6) {
-      next = Math.min(1, this.dyn + 0.05);
-      this.calm = 0;
+    } else {
+      this.slow = 0;
+      this.calm = this.fps >= target * 0.97 ? this.calm + 1 : 0;
     }
+    if (this.slow >= 4 && this.dyn > 0.6) {
+      this.ceiling = Math.min(this.ceiling, this.since < 15 ? this.dyn : 1);
+      next = Math.max(0.6, +(this.dyn - 0.1).toFixed(2));
+    } else if (this.calm >= 25 && this.dyn < this.ceiling) next = Math.min(this.ceiling, +(this.dyn + 0.1).toFixed(2));
     if (next !== this.dyn) {
       this.dyn = next;
+      this.slow = this.calm = this.since = 0;
       this.onResize();
     }
   }

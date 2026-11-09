@@ -18,11 +18,8 @@ addEventListener('keydown', function (e) {
 }, true);
 "#;
 
-/// Chromium switches for WebView2: let the GPU do the drawing even on drivers Chromium distrusts,
-/// and keep full speed when the window is covered (voice chat and online play keep running).
-const GPU_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection \
---ignore-gpu-blocklist --enable-gpu-rasterization --enable-zero-copy --disable-renderer-backgrounding \
---disable-background-timer-throttling --disable-backgrounding-occluded-windows";
+/// Chromium switches for WebView2: GPU rasterisation, and keep full speed when the window is covered (voice chat and online play keep running).
+const GPU_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --enable-gpu-rasterization --disable-renderer-backgrounding --disable-background-timer-throttling";
 
 fn main() {
     bridge::start();
