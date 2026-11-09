@@ -12,6 +12,7 @@ import {
 import { startOffline, startTutorial } from '../../game/session';
 import { joinRandom } from '../../multiplayer/matchmaking';
 import { useAccount } from '../../auth/account';
+import { isOwner } from '../../auth/admin';
 import { firebaseConfigured } from '../../env';
 import { hostFromMenu, ownHostCode } from '../../multiplayer/net';
 import { useUi } from '../../state/ui';
@@ -27,6 +28,8 @@ export function Play() {
   const go = useUi((s) => s.go);
   const [code] = useState(ownHostCode);
   const [maps, setMaps] = useState(false);
+  useAccount((a) => a.user?.uid); // re-check the owner when the account changes
+  const owner = isOwner();
   const signedIn = useAccount((a) => a.status === 'signedIn');
   const items = [
     {
@@ -58,7 +61,8 @@ export function Play() {
       run: () => void startOffline({ map: MAP_IDS[Math.floor(Math.random() * MAP_IDS.length)], mode: 'turf', duration: 180, difficulty: 'normal', allies: 3, rivals: 4 }),
     },
     { title: 'Custom Match', desc: 'Pick the map, mode, length and every bot slot.', run: () => go('custom') },
-    { title: 'Map editor', desc: 'Build your own maps in 3D, then edit, play or delete them.', run: () => setMaps(true) },
+    // The map editor is an owner tool, like the weapon editor.
+    ...(owner ? [{ title: 'Map editor', desc: 'Build maps in 3D, then edit, play or delete them.', run: () => setMaps(true) }] : []),
   ];
   return (
     <main className="screen" data-pig="magenta">
@@ -78,7 +82,7 @@ export function Play() {
           </button>
         ))}
       </div>
-      {maps && <MyMaps onClose={() => setMaps(false)} />}
+      {maps && owner && <MyMaps onClose={() => setMaps(false)} />}
       {code && (
         <section className="col code-note" aria-label="Your game code">
           <span className="code-note__label">Your game code</span>
