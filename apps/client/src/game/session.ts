@@ -183,9 +183,14 @@ function finish(o: MatchOutcome, you: number) {
 
 export function leaveMatch() {
   const ui = useUi.getState();
-  closeWorld();
-  useTutorial.setState({ active: false });
-  if (currentOnline) leaveRoom();
+  // The menu must come back even if closing the world or the room fails; otherwise the screen stays black.
+  try {
+    closeWorld();
+    useTutorial.setState({ active: false });
+    if (currentOnline) leaveRoom();
+  } catch (e) {
+    console.error(e);
+  }
   showMenu();
   ui.setPaused(false);
   ui.go('home');

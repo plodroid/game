@@ -992,39 +992,59 @@ export class MatchView implements View {
   }
 
   dispose() {
-    audio.onWorldSound = null;
-    audio.stopAmbient();
-    engine.input.onPause = null;
-    engine.input.onScoreboard = null;
-    engine.input.onChat = null;
-    engine.input.onTalk = null;
-    engine.input.onMap = null;
-    engine.input.onView = null;
-    void voice.talk(false);
-    voice.setNear(null);
-    useChat.getState().setOpen(false);
-    engine.input.wantsLock = false;
-    engine.input.engaged = false;
-    engine.input.unlock();
-    useHud.setState({ active: false, showBoard: false });
-    if (this.seats[1]) this.removeSeat();
-    for (const c of this.chars.values()) c.rig.dispose();
-    this.fx.dispose();
-    this.env.dispose();
-    this.mapGroup.traverse((o) => {
-      const m = o as THREE.Mesh;
-      m.geometry?.dispose();
-      (m.material as THREE.Material | undefined)?.dispose?.();
+    // Every step runs even if an earlier one fails: a half-cleaned match must never leave the screen black.
+    const safe = (f: () => void) => {
+      try {
+        f();
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    safe(() => {
+      audio.onWorldSound = null;
+      audio.stopAmbient();
+      const i = engine.input;
+      i.onPause = i.onScoreboard = i.onChat = i.onTalk = i.onMap = i.onView = null;
+      void voice.talk(false);
+      voice.setNear(null);
+      useChat.getState().setOpen(false);
+      i.wantsLock = false;
+      i.engaged = false;
+      i.unlock();
+      useHud.setState({ active: false, showBoard: false });
     });
-    for (const o of this.deco)
-      o.traverse((x) => {
-        const m = x as THREE.Mesh;
+    safe(() => {
+      const seat = this.seats[1];
+      if (!seat) return;
+      this.seats.length = 1;
+      seat.post.dispose();
+      seat.input.onPause = seat.input.onScoreboard = seat.input.onMap = null;
+      seat.hud.setState({ active: false, showBoard: false });
+      useSplit.setState({ seated: false });
+    });
+    safe(() => {
+      for (const c of this.chars.values()) c.rig.dispose();
+      this.fx.dispose();
+      this.env.dispose();
+    });
+    safe(() =>
+      this.mapGroup.traverse((o) => {
+        const m = o as THREE.Mesh;
         m.geometry?.dispose();
         (m.material as THREE.Material | undefined)?.dispose?.();
-      });
-    this.atlas.dispose();
-    for (const s of this.seats) s.post.dispose();
-    this.source.dispose();
+      }),
+    );
+    for (const o of this.deco)
+      safe(() =>
+        o.traverse((x) => {
+          const m = x as THREE.Mesh;
+          m.geometry?.dispose();
+          (m.material as THREE.Material | undefined)?.dispose?.();
+        }),
+      );
+    safe(() => this.atlas.dispose());
+    safe(() => this.seats[0].post.dispose());
+    safe(() => this.source.dispose());
     engine.renderer.shadowMap.autoUpdate = true;
   }
 }

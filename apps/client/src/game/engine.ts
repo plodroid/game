@@ -117,7 +117,12 @@ class Engine {
   }
 
   setView(v: View | null) {
-    this.view?.dispose();
+    // A view that fails to clean up must not stop the next one from showing (that is a frozen black screen).
+    try {
+      this.view?.dispose();
+    } catch (err) {
+      console.error(err);
+    }
     this.view = v;
     this.slowWindows = 0;
   }
@@ -142,7 +147,14 @@ class Engine {
         console.error(e);
       }
     }
-    this.view.render(dt);
+    try {
+      this.view.render(dt);
+    } catch (e) {
+      if (!this.reported) {
+        this.reported = true;
+        console.error(e);
+      }
+    }
     this.frames++;
     if (!this.fpsT) this.fpsT = t;
     if (t - this.fpsT >= 1000) {

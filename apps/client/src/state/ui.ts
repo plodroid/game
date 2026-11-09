@@ -56,7 +56,14 @@ export const useUi = create<UiStore>()((set, get) => ({
   online: typeof navigator === 'undefined' ? true : navigator.onLine,
   tryOn: null,
   setTryOn: (tryOn) => set({ tryOn }),
-  go: (s) => set((st) => (st.screen === s ? st : { screen: s, history: [...st.history, st.screen].slice(-12) })),
+  // Going to the screen you just came from steps back instead of stacking, so Lobby -> Online -> Back
+  // can't bounce between the two (the lobby sends you to Online when it has no room).
+  go: (s) =>
+    set((st) => {
+      if (st.screen === s) return st;
+      if (st.history[st.history.length - 1] === s) return { screen: s, history: st.history.slice(0, -1) };
+      return { screen: s, history: [...st.history, st.screen].slice(-12) };
+    }),
   back: () => {
     const h = get().history;
     set({ screen: h[h.length - 1] ?? 'home', history: h.slice(0, -1) });
