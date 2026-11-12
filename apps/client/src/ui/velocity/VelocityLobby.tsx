@@ -6,7 +6,7 @@ import {
 import { leaveRoom, send, useNet } from '../../multiplayer/net';
 import { useVoice } from '../../multiplayer/voice';
 import { useProfile } from '../../state/profile';
-import { useUi } from '../../state/ui';
+import { afterLobby, useUi } from '../../state/ui';
 import { useTracks } from '../../velocity/tracksState';
 import { Avatar } from '../Avatar';
 import { InviteFriends } from '../InviteFriends';
@@ -45,7 +45,7 @@ export function VelocityLobby() {
   const humans = lobby.players.filter((p) => !p.bot);
   const bots = Math.max(0, Math.min(st.bots, MAX_RACERS - humans.length));
   const invite = `${location.origin}${location.pathname}?join=${lobby.code}`;
-  const close = () => (leaveRoom(), go('play'));
+  const close = () => (leaveRoom(), go(afterLobby()));
   const track = trackDef(st.track);
 
   const slot = (p: LobbyPlayer, i: number) => {

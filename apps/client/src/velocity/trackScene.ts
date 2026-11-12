@@ -312,33 +312,7 @@ export function buildTrackScene(scene: THREE.Scene, renderer: THREE.WebGLRendere
     const g = strip(p, (i) => p.w[i], (i) => -p.w[i], 1, 0.035, 0, 1, (i) => i === 0 || i === 1);
     mesh(g, M({ map: ctex, roughness: 0.7 }), false);
   }
-  // Walls: a vertical strip on each outer edge, with a cap.
-  const wtex = keep(wallTexture(look.wall, look.accent));
-  const wallMat = M({ map: wtex, roughness: 0.75, emissive: look.wall === 'neon' ? new THREE.Color(look.accent) : undefined, emissiveIntensity: look.wall === 'neon' ? 0.6 : 0, side: THREE.DoubleSide });
-  if (look.wall === 'neon' && !o.lambert) (wallMat as THREE.MeshStandardMaterial).emissiveMap = wtex;
-  const H = Math.max(0.8, def.wall);
-  for (const side of [1, -1]) {
-    const pos: number[] = [], uv: number[] = [], idx: number[] = [];
-    let v = 0;
-    for (let i = 0; i <= p.n; i++) {
-      const k = i % p.n;
-      const off = side * (p.w[k] + def.shoulder + 0.3);
-      const x = p.px[k] + p.lx[k] * off, y = p.py[k] + p.ly[k] * off, z = p.pz[k] + p.lz[k] * off;
-      if (i) v += p.length / p.n / 3;
-      pos.push(x, y - 0.3, z, x, y + H, z);
-      uv.push(v, 0, v, 1);
-      if (i) {
-        const a = (i - 1) * 2;
-        idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
-      }
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-    g.setIndex(idx);
-    g.computeVertexNormals();
-    mesh(g, wallMat, false);
-  }
+  barriers(group, p, look, o, keep, M);
   // Under the road: a deck edge where it's raised, and pillars down to the ground.
   const deckMat = M({ color: 0x8a8d96, roughness: 0.85 });
   const raised = (i: number) => p.py[i] - def.ground > 1.2;
@@ -460,6 +434,7 @@ export function buildTrackScene(scene: THREE.Scene, renderer: THREE.WebGLRendere
   }
 
   scenery(group, p, look, o, keep, M);
+  roadside(group, p, look, o, keep, M);
 
   scene.add(group);
   const sunDir = skyLook.sunDir;
@@ -617,6 +592,10 @@ function scenery(
       break;
     }
   }
+  // Low bushes and rocks between the big things, so the ground is never bare.
+  const fill = { coast: 0x4faa54, sunset: 0x6a9a48, garden: 0x3a8f44, arcade: 0x8a6ae0, snow: 0xdde6f0, canyon: 0xa8552e, docks: 0x7a7e86, city: 0x6f7480, neon: 0x2a2c3c, core: 0x2c3040 }[def.theme];
+  instanced(new THREE.IcosahedronGeometry(0.9, 0).translate(0, 0.45, 0), M({ color: fill, roughness: 0.95, flatShading: true }), spots(n(170), 2.5, 55), (s) => new THREE.Vector3(s * 1.3, s, s * 1.3));
+  instanced(new THREE.IcosahedronGeometry(0.8, 0).translate(0, 0.3, 0), M({ color: def.theme === 'snow' ? 0xc8d4e2 : 0x9a968f, roughness: 0.95, flatShading: true }), spots(n(70), 3, 60), (s) => new THREE.Vector3(s * 1.6, s * 0.9, s * 1.3));
 }
 
 /** A palm crown: drooping leaves round the top of the trunk. */
@@ -651,3 +630,295 @@ function palmCrown() {
 }
 
 export const surfaceAt = (p: TrackPath, i: number) => SURFACES[p.surf[i]] ?? 'asphalt';
+
+type Keep = <T extends THREE.BufferGeometry | THREE.Material | THREE.Texture>(x: T) => T;
+type Mat = (opts: THREE.MeshStandardMaterialParameters) => THREE.Material;
+interface Spot { x: number; y: number; z: number; yaw: number; s?: number; sx?: number; sy?: number; sz?: number; color?: number }
+
+/** Instanced copies of one shape. */
+function place(group: THREE.Group, o: TrackOptions, keep: Keep, g: THREE.BufferGeometry, m: THREE.Material, list: Spot[], shadow = true) {
+  if (!list.length) return;
+  keep(g);
+  const im = new THREE.InstancedMesh(g, m, list.length);
+  const q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), c = new THREE.Color();
+  list.forEach((a, k) => {
+    q.setFromAxisAngle(up, a.yaw);
+    const s = a.s ?? 1;
+    im.setMatrixAt(k, new THREE.Matrix4().compose(new THREE.Vector3(a.x, a.y, a.z), q, new THREE.Vector3((a.sx ?? 1) * s, (a.sy ?? 1) * s, (a.sz ?? 1) * s)));
+    if (a.color !== undefined) im.setColorAt(k, c.setHex(a.color));
+  });
+  im.castShadow = o.shadows && shadow;
+  im.receiveShadow = o.shadows;
+  group.add(im);
+}
+
+const hash2 = (a: number, b: number) => {
+  const x = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+/**
+ * Sweeps a cross-section along one side of the loop: d is how far outside the wall's inner face
+ * (the face the physics wall has), h is the height above the road. Every face is flat-shaded.
+ */
+function sweep(p: TrackPath, side: 1 | -1, profile: [number, number][], uMetres: number, jitter = 0) {
+  const n = p.n, m = profile.length, sh = p.def.shoulder;
+  const per = [0];
+  for (let q = 1; q <= m; q++) per.push(per[q - 1] + Math.hypot(profile[q % m][0] - profile[q - 1][0], profile[q % m][1] - profile[q - 1][1]));
+  const row = (i: number) => {
+    const k = i % n;
+    return profile.map(([d, h], q) => {
+      const j = jitter && h > 0.3 ? (hash2(k, q) - 0.5) * jitter : 0;
+      const off = side * (p.w[k] + sh + d + j * 0.6);
+      return [p.px[k] + p.lx[k] * off, p.py[k] + p.ly[k] * off + h + j * 0.5, p.pz[k] + p.lz[k] * off];
+    });
+  };
+  const pos: number[] = [], uv: number[] = [];
+  let prev = row(0), u = 0;
+  for (let i = 1; i <= n; i++) {
+    const cur = row(i);
+    const u0 = u, u1 = u + p.length / n / uMetres;
+    u = u1;
+    for (let q = 0; q < m; q++) {
+      const r = (q + 1) % m, v0 = per[q] / 2, v1 = per[q + 1] / 2;
+      pos.push(...prev[q], ...prev[r], ...cur[q], ...prev[r], ...cur[r], ...cur[q]);
+      uv.push(u0, v0, u0, v1, u1, v0, u0, v1, u1, v1, u1, v0);
+    }
+    prev = cur;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.computeVertexNormals();
+  return g;
+}
+
+/** A stripe that alternates two colours along the track (u). */
+const stripeTex = (a: number, b: number) =>
+  canvasTex(64, 4, (g) => {
+    g.fillStyle = C(a);
+    g.fillRect(0, 0, 32, 4);
+    g.fillStyle = C(b);
+    g.fillRect(32, 0, 32, 4);
+  });
+
+/**
+ * The barriers that line both edges: solid 3D shapes whose inner face sits exactly where the physics
+ * wall is, so what you see is what you hit. One style per theme.
+ */
+function barriers(group: THREE.Group, p: TrackPath, look: ThemeLook, o: TrackOptions, keep: Keep, M: Mat) {
+  const def = p.def, H = Math.max(0.9, def.wall || 1);
+  const add = (g: THREE.BufferGeometry, m: THREE.Material, shadow = true) => {
+    keep(g);
+    const x = new THREE.Mesh(g, m);
+    x.castShadow = o.shadows && shadow;
+    x.receiveShadow = o.shadows;
+    group.add(x);
+  };
+  const both = (profile: [number, number][], m: THREE.Material, u = 4, jitter = 0, shadow = true) => {
+    for (const side of [1, -1] as const) add(sweep(p, side, profile, u, jitter), m, shadow);
+  };
+  const glow = (c: number) => keep(new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide }));
+  const doubled = { side: THREE.DoubleSide } as const;
+  switch (look.wall) {
+    case 'barrier': {
+      // Concrete blocks with a painted band.
+      both([[0, 0], [0, 0.3], [0.18, 0.78], [0.18, H], [0.6, H], [0.6, 0]], M({ color: 0xdedbd3, roughness: 0.85, ...doubled }));
+      const band = keep(stripeTex(look.accent, 0xf4f4ef));
+      both([[-0.015, 0.42], [-0.015, 0.62], [0, 0.62], [0, 0.42]], M({ map: band, roughness: 0.7, ...doubled }), 4, 0, false);
+      break;
+    }
+    case 'neon': {
+      both([[0, 0], [0, H], [0.6, H], [0.6, 0]], M({ color: 0x16171f, roughness: 0.5, metalness: 0.4, ...doubled }));
+      const g = glow(look.accent);
+      both([[-0.025, H * 0.76], [-0.025, H * 0.9], [0, H * 0.9], [0, H * 0.76]], g, 4, 0, false);
+      both([[0, H], [0, H + 0.04], [0.6, H + 0.04], [0.6, H]], g, 4, 0, false);
+      break;
+    }
+    case 'hedge': {
+      const tex = keep(wallTexture('hedge', look.accent));
+      both([[0, 0], [0, H * 0.5], [0.1, H * 0.85], [0.3, H * 1.12], [0.5, H * 0.85], [0.6, H * 0.5], [0.6, 0]], M({ map: tex, roughness: 0.95, ...doubled }), 3, 0.12);
+      break;
+    }
+    case 'snow': {
+      both([[0, 0], [0, H * 0.4], [0.2, H * 0.82], [0.5, H * 0.98], [0.95, H * 0.72], [1.4, H * 0.36], [1.7, 0]], M({ color: 0xf4f8fc, roughness: 0.6, ...doubled }), 4, 0.1);
+      // Red marker poles.
+      const poles: Spot[] = [];
+      for (let i = 0; i < p.n; i += 4) for (const side of [1, -1]) {
+        const off = side * (p.w[i] + def.shoulder + 0.8);
+        poles.push({ x: p.px[i] + p.lx[i] * off, y: p.py[i] + p.ly[i] * off + 0.9, z: p.pz[i] + p.lz[i] * off, yaw: 0 });
+      }
+      place(group, o, keep, new THREE.CylinderGeometry(0.05, 0.05, 1.8, 6), M({ color: 0xd7192f, roughness: 0.6 }), poles, false);
+      break;
+    }
+    case 'rock': {
+      const tex = keep(wallTexture('rock', look.accent));
+      both([[0, 0], [0, H], [0.4, H * 1.7], [1.4, H * 2.9], [3.6, H * 3.6], [5.5, H * 3.1], [5.5, 0]], M({ map: tex, roughness: 0.97, flatShading: true, ...doubled }), 5, 0.7);
+      break;
+    }
+    case 'rail': {
+      const steel = M({ color: 0xc9ced6, roughness: 0.4, metalness: 0.7, ...doubled });
+      both([[0, 0], [0, 0.34], [0.32, 0.34], [0.32, 0]], M({ color: 0x9aa0aa, roughness: 0.85, ...doubled }));
+      both([[-0.03, 0.46], [-0.03, 0.72], [0.1, 0.72], [0.1, 0.46]], steel, 4, 0, false);
+      both([[-0.03, 0.76], [-0.03, 0.98], [0.1, 0.98], [0.1, 0.76]], steel, 4, 0, false);
+      const posts: Spot[] = [];
+      for (let i = 0; i < p.n; i += 2) for (const side of [1, -1]) {
+        const off = side * (p.w[i] + def.shoulder + 0.18);
+        posts.push({ x: p.px[i] + p.lx[i] * off, y: p.py[i] + p.ly[i] * off + 0.5, z: p.pz[i] + p.lz[i] * off, yaw: Math.atan2(p.tx[i], p.tz[i]) });
+      }
+      place(group, o, keep, new THREE.BoxGeometry(0.12, 1.0, 0.12), M({ color: 0x80868f, roughness: 0.6, metalness: 0.5 }), posts, false);
+      break;
+    }
+    case 'tyres': {
+      // Stacks of tyres, two abreast, three or four high, with red and white ones mixed in.
+      const layers = Math.ceil(H / 0.34);
+      const list: Spot[] = [];
+      const dark = [0x1f2126, 0x2a2d34, 0x24262c];
+      for (let i = 0; i < p.n; i++) for (const side of [1, -1]) for (const along of [-0.5, 0.5]) {
+        const off = side * (p.w[i] + def.shoulder + 0.45);
+        const bx = p.px[i] + p.lx[i] * off + p.tx[i] * along, bz = p.pz[i] + p.lz[i] * off + p.tz[i] * along;
+        const by = p.py[i] + p.ly[i] * off;
+        for (let l = 0; l < layers; l++) {
+          const r = hash2(i * 2 + side + along, l);
+          list.push({ x: bx, y: by + 0.17 + l * 0.34, z: bz, yaw: 0, color: r > 0.93 ? 0xd7192f : r > 0.88 ? 0xf2f2ee : dark[(i + l) % 3] });
+        }
+      }
+      place(group, o, keep, new THREE.CylinderGeometry(0.47, 0.47, 0.32, 14), M({ color: 0xffffff, roughness: 0.9 }), list, false);
+      break;
+    }
+  }
+}
+
+/** Everything beside the track that isn't a barrier: lamps, billboards, a grandstand, verge props. */
+function roadside(group: THREE.Group, p: TrackPath, look: ThemeLook, o: TrackOptions, keep: Keep, M: Mat) {
+  const def = p.def, sh = def.shoulder;
+  const out = (i: number, side: number, d: number) => {
+    const off = side * (p.w[i] + sh + d);
+    return { x: p.px[i] + p.lx[i] * off, y: p.py[i] + p.ly[i] * off, z: p.pz[i] + p.lz[i] * off };
+  };
+  const yawOf = (i: number) => Math.atan2(p.tx[i], p.tz[i]);
+  // Not beside a stretch of road that passes close by, above or below.
+  const open = (i: number, side: number, d: number, clear: number) => {
+    const q = out(i, side, d);
+    for (let j = 0; j < p.n; j += 3) {
+      const gap = Math.min(Math.abs(j - i), p.n - Math.abs(j - i));
+      if (gap < 20) continue;
+      if (Math.abs(p.py[j] - q.y) < 7 && Math.hypot(p.px[j] - q.x, p.pz[j] - q.z) < p.w[j] + sh + clear) return false;
+    }
+    return !p.tunnel[i];
+  };
+
+  // Street lamps, alternating sides.
+  const poles: Spot[] = [], heads: Spot[] = [], bulbs: Spot[] = [];
+  for (let i = 9, k = 0; i < p.n; i += 17, k++) {
+    const side = k % 2 ? 1 : -1;
+    if (!open(i, side, 1.8, 3)) continue;
+    const q = out(i, side, 1.8);
+    poles.push({ ...q, y: q.y + 3.6, yaw: 0 });
+    const hx = q.x - p.lx[i] * side * 0.9, hz = q.z - p.lz[i] * side * 0.9;
+    heads.push({ x: (q.x + hx) / 2, y: q.y + 7.1, z: (q.z + hz) / 2, yaw: Math.atan2(-p.lx[i] * side, -p.lz[i] * side) });
+    bulbs.push({ x: hx, y: q.y + 7.0, z: hz, yaw: yawOf(i) });
+  }
+  place(group, o, keep, new THREE.CylinderGeometry(0.07, 0.12, 7.2, 6), M({ color: 0x4a4e57, roughness: 0.5, metalness: 0.6 }), poles);
+  place(group, o, keep, new THREE.BoxGeometry(0.1, 0.1, 0.95), M({ color: 0x4a4e57, roughness: 0.5, metalness: 0.6 }), heads, false);
+  place(group, o, keep, new THREE.BoxGeometry(0.6, 0.12, 0.34), keep(new THREE.MeshBasicMaterial({ color: look.night ? look.accent : 0xfff1c9 })), bulbs, false);
+
+  // Billboards on the straights.
+  const banners = ['VELOCITY', 'CHROMASHIFT', 'DRIFT', 'BOOST'].map((text, k) =>
+    keep(
+      canvasTex(512, 160, (g) => {
+        const grad = g.createLinearGradient(0, 0, 512, 160);
+        grad.addColorStop(0, C([look.accent, 0x1f5fe0, 0xff3f8e, 0x19d3be][k]));
+        grad.addColorStop(1, C([0x15161b, 0x15161b, 0x2a1030, 0x0c2a30][k]));
+        g.fillStyle = grad;
+        g.fillRect(0, 0, 512, 160);
+        g.fillStyle = 'rgba(255,255,255,0.14)';
+        for (let x = -160; x < 512; x += 64) {
+          g.beginPath();
+          g.moveTo(x, 160);
+          g.lineTo(x + 40, 160);
+          g.lineTo(x + 120, 0);
+          g.lineTo(x + 80, 0);
+          g.fill();
+        }
+        g.fillStyle = '#ffffff';
+        g.font = '900 italic 76px system-ui, sans-serif';
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillText(text, 256, 86);
+      }),
+    ),
+  );
+  const boards: Spot[][] = [[], [], [], []];
+  const bpost: Spot[] = [];
+  for (let i = 40, k = 0; i < p.n; i += 70, k++) {
+    const side = k % 2 ? 1 : -1;
+    if (Math.abs(p.curv[i]) > 1 / 220 || !open(i, side, 4.5, 8)) continue;
+    const q = out(i, side, 4.5);
+    const yaw = Math.atan2(-p.lx[i] * side, -p.lz[i] * side);
+    boards[k % 4].push({ ...q, y: q.y + 4.3, yaw });
+    for (const a of [-3.4, 3.4]) bpost.push({ x: q.x + p.tx[i] * a, y: q.y + 2.1, z: q.z + p.tz[i] * a, yaw: 0 });
+  }
+  boards.forEach((list, k) => place(group, o, keep, new THREE.PlaneGeometry(9, 2.8), M({ map: banners[k], roughness: 0.6, emissive: new THREE.Color(0xffffff), emissiveIntensity: look.night ? 0.5 : 0.12, emissiveMap: banners[k], side: THREE.DoubleSide }), list, false));
+  place(group, o, keep, new THREE.BoxGeometry(0.2, 4.2, 0.2), M({ color: 0x3a3d45, roughness: 0.6, metalness: 0.5 }), bpost);
+
+  // Grandstands at the start.
+  const crowd = keep(
+    canvasTex(256, 32, (g) => {
+      const r = rnd(11);
+      g.fillStyle = '#2b2e36';
+      g.fillRect(0, 0, 256, 32);
+      const cols = ['#ff3f8e', '#19d3be', '#ffc21a', '#2f6dff', '#f2f2ee', '#8b5cff', '#ff7a1a'];
+      for (let x = 2; x < 256; x += 6) for (let y = 4; y < 32; y += 9) {
+        g.fillStyle = cols[Math.floor(r() * cols.length)];
+        g.beginPath();
+        g.arc(x + r() * 2, y + r() * 2, 2.4, 0, Math.PI * 2);
+        g.fill();
+      }
+    }),
+  );
+  crowd.repeat.set(8, 1);
+  const stand = M({ map: crowd, roughness: 0.9 });
+  const concrete = M({ color: 0x8e9199, roughness: 0.9 });
+  for (const side of [1, -1]) {
+    if (!open(0, side, 8, 6)) continue;
+    const len = side === 1 ? 46 : 30;
+    for (let t = 0; t < 3; t++) {
+      const q = out(0, side, 7 + t * 2.4);
+      const m = new THREE.Mesh(keep(new THREE.BoxGeometry(2.4, 1.0, len)), t === 0 ? concrete : stand);
+      m.position.set(q.x, q.y + 0.5 + t * 1.1, q.z);
+      m.rotation.y = yawOf(0);
+      m.castShadow = o.shadows;
+      m.receiveShadow = o.shadows;
+      group.add(m);
+    }
+    const q = out(0, side, 7 + 2.4);
+    const roof = new THREE.Mesh(keep(new THREE.BoxGeometry(8.5, 0.25, len + 2)), M({ color: look.accent, roughness: 0.5, metalness: 0.2 }));
+    roof.position.set(q.x, q.y + 5.2, q.z);
+    roof.rotation.y = yawOf(0);
+    roof.castShadow = o.shadows;
+    group.add(roof);
+    const legs: Spot[] = [];
+    for (const a of [-len / 2 + 1, 0, len / 2 - 1]) for (const d of [4.4, 9.6]) {
+      const lq = out(0, side, d);
+      legs.push({ x: lq.x + p.tx[0] * a, y: lq.y + 2.6, z: lq.z + p.tz[0] * a, yaw: 0 });
+    }
+    place(group, o, keep, new THREE.BoxGeometry(0.3, 5.2, 0.3), M({ color: 0x3a3d45, roughness: 0.6, metalness: 0.5 }), legs, false);
+  }
+
+  // Cones, crates and tyre stacks left on the verge (scenery only).
+  const cones: Spot[] = [], crates: Spot[] = [], tyres: Spot[] = [];
+  for (const ob of p.obstacles) {
+    const x = p.px[ob.i] + p.lx[ob.i] * ob.off, y = p.py[ob.i] + p.ly[ob.i] * ob.off, z = p.pz[ob.i] + p.lz[ob.i] * ob.off;
+    const yaw = yawOf(ob.i);
+    if (ob.kind === 'cone') for (let k = 0; k < 3; k++) cones.push({ x: x + p.tx[ob.i] * (k - 1) * 1.6, y: y + 0.35, z: z + p.tz[ob.i] * (k - 1) * 1.6, yaw });
+    else if (ob.kind === 'crate') {
+      crates.push({ x, y: y + 0.55, z, yaw });
+      crates.push({ x: x + p.tx[ob.i] * 1.3, y: y + 0.55, z: z + p.tz[ob.i] * 1.3, yaw: yaw + 0.3 });
+      crates.push({ x: x + p.tx[ob.i] * 0.6, y: y + 1.65, z: z + p.tz[ob.i] * 0.6, yaw: yaw + 0.15 });
+    } else for (let l = 0; l < 3; l++) tyres.push({ x, y: y + 0.2 + l * 0.38, z, yaw, color: l === 1 ? 0xd7192f : 0x24262c });
+  }
+  place(group, o, keep, new THREE.ConeGeometry(0.28, 0.7, 10), M({ color: 0xff7a1a, roughness: 0.6 }), cones, false);
+  place(group, o, keep, new THREE.BoxGeometry(1.1, 1.1, 1.1), M({ color: 0xb8864f, roughness: 0.85 }), crates);
+  place(group, o, keep, new THREE.CylinderGeometry(0.55, 0.55, 0.36, 16), M({ color: 0xffffff, roughness: 0.9 }), tyres, false);
+}

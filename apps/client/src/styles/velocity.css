@@ -6,11 +6,12 @@
 /* ---------- Mode switch on Play ---------- */
 .mode-switch {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin: 0 0 18px;
 }
 .mode-switch__b {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -46,6 +47,22 @@
   display: block;
   font-size: 0.78rem;
   opacity: 0.8;
+  overflow-wrap: anywhere;
+}
+.mode-switch__b > span {
+  min-width: 0;
+}
+@media (max-width: 460px) {
+  .mode-switch__b {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 12px;
+  }
+  .mode-switch__title {
+    font-size: 1rem;
+    letter-spacing: 0.02em;
+  }
 }
 
 /* ---------- Race setup ---------- */
@@ -725,6 +742,33 @@
   font-weight: 900;
   font-style: italic;
   color: var(--gold);
+}
+
+.race-results section:has(table) {
+  overflow-x: auto;
+}
+@media (max-width: 560px) {
+  /* Car and overtakes drop out so the table fits a phone. */
+  .race-results th:nth-child(3),
+  .race-results td:nth-child(3),
+  .race-results th:nth-child(6),
+  .race-results td:nth-child(6) {
+    display: none;
+  }
+  .race-results table {
+    font-size: 0.82rem;
+  }
+  .race-results th,
+  .race-results td {
+    padding: 6px 4px;
+  }
+}
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
 }
 
 /* ---------- Garage ---------- */

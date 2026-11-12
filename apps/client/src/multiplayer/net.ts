@@ -19,7 +19,7 @@ import {
 import { env } from '../env';
 import { publicName, useProfile } from '../state/profile';
 import { useChat } from '../state/chat';
-import { useUi } from '../state/ui';
+import { afterLobby, useUi } from '../state/ui';
 import type { PeerHello } from './p2p';
 import { voice } from './voice';
 import { activeCar } from '../velocity/racing';
@@ -395,7 +395,7 @@ function bind(room: NetRoom, kind: RoomKind, endpoint?: string) {
     else if (code === 4101) toast({ text: 'Lost the connection to the host.', kind: 'warn' });
     else if (code > 1000 && code !== 4000) toast({ text: 'Disconnected from the server.', kind: 'warn' });
     if (wasMatch) netHooks.onLeftMatch?.();
-    else if (['lobby'].includes(useUi.getState().screen)) useUi.getState().go('online');
+    else if (['lobby'].includes(useUi.getState().screen)) useUi.getState().go(afterLobby());
   });
   room.onError((_code: number, message?: string) =>
     useUi.getState().toast({ text: friendly(message), kind: 'error' }),

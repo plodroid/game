@@ -490,6 +490,7 @@ export class RoomHost {
         return this.pushLobby();
       }
       case MSG.SETTINGS: {
+        if (this.isHost(id) && this.phaseNow === 'results') this.toLobby();
         if (!this.isHost(id) || this.phaseNow !== 'lobby') return;
         const next = sanitizeSettings(d as Partial<LobbySettings>, this.settings);
         // A race holds six: switching a fuller room to VELOCITY waits until it's six or fewer.
@@ -505,6 +506,7 @@ export class RoomHost {
         [...this.members.values()].forEach((x, i) => (x.team = (i % 2) as Team));
         return this.pushLobby();
       case MSG.START:
+        if (this.isHost(id) && this.phaseNow === 'results') this.toLobby();
         if (this.isHost(id)) this.startMatch();
         return;
       case MSG.TO_LOBBY:

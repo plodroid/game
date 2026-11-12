@@ -81,6 +81,15 @@ export const useUi = create<UiStore>()((set, get) => ({
   setResults: (results) => set({ results }),
 }));
 
+/**
+ * Where to land after leaving a lobby: the screen that opened it. Hosting from Play and then going to
+ * Online would leave the lobby in the history, and Back would bounce between the two forever.
+ */
+export const afterLobby = (): Screen => {
+  const h = useUi.getState().history;
+  return h[h.length - 1] === 'play' ? 'play' : 'online';
+};
+
 if (typeof window !== 'undefined') {
   addEventListener('online', () => useUi.setState({ online: true }));
   addEventListener('offline', () => useUi.setState({ online: false }));

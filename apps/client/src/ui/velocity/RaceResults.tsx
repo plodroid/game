@@ -1,4 +1,5 @@
-import { BODIES, coinsEarned, levelInfo, RACE_IDENTITIES, trackDef } from '@chromashift/shared';
+import { BODIES, coinsEarned, levelInfo, MSG, RACE_IDENTITIES, trackDef } from '@chromashift/shared';
+import { send, useNet } from '../../multiplayer/net';
 import { useUi } from '../../state/ui';
 import { raceControl, useRaceResults } from '../../velocity/state';
 import { Icon } from '../icons';
@@ -15,6 +16,7 @@ const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 export default function RaceResults() {
   const data = useRaceResults((s) => s.data);
   const go = useUi((s) => s.go);
+  const hosting = useNet((n) => !!n.lobby && n.lobby.hostId === n.you);
   if (!data) {
     return (
       <main className="screen">
@@ -125,7 +127,11 @@ export default function RaceResults() {
           <Button size="lg" onClick={() => go('garage')}>
             <Icon.car size={16} /> Garage
           </Button>
-          <Button size="lg" onClick={() => go(online ? 'lobby' : 'play')}>
+          <Button size="lg" onClick={() => {
+              // The room waits in its results phase until the host sends everyone back; until then the lobby is frozen.
+              if (online && hosting) send(MSG.TO_LOBBY);
+              go(online ? 'lobby' : 'play');
+            }}>
             {online ? 'Back to lobby' : 'Done'}
           </Button>
         </div>

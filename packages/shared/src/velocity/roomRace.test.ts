@@ -72,6 +72,12 @@ describe('VELOCITY rooms', () => {
     expect(end.result.players.some((p) => 'uid' in p)).toBe(false);
     expect(end.xp[start.you]).toBeGreaterThan(0);
     expect(room.phase).toBe('results');
+    // Back in the lobby the host can still pick another track and start, even if nobody pressed "back to lobby".
+    room.message('h', MSG.SETTINGS, { race: { track: 'coastal', laps: 1, preset: 'classic', damage: 'off', bots: 1, difficulty: 'easy' } });
+    expect(room.phase).toBe('lobby');
+    expect(host.last<LobbyState>(MSG.LOBBY)!.settings.race?.track).toBe('coastal');
+    room.message('h', MSG.START, {});
+    expect(room.phase).toBe('match');
     room.dispose();
   }, 120_000);
 

@@ -23,7 +23,7 @@ import { HOST_CODE_KEY, leaveRoom, send, useNet } from '../../multiplayer/net';
 import { voice, useVoice } from '../../multiplayer/voice';
 import { teamNames } from '../../rendering/palette';
 import { useProfile } from '../../state/profile';
-import { useUi } from '../../state/ui';
+import { afterLobby, useUi } from '../../state/ui';
 import { Avatar } from '../Avatar';
 import { InviteFriends } from '../InviteFriends';
 import { Icon, TeamShape } from '../icons';
@@ -87,13 +87,13 @@ export default function Lobby() {
   const signedIn = useAccount((a) => a.status === 'signedIn');
 
   useEffect(() => {
-    if (!net.room && net.status !== 'connecting') go('online');
+    if (!net.room && net.status !== 'connecting') go(afterLobby());
   }, [net.room, net.status, go]);
 
   if (!lobby)
     return (
       <main className="screen" data-pig="teal">
-        <Header title="Lobby" onBack={() => (leaveRoom(), go('online'))} />
+        <Header title="Lobby" onBack={() => (leaveRoom(), go(afterLobby()))} />
         <div className="loading">
           <div className="spinner" />
           Joining…
@@ -119,7 +119,7 @@ export default function Lobby() {
   const server = kind === 'server' && !net.sameOrigin ? `&server=${encodeURIComponent(net.endpoint)}` : '';
   const invite = `${location.origin}${location.pathname}?join=${lobby.code}${server}`;
   const permanent = kind === 'host' && savedHostCode() === lobby.code;
-  const close = () => (leaveRoom(), go('online'));
+  const close = () => (leaveRoom(), go(afterLobby()));
 
   const slot = (p: LobbyPlayer | undefined, i: number, team: number) =>
     p ? (

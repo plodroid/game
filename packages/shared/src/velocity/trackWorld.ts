@@ -11,7 +11,7 @@ export const QUERY_TRACK = groups(0xffff, G_TRACK);
 
 /**
  * The static physics of a track: the road and its verges as one triangle mesh, walls along both
- * edges, the ground, and obstacles on the verges. Built the same way on every device.
+ * edges and the ground. Built the same way on every device.
  */
 export function buildTrackColliders(world: RAPIER.World, p: TrackPath) {
   const { n, def } = p;
@@ -71,17 +71,5 @@ export function buildTrackColliders(world: RAPIER.World, p: TrackPath) {
       .setCollisionGroups(groups(G_TRACK, 0xffff))
       .setFriction(0.8),
   );
-  for (const o of p.obstacles) {
-    const i = o.i;
-    const x = p.px[i] + p.lx[i] * o.off, y = p.py[i] + p.ly[i] * o.off, z = p.pz[i] + p.lz[i] * o.off;
-    const half = o.kind === 'cone' ? 0.35 : o.kind === 'crate' ? 0.7 : 0.8;
-    const yaw = Math.atan2(p.tx[i], p.tz[i]);
-    world.createCollider(
-      RAPIER.ColliderDesc.cuboid(half, half, half)
-        .setTranslation(x, y + half, z)
-        .setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) })
-        .setCollisionGroups(groups(G_TRACK, 0xffff))
-        .setRestitution(0.3),
-    );
-  }
+  // Verge props (cones, crates, tyres) are scenery only: solid ones turned out to be invisible hazards.
 }
