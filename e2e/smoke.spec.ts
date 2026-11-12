@@ -19,6 +19,11 @@ test('loads under /game/ with every asset resolving', async ({ page }) => {
 
 test('plays an offline match against seven bots', async ({ page }) => {
   await page.goto('./');
+  // CI renders in software, where the game recommends Very Low (the default preset bakes
+  // volumetric clouds, which takes minutes without a GPU).
+  await page.locator('.menu__label', { hasText: 'Settings' }).click();
+  await page.getByRole('button', { name: 'Very Low', exact: true }).click();
+  await page.goto('./');
   await page.locator('.menu__label', { hasText: 'Play' }).click();
   await page.getByRole('button', { name: /Practice Against Bots/ }).click();
   const timer = page.locator('.timer');
