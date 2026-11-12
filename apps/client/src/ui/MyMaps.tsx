@@ -8,6 +8,7 @@ import { deletePreset, deletePublic, MAX_PRESETS, parseSharedMap, savePreset, sa
 import { useUi } from '../state/ui';
 import { Icon } from './icons';
 import { MapEditor } from './MapEditor';
+import { TrackEditor } from './velocity/TrackEditor';
 
 /**
  * Maps. Everyone can build maps and keep up to three presets; the owner can also publish maps for
@@ -20,6 +21,9 @@ export function MyMaps({ onClose }: { onClose: () => void }) {
   const toast = useUi((s) => s.toast);
   const [editing, setEditing] = useState<CustomMap | null>(null);
   const [importing, setImporting] = useState(false);
+  /** New: a CHROMASHIFT map or a VELOCITY track. */
+  const [choosing, setChoosing] = useState(false);
+  const [track, setTrack] = useState(false);
   const [text, setText] = useState('');
 
   const play = (m: CustomMap) => {
@@ -99,13 +103,43 @@ export function MyMaps({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <div className="row admin-tools__row">
-          <button className="btn btn--primary" onClick={() => setEditing(blankMap())}>
+          <button className="btn btn--primary" onClick={() => setChoosing(true)}>
             <Icon.plus size={14} /> New map
           </button>
           <button className="btn" onClick={() => setImporting(!importing)}>
             Import
           </button>
         </div>
+        {choosing && (
+          <div className="mode-switch" style={{ margin: '8px 0' }} role="group" aria-label="What to build">
+            <button
+              className="mode-switch__b"
+              onClick={() => {
+                setChoosing(false);
+                setEditing(blankMap());
+              }}
+            >
+              <Icon.gun size={26} />
+              <span>
+                <span className="mode-switch__title">Standard map</span>
+                <span className="mode-switch__sub">A CHROMASHIFT arena</span>
+              </span>
+            </button>
+            <button
+              className="mode-switch__b"
+              onClick={() => {
+                setChoosing(false);
+                setTrack(true);
+              }}
+            >
+              <Icon.car size={26} />
+              <span>
+                <span className="mode-switch__title">Racing track</span>
+                <span className="mode-switch__sub">A VELOCITY circuit</span>
+              </span>
+            </button>
+          </div>
+        )}
         {importing && (
           <div style={{ margin: '8px 0' }}>
             <textarea className="input" rows={3} placeholder="Paste a map here" value={text} onChange={(e) => setText(e.target.value)} style={{ width: '100%' }} />
@@ -132,6 +166,15 @@ export function MyMaps({ onClose }: { onClose: () => void }) {
           Presets follow your account when you’re signed in. When a friend joins a match on a map, it is sent to them automatically.
         </p>
       </div>
+      {track && (
+        <TrackEditor
+          onClose={() => setTrack(false)}
+          onPlay={(id) => {
+            onClose();
+            void import('../velocity/session').then((m) => m.startRace({ track: id, laps: 1, preset: 'classic', damage: 'visual', bots: 0, difficulty: 'normal' }));
+          }}
+        />
+      )}
       {editing &&
         createPortal(
           <MapEditor

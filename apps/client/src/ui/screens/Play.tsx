@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import {
   BOT_DIFFICULTIES,
   DURATION_OPTIONS,
@@ -19,6 +19,47 @@ import { Icon } from '../icons';
 import { MyMaps } from '../MyMaps';
 import { useMaps } from '../../state/maps';
 import { Button, Header, LengthDial, Segmented, Setting } from '../kit';
+/** VELOCITY's setup screen loads with the racing code, only when the car icon is picked. */
+const VelocityPlay = lazy(() => import('../velocity/VelocityPlay').then((m) => ({ default: m.VelocityPlay })));
+
+/** Which game Play shows: the paint shooter (default) or VELOCITY. Remembered on this device. */
+const MODE_KEY = 'chromashift.playMode';
+function readMode(): 'shooter' | 'velocity' {
+  try {
+    return localStorage.getItem(MODE_KEY) === 'velocity' ? 'velocity' : 'shooter';
+  } catch {
+    return 'shooter';
+  }
+}
+
+export function ModeSwitch({ mode, onChange }: { mode: 'shooter' | 'velocity'; onChange: (m: 'shooter' | 'velocity') => void }) {
+  const pick = (m: 'shooter' | 'velocity') => {
+    onChange(m);
+    try {
+      localStorage.setItem(MODE_KEY, m);
+    } catch {
+      /* not remembered */
+    }
+  };
+  return (
+    <div className="mode-switch" role="group" aria-label="Game">
+      <button className="mode-switch__b" aria-pressed={mode === 'shooter'} onClick={() => pick('shooter')}>
+        <Icon.gun size={30} />
+        <span>
+          <span className="mode-switch__title">CHROMASHIFT</span>
+          <span className="mode-switch__sub">Paint the arena, 4 v 4</span>
+        </span>
+      </button>
+      <button className="mode-switch__b" aria-pressed={mode === 'velocity'} onClick={() => pick('velocity')} style={{ ['--pig' as string]: 'var(--gold)' }}>
+        <Icon.car size={30} />
+        <span>
+          <span className="mode-switch__title">VELOCITY</span>
+          <span className="mode-switch__sub">Race up to six cars</span>
+        </span>
+      </button>
+    </div>
+  );
+}
 
 export const DIFF_LABEL: Record<BotDifficulty, string> = { easy: 'Easy', normal: 'Normal', hard: 'Hard', expert: 'Expert' };
 export const onlineIntent: { mode: 'join' | null } = { mode: null };
@@ -28,6 +69,7 @@ export function Play() {
   const [code] = useState(ownHostCode);
   const [maps, setMaps] = useState(false);
   const signedIn = useAccount((a) => a.status === 'signedIn');
+  const [mode, setMode] = useState(readMode);
   const items = [
     {
       title: 'Tutorial',
@@ -62,7 +104,16 @@ export function Play() {
   ];
   return (
     <main className="screen" data-pig="magenta">
-      <Header title="Play" sub="Every mode supports bots, so a full match never needs eight people." />
+      <Header title="Play" sub={mode === 'velocity' ? 'VELOCITY: race against bots or friends, up to six cars.' : 'Every mode supports bots, so a full match never needs eight people.'} />
+      <div className="col--wide">
+        <ModeSwitch mode={mode} onChange={setMode} />
+      </div>
+      {mode === 'velocity' && (
+        <Suspense fallback={<div className="loading"><div className="spinner" />Loading VELOCITY…</div>}>
+          <VelocityPlay />
+        </Suspense>
+      )}
+      {mode === 'shooter' && (
       <div className="col options stagger">
         {items.map((it) => (
           <button key={it.title} className="option" onClick={it.run}>
@@ -78,8 +129,9 @@ export function Play() {
           </button>
         ))}
       </div>
+      )}
       {maps && <MyMaps onClose={() => setMaps(false)} />}
-      {code && (
+      {code && mode === 'shooter' && (
         <section className="col code-note" aria-label="Your game code">
           <span className="code-note__label">Your game code</span>
           <span className="code num">{code}</span>

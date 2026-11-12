@@ -18,11 +18,15 @@ import {
   WEAPONS,
   weekIndex,
   weeklyQuests,
+  raceQuestProgress,
+  FREE_CAR_ITEMS,
   type Cosmetics,
+  type RaceResult,
   type MatchResult,
   type SpecialId,
   type WeaponId,
 } from '@chromashift/shared';
+import { applyRace, emptyRacing, sanitizeRacing, type Racing } from '../velocity/racing';
 
 export interface Stats {
   games: number;
@@ -54,6 +58,8 @@ export interface Profile {
   /** Locker items starred as favourites (same keys as `owned`). */
   favs: string[];
   quests: QuestState;
+  /** VELOCITY: car builds, racing stats and records (versioned, kept apart from the shooter's). */
+  racing: Racing;
   /** Local changes not yet synced to the cloud. */
   dirty: boolean;
   updatedAt: number;
@@ -108,6 +114,7 @@ export const newProfile = (): Profile => ({
   owned: [],
   favs: [],
   quests: freshQuests(),
+  racing: emptyRacing(),
   dirty: false,
   updatedAt: Date.now(),
 });
@@ -117,6 +124,10 @@ interface ProfileStore extends Profile {
   patch(p: Partial<Profile>): void;
   /** Records a match: stats, XP, coins and quest progress. Returns what the results screen shows. */
   recordMatch(r: MatchResult, you: number, xp: number): { xpBefore: number; levelBefore: number; coins: number };
+  /** Records a VELOCITY race once (by race id): racing stats, records, XP, coins and quests. */
+  recordRace(r: RaceResult, you: number, xp: number, online: boolean, raceId: string): { xpBefore: number; levelBefore: number; coins: number; records: string[] };
+  /** Changes the racing data (builds, chosen build). */
+  setRacing(patch: Partial<Racing>): void;
   owns(key: string): boolean;
   /** Spends coins on an item. False if it's owned already or there aren't enough coins. */
   buy(key: string, price: number): boolean;
@@ -180,7 +191,22 @@ export const useProfile = create<ProfileStore>()(
         setState({ stats: st, xp: s.xp + xp, coins: s.coins + coins, quests: { ...quests, progress }, dirty: true, updatedAt: Date.now() });
         return { ...before, coins };
       },
-      owns: (key) => (WEAPONS[key.slice(7)]?.admin ? gate.owner : FREE.has(key) || ownedHas(getState().owned, key)),
+      recordRace: (r, you, xp, online, raceId) => {
+        const s = getState();
+        const before = { xpBefore: s.xp, levelBefore: levelInfo(s.xp).level, coins: 0, records: [] as string[] };
+        const { racing, records } = applyRace(s.racing, r, you, online, raceId);
+        if (racing === s.racing) return before;
+        const quests = rollQuests(s.quests);
+        const delta = raceQuestProgress(r, you);
+        const progress = { ...quests.progress };
+        for (const q of [...dailyQuests(quests.day), ...weeklyQuests(quests.week)])
+          if (delta[q.stat]) progress[q.id] = Math.min(q.goal, (progress[q.id] ?? 0) + (delta[q.stat] ?? 0));
+        const coins = coinsEarned(s.xp, s.xp + xp);
+        setState({ racing, xp: s.xp + xp, coins: s.coins + coins, quests: { ...quests, progress }, dirty: true, updatedAt: Date.now() });
+        return { ...before, coins, records };
+      },
+      setRacing: (patch) => setState({ racing: { ...getState().racing, ...patch }, dirty: true, updatedAt: Date.now() }),
+      owns: (key) => (WEAPONS[key.slice(7)]?.admin ? gate.owner : FREE.has(key) || FREE_CAR_ITEMS.has(key) || ownedHas(getState().owned, key)),
       buy: (key, price) => {
         const s = getState();
         const w = WEAPONS[key.slice(7)];
@@ -220,6 +246,8 @@ export const useProfile = create<ProfileStore>()(
           hydrated: _h,
           patch: _p,
           recordMatch: _r,
+          recordRace: _rr,
+          setRacing: _sr,
           replace: _x,
           reset: _z,
           owns: _o,
@@ -248,6 +276,7 @@ export const useProfile = create<ProfileStore>()(
                 .filter((k) => !FREE.has(k)),
           favs: Array.isArray(p.favs) ? p.favs.filter((k): k is string => typeof k === 'string') : [],
           quests: rollQuests({ ...freshQuests(), ...p.quests }),
+          racing: sanitizeRacing(p.racing),
           weapon: WEAPON_IDS.includes(p.weapon as WeaponId) ? (p.weapon as WeaponId) : current.weapon,
           special: SPECIAL_IDS.includes(p.special as SpecialId) ? (p.special as SpecialId) : current.special,
         };

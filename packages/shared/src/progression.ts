@@ -43,7 +43,9 @@ export function coinsEarned(xpBefore: number, xpAfter: number) {
 
 /* ---------- Quests ---------- */
 
-export type QuestStat = 'matches' | 'wins' | 'paint' | 'kills' | 'assists' | `kind:${WeaponKind}` | `mode:${ModeId}`;
+export type QuestStat =
+  | 'matches' | 'wins' | 'paint' | 'kills' | 'assists' | `kind:${WeaponKind}` | `mode:${ModeId}`
+  | 'races' | 'raceWins' | 'podiums' | 'overtakes' | 'driftTime';
 
 export interface Quest {
   id: string;
@@ -80,6 +82,19 @@ const WEEKLY: Quest[] = [
   { id: 'w-lobber', text: 'Play 8 matches with a lobber', stat: 'kind:lobber', goal: 8, reward: 650 },
 ];
 
+/** VELOCITY quests: one extra daily and weekly slot, so the shooter's three stay exactly as they were. */
+const RACE_DAILY: Quest[] = [
+  { id: 'd-race', text: 'Finish 2 VELOCITY races', stat: 'races', goal: 2, reward: 140 },
+  { id: 'd-podium', text: 'Finish a VELOCITY race in the top 3', stat: 'podiums', goal: 1, reward: 160 },
+  { id: 'd-overtake', text: 'Overtake 10 cars in VELOCITY', stat: 'overtakes', goal: 10, reward: 140 },
+  { id: 'd-drift', text: 'Drift for 30 seconds in VELOCITY', stat: 'driftTime', goal: 30, reward: 130 },
+];
+const RACE_WEEKLY: Quest[] = [
+  { id: 'w-race', text: 'Finish 12 VELOCITY races', stat: 'races', goal: 12, reward: 700 },
+  { id: 'w-racewin', text: 'Win 4 VELOCITY races', stat: 'raceWins', goal: 4, reward: 850 },
+  { id: 'w-podium', text: 'Get 8 VELOCITY podiums', stat: 'podiums', goal: 8, reward: 750 },
+];
+
 const DAY = 86_400_000;
 /** UTC day number; quests turn over at midnight UTC so everyone shares the same set. */
 export const dayIndex = (now = Date.now()) => Math.floor(now / DAY);
@@ -96,8 +111,22 @@ function pick(pool: Quest[], n: number, seed: number) {
   return [...pool].sort((a, b) => order(a) - order(b)).slice(0, n);
 }
 
-export const dailyQuests = (day = dayIndex()) => pick(DAILY, 3, day * 2 + 1);
-export const weeklyQuests = (week = weekIndex()) => pick(WEEKLY, 3, week * 2 + 2);
+export const dailyQuests = (day = dayIndex()) => [...pick(DAILY, 3, day * 2 + 1), ...pick(RACE_DAILY, 1, day * 2 + 1)];
+export const weeklyQuests = (week = weekIndex()) => [...pick(WEEKLY, 3, week * 2 + 2), ...pick(RACE_WEEKLY, 1, week * 2 + 2)];
+
+/** How much one VELOCITY race moves each quest stat. */
+export function raceQuestProgress(r: { players: { id: number; position: number; finished: boolean; stats: { overtakes: number; driftTime: number } }[] }, playerId: number): Partial<Record<QuestStat, number>> {
+  const p = r.players.find((x) => x.id === playerId);
+  if (!p) return {};
+  const field = r.players.length;
+  return {
+    races: p.finished ? 1 : 0,
+    raceWins: p.finished && p.position === 1 && field > 1 ? 1 : 0,
+    podiums: p.finished && p.position <= 3 && field > 1 ? 1 : 0,
+    overtakes: Math.min(20, p.stats.overtakes),
+    driftTime: Math.round(p.stats.driftTime),
+  };
+}
 
 /** How much one match moves each quest stat. */
 export function questProgress(result: MatchResult, playerId: number): Partial<Record<QuestStat, number>> {

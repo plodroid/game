@@ -10,6 +10,8 @@ import type { SimEvent } from '../sim/events';
 import { BTN_MASK, type Input, type PlayerInfo, type PlayerState } from '../sim/player';
 import type { MatchConfig, MatchResult, Phase } from '../sim/simulation';
 import { clamp, wrapAngle } from '../vec';
+import type { CarLoadout } from '../velocity/catalog';
+import type { RaceSettings } from '../velocity/config';
 
 /** Message type ids. Client → server and server → client share one namespace. */
 export const MSG = {
@@ -59,12 +61,19 @@ export function cleanChat(raw: unknown): string {
   return raw.replace(/[\u0000-\u001f\u007f\u200b-\u200f\u2028-\u202e]/g, '').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX);
 }
 
+/** Which game a room plays: the paint shooter, or VELOCITY racing. */
+export type GameKind = 'shooter' | 'velocity';
+
 export interface LobbySettings {
   map: MapId;
   mode: ModeId;
   duration: number;
   botFill: boolean;
   botDifficulty: BotDifficulty;
+  /** The game this room plays (shooter when missing, as before VELOCITY). */
+  game?: GameKind;
+  /** VELOCITY: track, laps, rules, bots. */
+  race?: RaceSettings;
 }
 
 export interface LobbyPlayer {
@@ -81,6 +90,8 @@ export interface LobbyPlayer {
   verified: boolean;
   /** The game's owner, shown in white. */
   admin?: boolean;
+  /** VELOCITY: the car they'll race. */
+  car?: CarLoadout;
 }
 
 export interface LobbyState {
@@ -104,6 +115,8 @@ export interface JoinOptions {
   special: SpecialId;
   cosmetics: Cosmetics;
   quick?: boolean;
+  /** VELOCITY: the car they'll race. */
+  car?: CarLoadout;
 }
 
 export interface MatchStart {

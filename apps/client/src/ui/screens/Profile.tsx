@@ -7,6 +7,7 @@ import { useUi } from '../../state/ui';
 import { Avatar } from '../Avatar';
 import { AccountPanel } from '../AccountPanel';
 import { Button, Field, Header } from '../kit';
+import { RaceStats } from '../velocity/RaceStats';
 
 const nameOf = (slot: Exclude<Slot, 'weapon'>, id: string) => itemsFor(slot).find((o) => o.id === id)?.name ?? id;
 
@@ -95,6 +96,8 @@ export default function Profile() {
             Favourite weapon: {fav ? WEAPONS[fav].name : '—'}. Offline results are tracked on your device{signedIn ? ' and synced to your account' : ''}.
           </p>
         </section>
+
+        <RaceStats />
 
         {signedIn && (
           <section className="panel">

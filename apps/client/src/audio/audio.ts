@@ -109,6 +109,15 @@ class AudioEngine {
     this.buses.ambient.gain.setTargetAtTime(a.ambient * 0.6, t, 0.05);
   }
 
+  /** A mixer bus (for VELOCITY's live engine sounds), once audio is unlocked. */
+  bus(name: Bus): GainNode | null {
+    return this.ctx ? this.buses[name] : null;
+  }
+  /** Shared white noise (two seconds, looped by callers). */
+  get noiseBuffer(): AudioBuffer | null {
+    return this.ctx ? this.noise : null;
+  }
+
   setListener(p: Vec3, yaw: number) {
     this.listener.x = p.x;
     this.listener.y = p.y;

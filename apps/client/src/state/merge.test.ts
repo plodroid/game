@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_COSMETICS } from '@chromashift/shared';
 import { mergeSynced, same, type Synced } from './merge';
+import { emptyRacing } from '../velocity/racing';
 
 const base: Synced = {
   displayName: 'Ink',
@@ -25,6 +26,7 @@ const base: Synced = {
   favs: [],
   quests: { day: 1, week: 1, progress: { 'd-play': 1 }, claimed: [] },
   settings: { audio: { master: 0.8 } as never },
+  racing: emptyRacing(),
 };
 
 describe('mergeSynced', () => {

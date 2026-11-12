@@ -6,6 +6,12 @@ export type Action =
   | 'forward' | 'back' | 'left' | 'right' | 'jump' | 'fire' | 'dive' | 'sprint' | 'slide' | 'dodge'
   | 'special' | 'emote' | 'scoreboard' | 'pause' | 'chat' | 'talk' | 'map' | 'view';
 
+/** VELOCITY's own actions, bound separately from the shooter's (changing one never changes the other). */
+export type RaceAction =
+  | 'accelerate' | 'brake' | 'reverse' | 'steerLeft' | 'steerRight' | 'handbrake' | 'boost' | 'item' | 'camera' | 'lookBack'
+  | 'reset' | 'horn' | 'pause';
+export const RACE_ACTIONS: RaceAction[] = ['accelerate', 'brake', 'reverse', 'steerLeft', 'steerRight', 'handbrake', 'boost', 'item', 'camera', 'lookBack', 'reset', 'horn', 'pause'];
+
 /** Voice chat: hold a key to talk, an always-open mic, or off. */
 export type VoiceMode = 'ptt' | 'open' | 'off';
 /** Who you hear in a match: everyone by distance, teammates anywhere plus rivals nearby, or everyone. */
@@ -65,6 +71,13 @@ export interface Settings {
     bindings: Record<Action, string[]>;
     /** Which controller button (standard layout index) does each action. */
     padBindings: Record<Action, number | null>;
+    /** VELOCITY: keys and controller buttons for driving. */
+    raceBindings: Record<RaceAction, string[]>;
+    racePadBindings: Record<RaceAction, number | null>;
+    /** VELOCITY camera: chase distance multiplier and preset. */
+    raceCamera: 'near' | 'far' | 'hood';
+    /** Steering sensitivity for keys and sticks. */
+    raceSteer: number;
     /** Which button names to show; auto picks from the connected controller (PlayStation if unsure). */
     padStyle: 'auto' | 'playstation' | 'xbox';
     /** On-screen buttons: size, see-through and buzz. */
@@ -177,6 +190,39 @@ export const DEFAULT_PAD: Record<Action, number | null> = {
   view: 11,
 };
 
+export const DEFAULT_RACE_BINDINGS: Record<RaceAction, string[]> = {
+  accelerate: ['KeyW', 'ArrowUp'],
+  brake: ['KeyS', 'ArrowDown'],
+  reverse: ['KeyX'],
+  steerLeft: ['KeyA', 'ArrowLeft'],
+  steerRight: ['KeyD', 'ArrowRight'],
+  handbrake: ['Space'],
+  boost: ['ShiftLeft'],
+  item: ['KeyE'],
+  camera: ['KeyC'],
+  lookBack: ['KeyQ'],
+  reset: ['KeyR'],
+  horn: ['KeyH'],
+  pause: ['Escape'],
+};
+
+/** Racing on a controller: triggers drive, the left stick steers (fixed), buttons do the rest. */
+export const DEFAULT_RACE_PAD: Record<RaceAction, number | null> = {
+  accelerate: 7,
+  brake: 6,
+  reverse: 4,
+  steerLeft: 14,
+  steerRight: 15,
+  handbrake: 0,
+  boost: 2,
+  item: 5,
+  camera: 3,
+  lookBack: 11,
+  reset: 8,
+  horn: 10,
+  pause: 9,
+};
+
 export const DEFAULT_SETTINGS: Settings = {
   graphics: { preset: 'medium', ...PRESETS.medium, fpsCap: 60, showFps: false, adaptiveHints: true },
   audio: {
@@ -201,6 +247,10 @@ export const DEFAULT_SETTINGS: Settings = {
     touchControls: 'auto',
     bindings: DEFAULT_BINDINGS,
     padBindings: DEFAULT_PAD,
+    raceBindings: DEFAULT_RACE_BINDINGS,
+    racePadBindings: DEFAULT_RACE_PAD,
+    raceCamera: 'near',
+    raceSteer: 1,
     padStyle: 'auto',
     touchScale: 1,
     touchOpacity: 0.7,
@@ -234,6 +284,9 @@ interface SettingsStore extends Settings {
   bind(action: Action, slot: number, code: string): void;
   /** Puts a controller button on an action (null clears it); a button belongs to one action. */
   bindPad(action: Action, button: number | null): void;
+  /** VELOCITY bindings (their own set: a key can be on a shooter action and a racing action at once). */
+  bindRace(action: RaceAction, slot: number, code: string): void;
+  bindRacePad(action: RaceAction, button: number | null): void;
   reset(section?: keyof Settings): void;
   /** Overwrites from a cloud profile. */
   load(s: Partial<Settings>): void;
@@ -258,6 +311,8 @@ const merge = (s: Partial<Settings>): Settings => ({
     ...s.controls,
     bindings: migrateBindings(s.controls?.bindings),
     padBindings: { ...DEFAULT_PAD, ...s.controls?.padBindings },
+    raceBindings: { ...DEFAULT_RACE_BINDINGS, ...s.controls?.raceBindings },
+    racePadBindings: { ...DEFAULT_RACE_PAD, ...s.controls?.racePadBindings },
   },
   gameplay: { ...DEFAULT_SETTINGS.gameplay, ...s.gameplay },
   accessibility: { ...DEFAULT_SETTINGS.accessibility, ...s.accessibility },
@@ -297,6 +352,22 @@ export const useSettings = create<SettingsStore>()(
           if (button !== null) for (const a of Object.keys(padBindings) as Action[]) if (padBindings[a] === button) padBindings[a] = null;
           padBindings[action] = button;
           return { controls: { ...s.controls, padBindings } };
+        }),
+      bindRace: (action, slot, code) =>
+        set((s) => {
+          const raceBindings = { ...s.controls.raceBindings };
+          for (const a of Object.keys(raceBindings) as RaceAction[]) raceBindings[a] = raceBindings[a].filter((c) => c !== code);
+          const list = [...(raceBindings[action] ?? [])];
+          list[slot] = code;
+          raceBindings[action] = list.filter(Boolean).slice(0, 2);
+          return { controls: { ...s.controls, raceBindings } };
+        }),
+      bindRacePad: (action, button) =>
+        set((s) => {
+          const racePadBindings = { ...s.controls.racePadBindings };
+          if (button !== null) for (const a of Object.keys(racePadBindings) as RaceAction[]) if (racePadBindings[a] === button) racePadBindings[a] = null;
+          racePadBindings[action] = button;
+          return { controls: { ...s.controls, racePadBindings } };
         }),
       reset: (section) =>
         set(

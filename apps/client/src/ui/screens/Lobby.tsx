@@ -29,6 +29,7 @@ import { InviteFriends } from '../InviteFriends';
 import { Icon, TeamShape } from '../icons';
 import { Button, Header, LengthDial, Segmented, Setting, Toggle, useCopy } from '../kit';
 import { DIFF_LABEL } from './Play';
+import { VelocityLobby } from '../velocity/VelocityLobby';
 
 /** The host lists their game under Online → Public games, so strangers can find and join it. */
 function PublicSwitch() {
@@ -100,6 +101,7 @@ export default function Lobby() {
       </main>
     );
 
+  if (lobby.settings.game === 'velocity') return <VelocityLobby />;
   const me = lobby.players.find((p) => p.id === net.you);
   const host = lobby.hostId === net.you;
   const names = teamNames();

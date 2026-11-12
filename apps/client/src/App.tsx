@@ -17,6 +17,9 @@ import { CallUi } from './ui/CallUi';
 import { useSocial } from './state/social';
 import { useSplit } from './game/split';
 import { Player2Panel, SplitPrompt } from './ui/Split';
+import { RaceHud } from './ui/velocity/RaceHud';
+import { WhatsNew } from './ui/WhatsNew';
+import { useRaceHud, useRaceHud2 } from './velocity/state';
 
 const Online = lazy(() => import('./ui/screens/Online'));
 const Lobby = lazy(() => import('./ui/screens/Lobby'));
@@ -28,6 +31,8 @@ const Auth = lazy(() => import('./ui/screens/Auth'));
 const Results = lazy(() => import('./ui/screens/Results'));
 const Social = lazy(() => import('./ui/screens/Social'));
 const PlayerCard = lazy(() => import('./ui/PlayerCard'));
+const Garage = lazy(() => import('./ui/velocity/Garage'));
+const RaceResults = lazy(() => import('./ui/velocity/RaceResults'));
 
 const SCREENS: Record<Exclude<Screen, 'match'>, ComponentType> = {
   home: Home,
@@ -42,6 +47,8 @@ const SCREENS: Record<Exclude<Screen, 'match'>, ComponentType> = {
   auth: Auth,
   results: Results,
   social: Social,
+  garage: Garage,
+  raceResults: RaceResults,
 };
 
 export function App({ webgl2 }: { webgl2: boolean }) {
@@ -52,6 +59,8 @@ export function App({ webgl2 }: { webgl2: boolean }) {
   const a11y = useSettings((s) => s.accessibility);
   const status = useAccount((s) => s.status);
   const split = useSplit((s) => s.on);
+  const racing = useRaceHud((h) => h.active);
+  const racing2 = useRaceHud2((h) => h.active);
   // Everyone signs in before playing; builds without accounts configured skip the gate.
   const gated = firebaseConfigured && status !== 'signedIn';
   useMenuGamepad(screen !== 'match' || paused);
@@ -112,7 +121,15 @@ export function App({ webgl2 }: { webgl2: boolean }) {
   const Current = gated ? (status === 'loading' ? null : Auth) : screen === 'match' ? null : SCREENS[screen];
   return (
     <>
-      {!gated && (screen === 'match' || showSettingsOverMatch) && <Hud />}
+      {!gated && (screen === 'match' || showSettingsOverMatch) && !racing && <Hud />}
+      {!gated && (screen === 'match' || showSettingsOverMatch) && racing && (racing2 ? (
+        <>
+          <RaceHud side="left" />
+          <RaceHud store={useRaceHud2} side="right" />
+        </>
+      ) : (
+        <RaceHud />
+      ))}
       {Current && (
         <Suspense fallback={null}>
           <div key={gated ? 'gate' : screen} style={{ position: 'absolute', inset: splitMenu ? '0 50% 0 0' : 0, zIndex: showSettingsOverMatch ? 35 : undefined, ...(splitMenu ? { transform: 'translateZ(0)', overflow: 'hidden' } : {}) }}>
@@ -137,11 +154,12 @@ export function App({ webgl2 }: { webgl2: boolean }) {
         </div>
       )}
       {splitMenu && <Player2Panel />}
-      {!gated && screen !== 'match' && !splitMenu && <SocialBar />}
+      {!gated && screen !== 'match' && screen !== 'garage' && !splitMenu && <SocialBar />}
       {!gated && <SplitPrompt />}
       <Viewing />
       {!gated && screen !== 'match' && <TestVersionBar />}
       <Toasts />
+      {!gated && screen !== 'match' && <WhatsNew />}
       {!gated && <CallUi />}
       <Reconnecting />
     </>

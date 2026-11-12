@@ -10,6 +10,13 @@ import { Simulation, type MatchResult } from '../sim/simulation';
 import { xpForMatch } from '../progression';
 import { runCommand, type Mods } from '../commands';
 import { cleanPlayerName } from '../validation';
+import { botCar, DEFAULT_CAR, sanitizeCarLoadout, type CarLoadout } from '../velocity/catalog';
+import { DEFAULT_RACE_SETTINGS, MAX_RACERS, sanitizeRaceSettings, type Handling } from '../velocity/config';
+import { emptyRaceInput, type RaceInput } from '../velocity/car';
+import { RaceSim, type RacerInfo } from '../velocity/race';
+import { raceSnapshot, unpackRaceInput, xpForRace, type RaceEnd, type RaceStart } from '../velocity/protocol';
+import { isTrack, trackDef } from '../velocity/tracks';
+import type { RaceEvent } from '../velocity/race';
 import {
   cleanChat,
   MSG,
@@ -57,6 +64,8 @@ export interface RoomHostOptions {
    * Without it nobody can (dedicated servers have no admins).
    */
   authorize?: (who: { isHost: boolean; uid?: string; token?: string }) => Promise<'owner' | 'admin' | null>;
+  /** VELOCITY: the owner's handling tuning, if any. */
+  raceHandling?: () => Partial<Handling> | null;
 }
 
 interface Member {
@@ -81,6 +90,11 @@ interface Member {
   chatTokens: number;
   chatAt: number;
   client: HostClient;
+  /** VELOCITY: their car and race inputs. */
+  car: CarLoadout;
+  rqueue: RaceInput[];
+  rlast: RaceInput;
+  rLastSeq: number;
 }
 
 const BOT_NAMES = [
@@ -102,6 +116,7 @@ const BOT_NAMES = [
   'Sable',
 ];
 const PLAYABLE: ModeId[] = ['turf', 'zones', 'knockout', 'blitz', 'rush', 'suddendeath', 'brawl'];
+const RACE_BOT_NAMES = ['Dash', 'Nitro', 'Comet', 'Zippy', 'Torque', 'Vroom', 'Apex', 'Drift', 'Sparky', 'Turbo', 'Rally', 'Skid'];
 /** A player whose inputs stop arriving (hidden tab, stalled link) stops moving and firing instead of running on. */
 const INPUT_STALE_MS = 400;
 const pick = <T>(list: readonly T[]) => list[Math.floor(Math.random() * list.length)];
@@ -120,6 +135,8 @@ export function sanitizeSettings(s: Partial<LobbySettings> | undefined, base?: L
     duration: DURATION_OPTIONS.includes(Number(s?.duration)) ? Number(s!.duration) : d.duration,
     botFill: typeof s?.botFill === 'boolean' ? s.botFill : d.botFill,
     botDifficulty: BOT_DIFFICULTIES.includes(s?.botDifficulty as never) ? s!.botDifficulty! : d.botDifficulty,
+    game: s?.game === 'velocity' || s?.game === 'shooter' ? s.game : (d.game ?? 'shooter'),
+    race: sanitizeRaceSettings(s?.race, isTrack, d.race ?? DEFAULT_RACE_SETTINGS),
   };
 }
 
@@ -154,6 +171,10 @@ export class RoomHost {
   private again = new Set<string>();
   /** An offline match whose simulation is stepped by the host's own view; this room only mirrors it to guests. */
   private external = false;
+  /** VELOCITY: the running race, its roster and the events since the last snapshot. */
+  private race: RaceSim | null = null;
+  private raceRoster: Omit<RacerInfo, 'uid'>[] = [];
+  private raceEvents: RaceEvent[] = [];
 
   constructor(private opts: RoomHostOptions) {
     this.code = opts.code;
@@ -206,6 +227,10 @@ export class RoomHost {
       chatTokens: 4,
       chatAt: Date.now(),
       client,
+      car: DEFAULT_CAR,
+      rqueue: [],
+      rlast: emptyRaceInput(),
+      rLastSeq: 0,
     };
     this.members.set(client.id, m);
     this.hostId = client.id;
@@ -246,6 +271,10 @@ export class RoomHost {
   get size() {
     return this.members.size;
   }
+  /** How many can be in this room: eight for the shooter, six for VELOCITY. */
+  get capacity() {
+    return this.settings.game === 'velocity' ? MAX_RACERS : MAX_PLAYERS;
+  }
   get phase() {
     return this.phaseNow;
   }
@@ -256,7 +285,7 @@ export class RoomHost {
   join(
     client: HostClient,
     options:
-      Partial<{ name: string; weapon: string; special: string; cosmetics: Partial<Cosmetics> }> | undefined,
+      Partial<{ name: string; weapon: string; special: string; cosmetics: Partial<Cosmetics>; car: unknown }> | undefined,
     auth?: JoinAuth,
   ) {
     const m: Member = {
@@ -281,11 +310,16 @@ export class RoomHost {
       chatTokens: 4,
       chatAt: Date.now(),
       client,
+      car: sanitizeCarLoadout(options?.car),
+      rqueue: [],
+      rlast: emptyRaceInput(),
+      rLastSeq: 0,
     };
     this.members.set(client.id, m);
     if (!this.hostId) this.hostId = client.id;
     if (this.mods.size) client.send(MSG.MODS, Object.fromEntries(this.mods));
     if (this.phaseNow === 'match' && this.sim) this.joinRunning(m);
+    if (this.phaseNow === 'match' && this.race) this.joinRace(m);
     this.pushLobby();
     if (this.quick && this.phaseNow === 'lobby' && this.members.size >= MAX_PLAYERS) this.startMatch();
   }
@@ -296,7 +330,9 @@ export class RoomHost {
     if (!m) return;
     m.connected = false;
     m.queue.length = 0;
+    m.rqueue.length = 0;
     if (this.phaseNow === 'match') this.sim?.setBot(m.pid, this.settings.botDifficulty);
+    if (this.phaseNow === 'match') this.race?.setBot(m.pid, this.settings.race?.difficulty ?? 'normal');
     this.pushLobby();
   }
 
@@ -311,6 +347,10 @@ export class RoomHost {
       this.sim.setBot(m.pid, null);
       client.send(MSG.SYNC, { rle: this.sim.world.grid.encode() });
     }
+    if (this.phaseNow === 'match' && this.race?.byId(m.pid)) {
+      this.race.setBot(m.pid, null);
+      m.rLastSeq = 0;
+    }
     this.pushLobby();
   }
 
@@ -319,6 +359,7 @@ export class RoomHost {
     if (!m) return;
     this.members.delete(id);
     if (this.phaseNow === 'match') this.sim?.setBot(m.pid, this.settings.botDifficulty);
+    if (this.phaseNow === 'match') this.race?.setBot(m.pid, this.settings.race?.difficulty ?? 'normal');
     if (this.hostId === id) this.hostId = this.members.keys().next().value ?? '';
     this.pushLobby();
   }
@@ -327,6 +368,8 @@ export class RoomHost {
     this.disposed = true;
     this.sim?.dispose();
     this.sim = null;
+    this.race?.dispose();
+    this.race = null;
   }
 
   private pushMods() {
@@ -403,6 +446,17 @@ export class RoomHost {
     switch (type) {
       case MSG.INPUT: {
         if (this.phaseNow !== 'match' || !Array.isArray(data)) return;
+        if (this.race) {
+          for (const raw of data.slice(0, 10)) {
+            const inp = emptyRaceInput();
+            if (!unpackRaceInput(raw, inp) || inp.seq <= m.rLastSeq) continue;
+            m.rLastSeq = inp.seq;
+            m.rqueue.push(inp);
+            m.lastInputAt = Date.now();
+          }
+          while (m.rqueue.length > 8) m.rqueue.shift();
+          return;
+        }
         for (const raw of data.slice(0, 10)) {
           const inp = emptyInput();
           // Malformed or replayed inputs are dropped; values are clamped inside unpackInput.
@@ -425,6 +479,7 @@ export class RoomHost {
         if (SPECIAL_IDS.includes(d.special as SpecialId)) m.special = d.special as SpecialId;
         if (d.cosmetics && typeof d.cosmetics === 'object')
           m.cosmetics = sanitizeCosmetics(d.cosmetics as Partial<Cosmetics>);
+        if (d.car && typeof d.car === 'object') m.car = sanitizeCarLoadout(d.car);
         return this.pushLobby();
       case MSG.TEAM: {
         if (this.phaseNow !== 'lobby' || (d.team !== 0 && d.team !== 1)) return;
@@ -434,10 +489,17 @@ export class RoomHost {
         target.team = d.team;
         return this.pushLobby();
       }
-      case MSG.SETTINGS:
+      case MSG.SETTINGS: {
         if (!this.isHost(id) || this.phaseNow !== 'lobby') return;
-        this.settings = sanitizeSettings(d as Partial<LobbySettings>, this.settings);
+        const next = sanitizeSettings(d as Partial<LobbySettings>, this.settings);
+        // A race holds six: switching a fuller room to VELOCITY waits until it's six or fewer.
+        if (next.game === 'velocity' && this.settings.game !== 'velocity' && this.members.size > MAX_RACERS) {
+          m.client.send(MSG.NOTICE, { text: `VELOCITY races hold ${MAX_RACERS}. Ask ${this.members.size - MAX_RACERS} to leave first.`, kind: 'warn' });
+          next.game = 'shooter';
+        }
+        this.settings = next;
         return this.pushLobby();
+      }
       case MSG.BALANCE:
         if (!this.isHost(id) || this.phaseNow !== 'lobby') return;
         [...this.members.values()].forEach((x, i) => (x.team = (i % 2) as Team));
@@ -470,6 +532,7 @@ export class RoomHost {
 
   private startMatch() {
     if (this.phaseNow !== 'lobby' || !this.members.size) return;
+    if (this.settings.game === 'velocity') return this.startRace();
     const s = this.settings;
     const infos: PlayerInfo[] = [...this.members.values()].map((m) => ({
       id: m.pid,
@@ -566,6 +629,105 @@ export class RoomHost {
     return undefined;
   }
 
+  /* ---------- VELOCITY ---------- */
+
+  private startRace() {
+    const s = this.settings.race ?? DEFAULT_RACE_SETTINGS;
+    const ms = [...this.members.values()].slice(0, MAX_RACERS);
+    const infos: RacerInfo[] = ms.map((m, i) => ({
+      id: m.pid,
+      name: m.name,
+      bot: !m.connected,
+      difficulty: s.difficulty,
+      car: m.car,
+      identity: i,
+      ...(m.uid ? { uid: m.uid } : {}),
+      ...(m.admin ? { admin: true } : {}),
+    }));
+    const seed = (Math.random() * 2 ** 31) | 0;
+    const names = [...RACE_BOT_NAMES].sort(() => Math.random() - 0.5);
+    for (let k = 0; k < s.bots && infos.length < MAX_RACERS; k++)
+      infos.push({ id: this.nextPid++, name: names[k % names.length], bot: true, difficulty: s.difficulty, car: botCar(seed + k * 977), identity: infos.length });
+    const handling = this.opts.raceHandling?.() ?? null;
+    this.race = new RaceSim({ track: s.track, laps: s.laps, preset: s.preset, damage: s.damage, seed, ...(handling ? { handling } : {}) }, infos);
+    this.raceRoster = infos.map(({ uid: _uid, ...p }) => p);
+    this.raceEvents = [];
+    this.phaseNow = 'match';
+    this.acc = this.ticks = this.snaps = 0;
+    this.finishing = false;
+    const now = Date.now();
+    const def = trackDef(s.track);
+    for (const m of this.members.values()) {
+      m.rqueue.length = 0;
+      m.rLastSeq = 0;
+      m.rlast = emptyRaceInput();
+      m.lastInputAt = now;
+      if (m.connected && this.race.byId(m.pid))
+        m.client.send(MSG.MATCH, { race: true, config: this.race.config, racers: this.raceRoster, you: m.pid, ...(def?.custom ? { track: def } : {}) } satisfies RaceStart);
+    }
+    this.pushLobby();
+  }
+
+  /** Someone arriving mid-race takes over a bot's car; with no bot to replace they race next time. */
+  private joinRace(m: Member) {
+    const race = this.race!;
+    const taken = new Set([...this.members.values()].filter((x) => x !== m).map((x) => x.pid));
+    const bot = race.racers.find((r) => r.info.bot && !taken.has(r.id));
+    if (!bot) {
+      m.client.send(MSG.NOTICE, { text: 'A race is on. You’ll race in the next one.', kind: 'info' });
+      return;
+    }
+    m.pid = bot.id;
+    race.setBot(bot.id, null);
+    bot.info = { ...bot.info, name: m.name };
+    this.raceRoster = race.racers.map(({ info: { uid: _uid, ...p } }) => p);
+    m.lastInputAt = Date.now();
+    const def = trackDef(race.config.track);
+    m.client.send(MSG.MATCH, { race: true, config: race.config, racers: this.raceRoster, you: m.pid, ...(def?.custom ? { track: def } : {}) } satisfies RaceStart);
+  }
+
+  private tickRace(now: number) {
+    const race = this.race!;
+    while (this.acc >= DT) {
+      for (const m of this.members.values()) {
+        if (!m.connected || !race.byId(m.pid)) continue;
+        const next = m.rqueue.shift();
+        if (next) m.rlast = next;
+        else if (now - m.lastInputAt > INPUT_STALE_MS && (m.rlast.throttle || m.rlast.brake || m.rlast.steer || m.rlast.buttons)) m.rlast = { ...emptyRaceInput(), seq: m.rlast.seq };
+        race.setInput(m.pid, m.rlast);
+      }
+      race.step();
+      this.raceEvents.push(...race.drainEvents());
+      this.acc -= DT;
+      if (++this.ticks % 3 === 0 || race.phase === 'ended') {
+        const snap = raceSnapshot(race, this.raceEvents);
+        this.raceEvents = [];
+        for (const m of this.members.values()) if (m.connected) m.client.send(MSG.SNAP, snap);
+      }
+      if (race.phase === 'ended') {
+        this.finishRace();
+        break;
+      }
+    }
+  }
+
+  private finishRace() {
+    const race = this.race;
+    if (!race?.result || this.finishing) return;
+    this.finishing = true;
+    const r = race.result;
+    const xp: Record<number, number> = {};
+    for (const p of r.players) if (!p.bot) xp[p.id] = xpForRace(r, p.id);
+    const end: RaceEnd = { race: true, result: { ...r, players: r.players.map(({ uid: _uid, ...p }) => p) }, xp, recorded: false };
+    for (const m of this.members.values()) if (m.connected) m.client.send(MSG.END, end);
+    this.phaseNow = 'results';
+    this.again.clear();
+    this.resultsAt = this.quick ? Date.now() + 15_000 : this.random ? Date.now() + 14_000 : 0;
+    race.dispose();
+    this.race = null;
+    this.pushLobby();
+  }
+
   tick(dtMs: number) {
     const now = Date.now();
     if (this.phaseNow === 'lobby' && (this.quick || this.random) && this.autoStartAt) {
@@ -573,6 +735,10 @@ export class RoomHost {
       else if (now - this.lastLobbyPush > 1000) this.pushLobby();
     }
     if (this.phaseNow === 'results' && this.resultsAt && now >= this.resultsAt) this.toLobby();
+    if (this.race && this.phaseNow === 'match' && !this.finishing) {
+      this.acc += Math.min(dtMs, 250) / 1000;
+      return this.tickRace(now);
+    }
     const sim = this.sim;
     if (this.external || this.phaseNow !== 'match' || !sim || this.finishing) return;
     this.acc += Math.min(dtMs, 250) / 1000;
@@ -681,6 +847,7 @@ export class RoomHost {
       connected: m.connected,
       verified: m.verified,
       ...(m.admin ? { admin: true } : {}),
+      car: m.car,
     }));
     return {
       code: this.code,

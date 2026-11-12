@@ -53,7 +53,7 @@ service cloud.firestore {
         && (!('emotes' in c) || (c.emotes is list && c.emotes.size() <= 8));
     }
     function validUser(d) {
-      return d.keys().hasOnly(['username', 'usernameKey', 'displayName', 'createdAt', 'updatedAt', 'xp', 'stats', 'weapon', 'special', 'cosmetics', 'settings', 'coins', 'owned', 'favs', 'quests', 'banned'])
+      return d.keys().hasOnly(['username', 'usernameKey', 'displayName', 'createdAt', 'updatedAt', 'xp', 'stats', 'weapon', 'special', 'cosmetics', 'settings', 'coins', 'owned', 'favs', 'quests', 'banned', 'racing'])
         && validUsername(d.username)
         && d.usernameKey == d.username.lower()
         && validDisplayName(d.displayName)
@@ -68,7 +68,12 @@ service cloud.firestore {
         && (!('owned' in d) || (d.owned is list && d.owned.size() <= 6000))
         && (!('favs' in d) || (d.favs is list && d.favs.size() <= 400))
         && (!('quests' in d) || d.quests is map)
-        && (!('banned' in d) || d.banned is bool);
+        && (!('banned' in d) || d.banned is bool)
+        // VELOCITY: car builds, racing stats and records (versioned, small).
+        && (!('racing' in d) || (d.racing is map && d.racing.keys().hasOnly(['v', 'builds', 'active', 'stats', 'tracks', 'cars', 'last'])
+          && d.racing.builds is list && d.racing.builds.size() <= 3
+          && d.racing.tracks is map && d.racing.tracks.size() <= 80
+          && d.racing.cars is map && d.racing.cars.size() <= 20));
     }
     function validStatsCard(s) {
       return s is map && s.keys().hasOnly(['games', 'wins', 'kills', 'paint'])
@@ -398,6 +403,14 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     // A player's own saved map presets: at most three, private to them.
+    // A player's VELOCITY track presets (up to three), like map presets.
+    match /trackPresets/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if isOwner(uid) && request.resource.data.keys().hasOnly(['tracks', 'updatedAt'])
+        && request.resource.data.tracks is list && request.resource.data.tracks.size() <= 3
+        && request.resource.data.updatedAt == request.time;
+    }
+
     match /mapPresets/{uid} {
       allow read: if isOwner(uid);
       allow write: if isOwner(uid) && request.resource.data.keys().hasOnly(['maps', 'updatedAt'])

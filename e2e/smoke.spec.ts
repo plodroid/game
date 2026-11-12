@@ -1,5 +1,20 @@
 import { expect, test } from '@playwright/test';
 
+// The one-time "what's new" screen is covered by its own test; the rest start past it.
+test.beforeEach(async ({ page }, info) => {
+  if (!info.title.includes("what's new")) await page.addInitScript(() => localStorage.setItem('chromashift.seen', 'velocity-1'));
+});
+
+test("shows what's new once, and closes", async ({ page }) => {
+  await page.goto('./');
+  await expect(page.getByText('MASSIVE UPDATE!')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByText('MASSIVE UPDATE!')).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator('.menu__label', { hasText: 'Play' })).toBeVisible();
+  await expect(page.getByText('MASSIVE UPDATE!')).toHaveCount(0);
+});
+
 test('loads under /game/ with every asset resolving', async ({ page }) => {
   const failed: string[] = [];
   const errors: string[] = [];
@@ -57,4 +72,25 @@ test('explains when WebGL2 is unavailable', async ({ page }) => {
   });
   await page.goto('./');
   await expect(page.getByText('This device can’t run CHROMASHIFT')).toBeVisible();
+});
+
+test('VELOCITY: picks racing on Play, starts a race against bots and drives', async ({ page }) => {
+  test.setTimeout(150_000);
+  await page.goto('./');
+  await page.locator('.menu__label', { hasText: 'Settings' }).click();
+  await page.getByRole('button', { name: 'Very Low', exact: true }).click();
+  await page.goto('./');
+  await page.locator('.menu__label', { hasText: 'Play' }).click();
+  await page.getByRole('button', { name: /VELOCITY/ }).click();
+  await expect(page.locator('.track-card')).toHaveCount(10);
+  await page.getByRole('button', { name: 'Race', exact: true }).click();
+  await expect(page.locator('.race-hud')).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('.race-board li')).toHaveCount(6);
+  await expect(page.locator('.dmg')).toBeVisible();
+  // Hold the accelerator once the lights go green: the speedometer climbs.
+  await page.keyboard.down('KeyW');
+  await expect
+    .poll(async () => Number((await page.locator('.speedo-kmh').innerText()).replace(/\D/g, '')), { timeout: 90_000 })
+    .toBeGreaterThan(20);
+  await page.keyboard.up('KeyW');
 });

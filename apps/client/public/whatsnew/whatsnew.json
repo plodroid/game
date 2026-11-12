@@ -1,0 +1,38 @@
+{
+  "id": "velocity-1",
+  "mandatory": true,
+  "kicker": "MASSIVE UPDATE!",
+  "title": "The new <em>VELOCITY</em> is here",
+  "sub": "CHROMASHIFT now has a second game: racing. Up to six cars, real driving, your own garage.",
+  "images": ["hero-grid.jpg", "drift-sunset.jpg", "garage.jpg", "frozen.jpg", "neon-chase.jpg"],
+  "sections": [
+    {
+      "title": "New",
+      "items": [
+        "VELOCITY racing: pick the car icon on Play. Race bots offline, or friends with your game code.",
+        "10 new race tracks: Coastal Sprint, Neon Circuit, Prism Canyon, Skyline Rush, Dye Docks, Bloom Raceway, Core Raceway, Arcade Velocity, Frozen Apex and Sunset Drift.",
+        "Real driving: grip, drifts, mini-turbos, boost, slipstream, and suspension that leans in the corners and bounces over the hills.",
+        "The Garage: a 3D showroom for your car. 6 bodies, 32 colours, 56 paint finishes, 24 wheels, bumpers, spoilers, lights, horns, engine sounds, trails, smoke and more. Keep 3 saved builds.",
+        "Crashes leave dents, scratches and broken lights, and a bad one slows you down. Your car is always fixed after the race.",
+        "Arcade races with pickups: Turbo, Shield, Paint Slick, Shockwave, Repair, Slipstream and Decoy.",
+        "Racing bots on 4 levels, racing stats and personal records on your profile, and new racing quests.",
+        "Build your own tracks in the new track editor, then test drive them."
+      ]
+    },
+    {
+      "title": "Changed",
+      "items": [
+        "Play has two games at the top: CHROMASHIFT (the gun) and VELOCITY (the car).",
+        "Settings → Controls has a gun and a car too, so driving keys and buttons are set separately.",
+        "The Locker has a Garage button for your cars.",
+        "One extra daily and weekly quest, for racing. Your other quests are the same."
+      ]
+    },
+    {
+      "title": "Removed",
+      "items": [
+        "Nothing. Every CHROMASHIFT map, weapon, item, friend and coin is still here."
+      ]
+    }
+  ]
+}

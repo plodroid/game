@@ -14,6 +14,7 @@ import {
   type LobbySettings,
   type LobbyState,
   type MatchStart,
+  type RaceStart,
 } from '@chromashift/shared';
 import { env } from '../env';
 import { publicName, useProfile } from '../state/profile';
@@ -21,6 +22,7 @@ import { useChat } from '../state/chat';
 import { useUi } from '../state/ui';
 import type { PeerHello } from './p2p';
 import { voice } from './voice';
+import { activeCar } from '../velocity/racing';
 
 export type NetStatus = 'idle' | 'connecting' | 'lobby' | 'match' | 'error';
 /** server: a dedicated server · host: this tab hosts the game · peer: a game hosted in someone else's tab. */
@@ -105,7 +107,7 @@ export const useNet = create<NetStore>()(() => ({
 
 /** Set by the session layer to hand a starting match to the engine. */
 export const netHooks: {
-  onMatch: ((room: NetRoom, start: MatchStart) => void) | null;
+  onMatch: ((room: NetRoom, start: MatchStart | RaceStart) => void) | null;
   onLeftMatch: (() => void) | null;
   idToken: (() => Promise<string | undefined>) | null;
   /** Every lobby change of the game this tab hosts (null once it closes); used by public listing. */
@@ -196,6 +198,7 @@ export function peerHello(): PeerHello {
     weapon: p.weapon,
     special: p.special,
     cosmetics: p.cosmetics,
+    car: activeCar(p.racing),
   };
 }
 
@@ -369,7 +372,7 @@ function bind(room: NetRoom, kind: RoomKind, endpoint?: string) {
   room.onMessage(MSG.GRANT, (g: Grant) => {
     if (useNet.getState().room === room) applyGrant(g);
   });
-  room.onMessage(MSG.MATCH, (start: MatchStart) => {
+  room.onMessage(MSG.MATCH, (start: MatchStart | RaceStart) => {
     useNet.setState({ status: 'match', you: start.you });
     netHooks.onMatch?.(room, start);
   });

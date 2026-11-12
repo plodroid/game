@@ -196,7 +196,8 @@ export function leaveMatch() {
   ui.go('home');
 }
 
-netHooks.onMatch = (room, start) => void startOnline(room, start);
+netHooks.onMatch = (room, start) =>
+  'race' in start ? void import('../velocity/session').then((m) => m.startRaceOnline(room, start)) : void startOnline(room, start);
 netHooks.onLeftMatch = () => {
   if (engine.view?.kind === 'match') leaveMatch();
 };

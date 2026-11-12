@@ -10,6 +10,8 @@ import { DEFAULT_BINDINGS, DEFAULT_PAD, useSettings, type Action, type Preset } 
 import { useUi } from '../../state/ui';
 import { checkForUpdates, useUpdates, type UpdateResult } from '../../updates';
 import { Button, Header, KeyCapture, keyLabel, Segmented, Setting, Slider, Toggle } from '../kit';
+import { Icon } from '../icons';
+import { RaceControls } from '../velocity/RaceControls';
 
 type Tab = 'graphics' | 'audio' | 'controls' | 'gameplay' | 'accessibility';
 const TABS: { id: Tab; label: string }[] = [
@@ -565,8 +567,26 @@ function Controls() {
   const last = useDevice((d) => d.last);
   const coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
   const [kind, setKind] = useState<Kind>(last === 'pad' ? 'pad' : coarse ? 'touch' : 'keyboard');
+  // Gun: CHROMASHIFT's controls. Car: VELOCITY's, a separate set.
+  const [game, setGame] = useState<'shooter' | 'velocity'>('shooter');
   return (
     <>
+      <div className="mode-switch" role="group" aria-label="Which game's controls" style={{ marginBottom: 12 }}>
+        <button className="mode-switch__b" aria-pressed={game === 'shooter'} onClick={() => setGame('shooter')}>
+          <Icon.gun size={26} />
+          <span>
+            <span className="mode-switch__title">CHROMASHIFT</span>
+            <span className="mode-switch__sub">Shooter controls</span>
+          </span>
+        </button>
+        <button className="mode-switch__b" aria-pressed={game === 'velocity'} onClick={() => setGame('velocity')} style={{ ['--pig' as string]: 'var(--gold)' }}>
+          <Icon.car size={26} />
+          <span>
+            <span className="mode-switch__title">VELOCITY</span>
+            <span className="mode-switch__sub">Driving controls</span>
+          </span>
+        </button>
+      </div>
       <Segmented
         value={kind}
         onChange={setKind}
@@ -580,9 +600,10 @@ function Controls() {
       <p className="muted small" style={{ margin: '8px 0 14px' }}>
         Every kind of device can be changed here, whichever one you’re using. The game switches to controller buttons by itself when you press one.
       </p>
-      {kind === 'keyboard' && <KeyboardControls />}
-      {kind === 'pad' && <ControllerControls />}
-      {kind === 'touch' && <TouchControlsSettings />}
+      {game === 'velocity' && <RaceControls kind={kind} />}
+      {game === 'shooter' && kind === 'keyboard' && <KeyboardControls />}
+      {game === 'shooter' && kind === 'pad' && <ControllerControls />}
+      {game === 'shooter' && kind === 'touch' && <TouchControlsSettings />}
     </>
   );
 }

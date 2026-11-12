@@ -81,14 +81,22 @@ jobs:
           VITE_CHANNEL: test
           VITE_BUILD_SHA: ${{ github.sha }}
 
-      # The released commit: what the owner last chose with "Update for everyone" (config/release in
-      # Firestore), else what the site already serves, else (the very first time) this push.
+      # The released commit: this push if its message says [release] (straight to everyone), else what
+      # the owner last chose with "Update for everyone" (config/release in Firestore) unless the site
+      # already serves something newer, else what the site serves, else (the very first time) this push.
       - name: Build the released version
         run: |
           doc=$(curl -fsS "https://firestore.googleapis.com/v1/projects/$VITE_FIREBASE_PROJECT_ID/databases/(default)/documents/config/release" || true)
-          sha=$(echo "$doc" | jq -r '.fields.json.stringValue // empty' 2>/dev/null | jq -r '.sha // empty' 2>/dev/null || true)
-          [ -n "$sha" ] || sha=$(curl -fsS https://plodroid.github.io/game/version.json | jq -r '.sha // empty' 2>/dev/null || true)
-          if [ -z "$sha" ] || ! git cat-file -e "$sha^{commit}" 2>/dev/null; then sha=$GITHUB_SHA; fi
+          chosen=$(echo "$doc" | jq -r '.fields.json.stringValue // empty' 2>/dev/null | jq -r '.sha // empty' 2>/dev/null || true)
+          served=$(curl -fsS https://plodroid.github.io/game/version.json | jq -r '.sha // empty' 2>/dev/null || true)
+          git cat-file -e "$chosen^{commit}" 2>/dev/null || chosen=""
+          git cat-file -e "$served^{commit}" 2>/dev/null || served=""
+          sha=$chosen
+          # A release made straight from a push is newer than an older choice in Firestore.
+          if [ -n "$served" ] && [ -n "$chosen" ] && [ "$served" != "$chosen" ] && git merge-base --is-ancestor "$chosen" "$served"; then sha=$served; fi
+          [ -n "$sha" ] || sha=$served
+          if git log -1 --format=%B "$GITHUB_SHA" | grep -qF '[release]'; then sha=$GITHUB_SHA; fi
+          [ -n "$sha" ] || sha=$GITHUB_SHA
           echo "Released version: $sha"
           if [ "$sha" != "$GITHUB_SHA" ]; then
             git checkout --quiet "$sha"

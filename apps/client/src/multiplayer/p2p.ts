@@ -5,7 +5,6 @@ import { Packr } from 'msgpackr';
 import {
   generateRoomCode,
   initPhysics,
-  MAX_PLAYERS,
   normalizeRoomCode,
   PROTOCOL_VERSION,
   RoomHost,
@@ -18,6 +17,7 @@ import {
   type LobbyState,
 } from '@chromashift/shared';
 import { env } from '../env';
+import { tuning } from '../velocity/tuning';
 import { HOST_CODE_KEY, type NetRoom } from './net';
 
 /**
@@ -58,7 +58,7 @@ export const PEER_OPTIONS = {
 export const hasRelay = !!env.turn;
 
 /** What a guest tells the host. Never includes the account token: the host is just another player. */
-export type PeerHello = Pick<JoinOptions, 'name' | 'protocol' | 'weapon' | 'special' | 'cosmetics'> & {
+export type PeerHello = Pick<JoinOptions, 'name' | 'protocol' | 'weapon' | 'special' | 'cosmetics' | 'car'> & {
   /** The game's owner says so; the host checks it against the owner's note in Firestore (no token is ever sent). */
   admin?: boolean;
 };
@@ -85,7 +85,7 @@ export function explain(e: unknown): string {
     case 'unavailable-id':
       return 'Couldn’t reserve a game code. Try again in a moment.';
     case 'full':
-      return 'That game is full (8 players).';
+      return 'That game is full.';
     case 'version':
       return 'That game runs a different version of CHROMASHIFT. Both of you should refresh the page to update.';
     case 'expired':
@@ -457,6 +457,7 @@ class BrowserHost {
       settings,
       onLobby: (s) => this.onLobby?.(s),
       authorize,
+      raceHandling: () => tuning.handling,
       kick: (id) => {
         const s = this.sessions.get(id);
         if (s) this.remove(s);
@@ -537,7 +538,7 @@ class BrowserHost {
       this.room.reconnect(seat.client);
       return seat;
     }
-    if (this.room.size >= MAX_PLAYERS && !admin) return refuse('full');
+    if (this.room.size >= this.room.capacity && !admin) return refuse('full');
     const s: Session = {
       id: randomId(6),
       resume: randomId(),

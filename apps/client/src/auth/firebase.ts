@@ -52,6 +52,8 @@ import { settingsSnapshot, useSettings, type Settings } from '../settings/settin
 import { mergeSynced, same, type Synced } from '../state/merge';
 import { newProfile, useProfile, type Profile, type Stats } from '../state/profile';
 import { setWeaponConfig } from '../weapons/custom';
+import { emptyRacing, sanitizeRacing } from '../velocity/racing';
+import { applyTuningJson } from '../velocity/tuning';
 import { useAccount, type AccountUser } from './account';
 
 let app: FirebaseApp;
@@ -84,6 +86,7 @@ interface UserDoc {
   quests?: Profile['quests'];
   banned?: boolean;
   settings?: Partial<Settings>;
+  racing?: unknown;
 }
 
 /**
@@ -107,6 +110,7 @@ export async function start() {
   }
   await getRedirectResult(auth).catch(() => null);
   await loadWeaponConfig();
+  void loadVelocityConfig().then(applyTuningJson);
   onAuthStateChanged(auth, (u) => void onUser(u));
 }
 
@@ -186,6 +190,7 @@ function localSynced(): Synced {
     favs: p.favs,
     quests: p.quests,
     settings: settingsSnapshot(),
+    racing: p.racing,
   };
 }
 
@@ -213,6 +218,8 @@ function docToSynced(uid: string, d: UserDoc): Synced {
           ? local.quests
           : newProfile().quests,
     settings: d.settings ?? {},
+    // Accounts from before VELOCITY keep this device's racing data.
+    racing: d.racing ? sanitizeRacing(d.racing) : mine ? local.racing : emptyRacing(),
   };
 }
 
@@ -656,6 +663,32 @@ export async function loadMapPresets(): Promise<string[] | null> {
   if (!user) return null;
   const d = (await getDoc(doc(db, 'mapPresets', user.uid))).data();
   return d && Array.isArray(d.maps) ? (d.maps as string[]) : null;
+}
+
+/** This player's VELOCITY track presets (up to three), or null when none were saved. */
+export async function loadTrackPresets(): Promise<string[] | null> {
+  if (!user) return null;
+  const d = (await getDoc(doc(db, 'trackPresets', user.uid))).data();
+  return d && Array.isArray(d.tracks) ? (d.tracks as string[]) : null;
+}
+
+export async function saveTrackPresets(tracks: string[]) {
+  if (!user) return;
+  await setDoc(doc(db, 'trackPresets', user.uid), { tracks: tracks.slice(0, 3), updatedAt: serverTimestamp() });
+}
+
+/** The owner's VELOCITY handling (config/velocity): everyone reads, only the owner writes. */
+export async function loadVelocityConfig(): Promise<string | null> {
+  try {
+    const s = await Promise.race([getDoc(doc(db, 'config', 'velocity')), new Promise<never>((_, no) => setTimeout(() => no(new Error('slow')), 3000))]);
+    return s.exists() ? String(s.data().json) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveVelocityConfig(json: string) {
+  await setDoc(doc(db, 'config', 'velocity'), { json, updatedAt: serverTimestamp() });
 }
 
 export async function saveMapPresets(maps: string[]) {

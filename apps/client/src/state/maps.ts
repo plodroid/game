@@ -3,6 +3,7 @@ import { newMapId, registerCustomMap, removeCustomMap, sanitizeCustomMap, type C
 import { accounts, useAccount } from '../auth/account';
 import { isOwner } from '../auth/admin';
 import { firebaseConfigured } from '../env';
+import { syncTrackPresets, takePublishedTracks } from '../velocity/tracksState';
 
 /*
  * Maps come in two kinds. Presets are a player's own: up to three, kept on this device and, when
@@ -107,12 +108,19 @@ async function sync() {
   const m = await accounts();
   if (!m) return;
   try {
-    const maps = (await m.loadPublicMaps()).map((j) => registerCustomMap(JSON.parse(j))).filter((x): x is CustomMap => !!x);
+    const jsons = await m.loadPublicMaps();
+    // Published VELOCITY tracks share the collection, marked as tracks.
+    takePublishedTracks(jsons);
+    const maps = jsons
+      .filter((j) => !/"kind"\s*:\s*"track"/.test(j))
+      .map((j) => registerCustomMap(JSON.parse(j)))
+      .filter((x): x is CustomMap => !!x);
     useMaps.setState({ publics: maps });
   } catch {
     /* offline: the maps already loaded stay */
   }
   if (useAccount.getState().status !== 'signedIn') return;
+  void syncTrackPresets();
   try {
     const stored = await m.loadMapPresets();
     if (stored) {

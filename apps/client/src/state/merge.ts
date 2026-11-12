@@ -1,6 +1,7 @@
 import type { Cosmetics } from '@chromashift/shared';
 import type { Settings } from '../settings/settings';
 import type { QuestState, Stats } from './profile';
+import { mergeRacing, type Racing } from '../velocity/racing';
 
 /** The part of an account that follows the player between devices (users/{uid}). */
 export interface Synced {
@@ -15,6 +16,7 @@ export interface Synced {
   favs: string[];
   quests: QuestState;
   settings: Partial<Settings>;
+  racing: Racing;
 }
 
 /** JSON with sorted keys, so equal data compares equal whatever order the keys arrived in. */
@@ -74,5 +76,6 @@ export function mergeSynced(base: Synced, local: Synced, remote: Synced): Synced
       claimed: [...new Set([...remote.quests.claimed, ...local.quests.claimed])],
     },
     stats,
+    racing: mergeRacing(base.racing, local.racing, remote.racing),
   };
 }

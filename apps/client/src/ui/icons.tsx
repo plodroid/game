@@ -16,6 +16,23 @@ const base = (size: number, p: P) => ({
 });
 
 export const Icon = {
+  /** CHROMASHIFT (the paint shooter): a paint blaster. */
+  gun: ({ size = 20, ...p }: P) => (
+    <svg {...base(size, p)}>
+      <path d="M3 9.5h13.5l2-2h2v5h-2l-1-1H12l-1.6 6H6.6l1.4-6H3z" />
+      <circle cx="19.5" cy="15.5" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="21" cy="18.6" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  ),
+  /** VELOCITY (racing): a low sports car. */
+  car: ({ size = 20, ...p }: P) => (
+    <svg {...base(size, p)}>
+      <path d="M2.5 15.5v-2.3c0-.8.5-1.4 1.2-1.6l3.1-.9 2.6-2.9c.4-.5 1-.7 1.6-.7h3.6c.7 0 1.3.3 1.7.8l2.3 2.8 2.2.5c.8.2 1.3.9 1.3 1.7v2.6h-2" />
+      <path d="M9 15.5h6" />
+      <circle cx="6.5" cy="15.8" r="2" />
+      <circle cx="17.5" cy="15.8" r="2" />
+    </svg>
+  ),
   back: ({ size = 20, ...p }: P) => (
     <svg {...base(size, p)}>
       <path d="M15 5l-7 7 7 7" />

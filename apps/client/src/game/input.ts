@@ -1,12 +1,14 @@
 import { create } from 'zustand';
 import { BTN, WHEEL } from '@chromashift/shared';
-import { useSettings, type Action } from '../settings/settings';
+import { useSettings, type Action, type RaceAction } from '../settings/settings';
 
 /** The emote wheel: open while the emote button is held; `pick` is the highlighted slot or -1. */
 export const useWheel = create<{ open: boolean; pick: number }>()(() => ({ open: false, pick: -1 }));
 
 /** Written by the on-screen touch controls. */
 export const touch = { active: false, mx: 0, mz: 0, lookX: 0, lookY: 0, buttons: 0 };
+/** Written by the VELOCITY touch controls: steering -1 (right) … 1 (left), pedals 0..1, held actions. */
+export const raceTouch = { active: false, steer: 0, throttle: 0, brake: 0, held: new Set<RaceAction>(), pressed: new Set<RaceAction>() };
 
 const ACTION_BTN: Partial<Record<Action, number>> = {
   fire: BTN.FIRE,
@@ -351,6 +353,68 @@ export class InputManager {
     this.emoteSlot = -1;
     this.latched.clear();
     this.padLatched.clear();
+  }
+
+  /* ---------- VELOCITY ---------- */
+
+  private raceCodes(a: RaceAction) {
+    return useSettings.getState().controls.raceBindings[a] ?? [];
+  }
+  private racePad(a: RaceAction) {
+    return useSettings.getState().controls.racePadBindings[a] ?? null;
+  }
+
+  /** Is a racing action held (key, controller button or touch)? */
+  raceHeld(a: RaceAction): boolean {
+    if (this.raceCodes(a).some((c) => this.down.has(c))) return true;
+    const pi = this.racePad(a);
+    if (pi !== null && this.padDown.has(pi)) return true;
+    return this.touchOK && raceTouch.active && raceTouch.held.has(a);
+  }
+
+  /** Was a racing action pressed since the last tick (taps shorter than a tick still count)? */
+  racePressed(a: RaceAction): boolean {
+    if (this.raceCodes(a).some((c) => this.latched.has(c))) return true;
+    const pi = this.racePad(a);
+    if (pi !== null && this.padLatched.has(pi)) return true;
+    return this.touchOK && raceTouch.active && raceTouch.pressed.has(a);
+  }
+
+  /** Analog driving: steering from the left stick (or keys/D-pad), pedals from triggers (or keys). */
+  raceAxes(): { steer: number; throttle: number; brake: number; analog: boolean } {
+    let steer = (this.raceHeld('steerLeft') ? 1 : 0) - (this.raceHeld('steerRight') ? 1 : 0);
+    let throttle = this.raceHeld('accelerate') ? 1 : 0;
+    let brake = this.raceHeld('brake') ? 1 : 0;
+    let analog = false;
+    const p = this.pad();
+    if (p) {
+      const sx = dz(p.axes[0] ?? 0);
+      if (sx) {
+        steer = -sx;
+        analog = true;
+      }
+      const tv = (a: RaceAction) => {
+        const i = this.racePad(a);
+        return i === null ? 0 : (p.buttons[i]?.value ?? 0);
+      };
+      throttle = Math.max(throttle, tv('accelerate'));
+      brake = Math.max(brake, tv('brake'));
+    }
+    if (this.touchOK && raceTouch.active) {
+      if (raceTouch.steer) {
+        steer = raceTouch.steer;
+        analog = true;
+      }
+      throttle = Math.max(throttle, raceTouch.throttle);
+      brake = Math.max(brake, raceTouch.brake);
+    }
+    return { steer: Math.max(-1, Math.min(1, steer)), throttle, brake, analog };
+  }
+
+  /** Clears racing presses after a tick has seen them (touch presses included). */
+  consumeRace() {
+    this.consume();
+    raceTouch.pressed.clear();
   }
 
   rumble(strength: number, ms: number) {

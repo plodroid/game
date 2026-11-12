@@ -1,6 +1,6 @@
 # CHROMASHIFT
 
-A colourful third-person team paint shooter that runs in the browser. Two teams of four race to cover the arena in their colour: shoot, roll and lob paint, dive into your own colour to swim and refill, climb painted walls, and splat rivals. It plays fully offline against bots, and online with friends: anyone can host a game from their browser and friends join with a code. No downloads, no server, no port forwarding.
+A colourful third-person team paint shooter that runs in the browser, with a second game inside it: **VELOCITY**, arcade racing for up to six cars. Two teams of four race to cover the arena in their colour: shoot, roll and lob paint, dive into your own colour to swim and refill, climb painted walls, and splat rivals. It plays fully offline against bots, and online with friends: anyone can host a game from their browser and friends join with a code. No downloads, no server, no port forwarding.
 
 **Play:** https://plodroid.github.io/game/ (installable as an app)
 
@@ -31,6 +31,31 @@ A colourful third-person team paint shooter that runs in the browser. Two teams 
 - **Settings**: Very Low to Ultra graphics presets plus every option individually, hardware check, audio buses, key rebinding, gamepad and touch controls, camera and HUD options, and accessibility (colour-blind palettes with shape markers, text size, reduced motion, subtitles, visual audio cues, high contrast).
 - **PWA**: installable, works offline against bots, asks before updating.
 - **All assets are original and generated in code**: character and weapon models, textures, music and sound effects. Nothing is downloaded or licensed.
+
+## VELOCITY (racing)
+
+Pick the car icon at the top of **Play** (the gun icon is the paint shooter, as before). Everything else is shared: accounts, friends, coins, XP, quests, settings, codes and invites.
+
+- **Real driving.** Each car is a Rapier rigid body on four ray-cast wheels: springs and dampers, tyres whose grip is limited by how hard they're pressed into the road (one friction circle for steering, drive and brakes), weight transfer, downforce, drag, air control and per-surface grip (asphalt, dirt, grass, sand, ice, snow, metal). Hold the handbrake through a corner to drift: the car holds a slide angle you steer, the front wheels counter-steer, and letting go after a long drift pays a mini-turbo (three tiers). A boost meter fills from drifting and from slipstreaming close behind another car. Handling is one table for every car (`packages/shared/src/velocity/config.ts`), so cosmetics never change speed or grip; the owner can tune it for everyone in game.
+- **Ten tracks**, each a closed spline with heights, widths, banking and surfaces: Coastal Sprint, Neon Circuit (dusk), Prism Canyon, Skyline Rush (a figure of eight over a bridge), Dye Docks, Bloom Raceway, Core Raceway (tunnels), Arcade Velocity (a banked helix that crosses over itself), Frozen Apex (ice) and Sunset Drift (golden hour). Every track has a start line, six grid slots, checkpoints, respawns, walls, verges, a racing line and speed profile for the bots, and a minimap, all generated from the track itself. Tests check each one closes, fits six cars and never overlaps itself except over a bridge.
+- **Races** of 1–10 laps with six cars at most (people and bots): countdown, checkpoints in order, laps, live positions, wrong-way warnings, respawns (button, upside down, off the track, stuck), a 30-second finish window and results with lap times, the fastest lap, overtakes and rewards. **Classic** is pure racing; **Arcade** adds pickup boxes (Turbo Burst, Prism Shield, Paint Slick, Shockwave, Repair Burst, Slipstream Charge, Decoy Beacon), with odds that help cars at the back.
+- **Damage** from real contacts: each hit's force and contact point dent the panels near it and wear 18 parts (bumpers, panels, bonnet, engine, steering, suspension, four wheels, four lights). Dents, scratches, grime, cracked glass and dead lights build up on the car; with full damage a few parts gently affect power, steering, grip or brakes. The HUD shows a schematic of the car with each part coloured from healthy to critical. Cars are always fixed after the race.
+- **Bots** on the four existing difficulties drive the same physics with the same controls: they follow the racing line, brake for what's ahead, drift open corners, pull out to pass, back out of walls, use items, and never get extra speed.
+- **Online**: host a race from Play → VELOCITY → Host a race (or switch a lobby to VELOCITY), friends join with the usual code or link. The host (a browser, or the dedicated server) runs the race; guests predict their own car and see the others smoothly interpolated.
+- **The Garage**: a 3D showroom (turntable, LED walls, studio reflections, optional driver) with an orbit camera that moves to each part as you browse. 6 bodies, 32 colours, 56 finishes (gloss, matte, metallic, pearl, candy, chrome, brushed, carbon, holographic and patterns), 24 wheel designs, rim finishes, tyres, bumpers, diffusers, bonnets, spoilers, roofs, mirrors, glass tints, head and tail lights, liveries, plates, underglow, exhausts, horns, engine sounds, wheel glow, trails, boost and drift effects, accessories, victory celebrations and badges. Items cost the same coins as the locker; a few are earned by racing. Three saved builds per account.
+- **Track editor**: Maps → New map → Racing track. Drag points, set height, width, banking and surface per point, mark tunnels, pickups and obstacles; it checks the track as you go, and Test drive puts you on it. Keep three, share by copy and paste; the owner can publish tracks for everyone.
+- **Controls**: Settings → Controls has the gun (CHROMASHIFT) and the car (VELOCITY): racing keys and controller buttons are a separate set, with analog steering and triggers. Touch screens get a steering pad and pedals.
+- **Stats**: the profile shows races, wins, podiums, rates, distance, laps, drift time and more, with best laps and race times per track and records per car.
+
+| VELOCITY action | Keyboard | Controller |
+| --- | --- | --- |
+| Accelerate / brake (reverse when stopped) | W / S | RT / LT (R2 / L2) |
+| Steer | A / D | Left stick |
+| Handbrake (drift) | Space | A (✕) |
+| Boost | Left Shift | X (□) |
+| Use item | E | RB (R1) |
+| Change camera / look behind | C / Q | Y (△) / R3 |
+| Reset car / horn | R / H | View (Share) / L3 |
 
 ## Technology
 
@@ -152,7 +177,7 @@ What's stored: passwords are handled only by Firebase Authentication. Firestore 
 
 [.github/workflows/deploy.yml](.github/workflows/deploy.yml) runs on every push to `main`. It installs dependencies, typechecks, lints, runs the unit, simulation and multiplayer tests, builds the client, runs the end-to-end tests, then uploads `apps/client/dist` and deploys it with the Pages Actions flow. The repository's Pages source must be **GitHub Actions** (Settings → Pages).
 
-**Test versions.** A push never reaches players by itself. The workflow builds the pushed commit as the owner's test version at `/game/beta/` and rebuilds the released commit at `/game/`. Signed in as the owner, the live game shows a lightning button by the notifications when there is a test version; it opens the test version, which has a yellow bar with **Update for everyone** (and **Back to live**). That button records the commit in the Firestore document `config/release` (owner-only writes): from then on every player who opens the game is sent to it, and the next deploy builds it at `/game/` again. Anyone else who opens `/game/beta/` is sent back to the live game. The code is in [apps/client/src/release.tsx](apps/client/src/release.tsx).
+**Test versions.** A push never reaches players by itself, unless its commit message contains `[release]`, which releases it straight to everyone. The workflow builds the pushed commit as the owner's test version at `/game/beta/` and rebuilds the released commit at `/game/`. Signed in as the owner, the live game shows a lightning button by the notifications when there is a test version; it opens the test version, which has a yellow bar with **Update for everyone** (and **Back to live**). That button records the commit in the Firestore document `config/release` (owner-only writes): from then on every player who opens the game is sent to it, and the next deploy builds it at `/game/` again. Anyone else who opens `/game/beta/` is sent back to the live game. The code is in [apps/client/src/release.tsx](apps/client/src/release.tsx).
 
 Optional repository **Variables** (Settings → Secrets and variables → Actions → Variables): `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_DEFAULT_SERVER_URL`. All are public values (the API key may be stored as a Secret instead; the workflow accepts either). Never put a service account in the client build.
 

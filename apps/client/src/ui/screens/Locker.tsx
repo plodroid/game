@@ -358,6 +358,19 @@ export default function Locker() {
               ))}
             </div>
           ))}
+          <div className="shelf__group">
+            <span className="shelf__label">Cars</span>
+            <button
+              className="tab"
+              onClick={() => {
+                audio.play('click');
+                useUi.getState().go('garage');
+              }}
+              title="VELOCITY cars: bodies, paint, wheels, parts and effects in the 3D garage"
+            >
+              <Icon.car size={14} /> Garage
+            </button>
+          </div>
         </nav>
 
         {tab !== 'special' && tab !== 'skin' && (
