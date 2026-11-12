@@ -61,6 +61,14 @@ export interface MapTheme {
   ground: number;
   materials: Record<MaterialId, number>;
   indoor?: boolean;
+  /** Summer look (visual only). Cloud cover, 0 … 1. */
+  clouds?: number;
+  /** Haze in the air: about 1.6 crisp and deep blue … 6 milky. */
+  haze?: number;
+  /** Sea level; null when no sea is in view (indoor). Default: just under the arena floor. */
+  sea?: number | null;
+  /** Radius of a beach island under the arena, for maps that stand high above the sea. */
+  land?: number;
 }
 
 export interface MapDef {

@@ -2,15 +2,22 @@ import * as THREE from 'three';
 import { Animator, type AnimState } from '../characters/animator';
 import { buildCharacter, type Rig } from '../characters/model';
 import { teamColors } from '../rendering/palette';
+import { menuBeach, type Beach } from '../rendering/beach';
+import { SHADOW_LAYER } from '../characters/compact';
+import { Ocean } from '../rendering/ocean';
 import { Post } from '../rendering/post';
+import { SummerSky, visualTier } from '../rendering/sky';
 import { prefersReducedMotion, useSettings, type GraphicsSettings } from '../settings/settings';
 import { useProfile } from '../state/profile';
 import { useUi, type Screen } from '../state/ui';
 import { engine, type View } from './engine';
 import { WEAPONS } from '@chromashift/shared';
 
-/** A dusky studio sweep, tinted towards the paint of the menu section on screen. */
-const STUDIO = 0x3a3346;
+const drawSize = new THREE.Vector2();
+
+/** The menu beach: sea level, and the sand the plinth stands on. */
+const SEA = -0.95;
+const FLOOR = -0.34;
 const PAINT: Partial<Record<Screen, number>> = {
   play: 0xff4d94,
   custom: 0xff4d94,
@@ -25,8 +32,9 @@ const PAINT: Partial<Record<Screen, number>> = {
 };
 
 /**
- * Live 3D backdrop for the menus: the player's character on a paint-splattered plinth in a photo
- * studio, in front of a seamless paper sweep (floor, cove and wall in one curve, so no horizon).
+ * Live 3D backdrop for the menus: the player's character on a paint-splattered plinth on a beach
+ * on a hot summer day: real sky and clouds, the sea, palms and the sun casting their shadow on the
+ * sand. A rim light takes the paint of the menu section on screen.
  */
 export class MenuView implements View {
   readonly kind = 'menu';
@@ -43,18 +51,32 @@ export class MenuView implements View {
   private outcome: 'none' | 'win' | 'lose' = 'none';
   private unsub: () => void;
   private unsubScreen: () => void;
-  private paper: THREE.MeshStandardMaterial;
-  private tint = new THREE.Color(STUDIO);
+  private sky: SummerSky;
+  private ocean: Ocean;
+  private beach: Beach;
+  private envMap: THREE.Texture | null = null;
   private rim = new THREE.DirectionalLight(0xffffff, 2.2);
   private rimTint = new THREE.Color(0xffffff);
 
   constructor() {
     const colors = teamColors();
     const g = useSettings.getState().graphics;
-    this.paper = new THREE.MeshStandardMaterial({ color: STUDIO, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
-    this.scene.add(new THREE.Mesh(sweep(60), this.paper));
-    this.scene.background = this.paper.color;
-    this.scene.fog = new THREE.Fog(STUDIO, 16, 44);
+    const tier = visualTier(g);
+    const lambert = g.paintQuality === 0;
+    // The sun is behind the camera and to the right, so it lights the character's face and the
+    // clouds out to sea; the sky behind them is the deep blue away from the sun.
+    this.sky = new SummerSky(engine.renderer, { sunDir: new THREE.Vector3(0.62, 0.66, 0.42).normalize(), turbidity: 2, clouds: 0.4, seed: 3.7 }, tier, 1.6);
+    this.scene.add(this.sky.mesh);
+    this.scene.fog = new THREE.FogExp2(this.sky.light.haze.clone(), 0.0062);
+    this.beach = menuBeach({ tier, lambert, seaLevel: SEA, floor: FLOOR });
+    this.scene.add(this.beach.group);
+    this.ocean = new Ocean(this.sky, { tier, level: SEA, x: 0, z: -40, far: 200, shores: this.beach.shores });
+    this.scene.add(this.ocean.mesh);
+    if (g.reflections && !lambert) {
+      this.envMap = this.sky.environment();
+      this.scene.environment = this.envMap;
+      this.scene.environmentIntensity = 0.85;
+    }
     this.setTint(useUi.getState().screen, true);
     this.unsubScreen = useUi.subscribe((st, prev) => {
       if (st.tryOn !== prev.tryOn) {
@@ -68,25 +90,45 @@ export class MenuView implements View {
       if (prev.screen === 'results') this.outcome = 'none';
     });
 
-    // Studio light on a dark set: a warm key on the character, a cool fill, and a rim from
-    // behind in the section's paint so the silhouette stands off the backdrop.
-    this.scene.add(new THREE.HemisphereLight(0xe8e0ff, 0x2a2433, 1.15));
-    const key = new THREE.DirectionalLight(0xfff4e8, 2.8);
-    key.position.set(4, 7, 6);
-    const fill = new THREE.DirectionalLight(0xc8d6ff, 0.7);
-    fill.position.set(-6, 3, 4);
+    // Key: the sun, casting the character's shadow on the sand. Fill: blue sky above, warm sand below.
+    // Rim: from behind, in the section's paint, so the silhouette stands off the sea.
+    const skyTint = this.sky.light.skyAmbient.clone();
+    skyTint.multiplyScalar(1 / Math.max(skyTint.r, skyTint.g, skyTint.b));
+    this.scene.add(new THREE.HemisphereLight(skyTint, 0xe2c9a0, this.envMap ? 0.65 : 1.4));
+    const key = new THREE.DirectionalLight(this.sky.light.sunColor, 3.1);
+    key.position.copy(this.sky.look.sunDir).multiplyScalar(14);
+    if (g.shadowQuality > 0) {
+      key.castShadow = true;
+      key.shadow.mapSize.set(1024, 1024);
+      const sc = key.shadow.camera;
+      sc.left = sc.bottom = -6;
+      sc.right = sc.top = 6;
+      sc.near = 1;
+      sc.far = 40;
+      sc.layers.enable(SHADOW_LAYER);
+      key.shadow.bias = -0.0006;
+      key.shadow.normalBias = 0.02;
+      key.shadow.radius = 2.5;
+    }
+    this.rim.intensity = 1.6;
     this.rim.position.set(-2, 5, -8);
-    this.scene.add(key, fill, this.rim);
+    this.scene.add(key, this.rim);
 
     const top = new THREE.MeshStandardMaterial({ map: platformTexture(colors, true), roughness: 0.45, metalness: 0.05 });
-    const side = new THREE.MeshStandardMaterial({ color: 0x1d1823, roughness: 0.7 });
+    const side = new THREE.MeshStandardMaterial({ color: 0xb48a5e, roughness: 0.85 });
     const platform = new THREE.Mesh(new THREE.CylinderGeometry(1.75, 1.75, 0.34, 64), [side, top, side]);
     platform.position.y = -0.17;
+    platform.castShadow = platform.receiveShadow = g.shadowQuality > 0;
     this.scene.add(platform);
     const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.55, 24), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.32, depthWrite: false }));
     shadow.rotation.x = -Math.PI / 2;
     shadow.position.y = 0.011;
-    this.scene.add(shadow);
+    // A soft contact shadow when the sun casts no real one.
+    if (g.shadowQuality === 0) this.scene.add(shadow);
+    else {
+      shadow.geometry.dispose();
+      (shadow.material as THREE.Material).dispose();
+    }
     // Paint spilled on the studio floor around the plinth.
     const spill = new THREE.Mesh(
       new THREE.PlaneGeometry(12, 12),
@@ -107,19 +149,12 @@ export class MenuView implements View {
     this.resize();
   }
 
-  /** The paper takes a little of the section's paint; the home screen keeps it neutral. */
+  /** The rim light takes the section's paint; the home screen keeps it white. */
   private setTint(screen: Screen, now = false) {
     const paint = PAINT[screen];
-    this.tint.set(STUDIO);
     this.rimTint.set(0xffffff);
-    if (paint !== undefined) {
-      this.tint.lerp(new THREE.Color(paint), 0.16);
-      this.rimTint.lerp(new THREE.Color(paint), 0.7);
-    }
-    if (now) {
-      this.paper.color.copy(this.tint);
-      this.rim.color.copy(this.rimTint);
-    }
+    if (paint !== undefined) this.rimTint.lerp(new THREE.Color(paint), 0.7);
+    if (now) this.rim.color.copy(this.rimTint);
   }
 
   private onPointer = (e: PointerEvent) => {
@@ -176,10 +211,10 @@ export class MenuView implements View {
       outcome: this.outcome, hiddenBlob: false, wallYaw: 0,
     };
     this.anim!.update(dt, st);
-    // Ease the studio paper towards the section's tint.
-    this.paper.color.lerp(this.tint, reduced ? 1 : 1 - Math.exp(-5 * dt));
+    // Ease the rim light towards the section's paint; the clouds drift and the sea moves.
     this.rim.color.lerp(this.rimTint, reduced ? 1 : 1 - Math.exp(-5 * dt));
-    (this.scene.fog as THREE.Fog).color.copy(this.paper.color);
+    this.sky.update(reduced ? 0 : dt);
+    this.ocean.update(dt);
     // Wide screens put the character right of the menu sheet; tall ones above the bottom sheet.
     const aspect = innerWidth / innerHeight;
     const wide = aspect > 1.1, tall = aspect < 0.8;
@@ -189,6 +224,7 @@ export class MenuView implements View {
   }
 
   render(dt: number) {
+    this.sky.fitTo(this.camera, engine.renderer.getDrawingBufferSize(drawSize).y);
     this.post.render(dt);
   }
 
@@ -216,6 +252,11 @@ export class MenuView implements View {
     this.unsubScreen();
     this.rig?.dispose();
     this.post.dispose();
+    this.beach.dispose();
+    this.ocean.dispose();
+    this.sky.dispose();
+    this.envMap?.dispose();
+    this.scene.environment = null;
     this.scene.traverse((o) => {
       const m = o as THREE.Mesh;
       m.geometry?.dispose();
@@ -264,25 +305,4 @@ function platformTexture(colors: [THREE.Color, THREE.Color], solid: boolean) {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
-}
-
-/** A seamless paper sweep: floor, a curved cove and the wall, as one ribbon `width` metres wide. */
-function sweep(width: number) {
-  // The floor is level with the plinth's base.
-  const floor = -0.34;
-  const profile: [number, number][] = [];
-  for (let z = 14; z > -6; z -= 2) profile.push([z, floor]);
-  for (let i = 0; i <= 18; i++) {
-    const a = -Math.PI / 2 - (i / 18) * (Math.PI / 2);
-    profile.push([-6 + Math.cos(a) * 4, floor + 4 + Math.sin(a) * 4]);
-  }
-  for (let y = 6; y <= 30; y += 6) profile.push([-10, y]);
-  const pos: number[] = [], idx: number[] = [];
-  for (const [z, y] of profile) pos.push(-width / 2, y, z, width / 2, y, z);
-  for (let k = 0; k < profile.length - 1; k++) idx.push(k * 2, k * 2 + 1, k * 2 + 2, k * 2 + 1, k * 2 + 3, k * 2 + 2);
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setIndex(idx);
-  g.computeVertexNormals();
-  return g;
 }

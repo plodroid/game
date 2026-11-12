@@ -57,8 +57,9 @@ class Engine {
       preserveDrawingBuffer: false,
     });
     r.outputColorSpace = THREE.SRGBColorSpace;
-    r.toneMapping = THREE.NeutralToneMapping;
-    r.toneMappingExposure = 1.05;
+    // Filmic tone mapping: bright summer highlights roll off softly instead of clipping.
+    r.toneMapping = THREE.ACESFilmicToneMapping;
+    r.toneMappingExposure = 1.0;
     r.shadowMap.type = THREE.PCFShadowMap;
     r.domElement.className = 'stage-canvas';
     stage.appendChild(r.domElement);

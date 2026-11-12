@@ -6,7 +6,7 @@ import type { MapDef } from './types';
  * mirrored through the centre for team 1, so both sides get the same routes and sightlines.
  */
 
-// A working harbour at dusk: container stacks, a raised boardwalk and catwalks over the water.
+// A sunny working harbour: container stacks, a raised boardwalk and catwalks over the water.
 const docks = new MapBuilder()
   .box(0, 0, 40, 70, -1, 0, { mat: 'floor', mirror: false })
   .box(0, -31, 14, 8, 0, 2, { mat: 'base' })
@@ -43,17 +43,20 @@ const docks = new MapBuilder()
 export const DOCKS: MapDef = {
   id: 'docks',
   name: 'Dye Docks',
-  description: 'A harbour at dusk. Container stacks, a raised boardwalk and long falls into the bay.',
+  description: 'A sunny harbour. Container stacks, a raised boardwalk and long falls into the bay.',
   theme: {
-    skyTop: 0x1f3f6a,
-    skyHorizon: 0xffb07a,
-    skyBottom: 0x22314a,
-    fog: 0x9ab0c4,
-    sunColor: 0xffe2c2,
-    sunIntensity: 2.4,
-    sunDir: [0.55, 0.45, -0.7],
-    ambient: 0x8ca0c8,
-    ground: 0x2a4a6a,
+    skyTop: 0x2f7fe0,
+    skyHorizon: 0xd5e9fb,
+    skyBottom: 0xb9d6ea,
+    fog: 0xcfe2f2,
+    sunColor: 0xfff2dc,
+    sunIntensity: 3.2,
+    sunDir: [0.58, 0.74, -0.35],
+    ambient: 0x9cc7ff,
+    ground: 0x9cc4cf,
+    clouds: 0.36,
+    haze: 2.3,
+    sea: -1.45,
     materials: { floor: 0x9a7a5c, wall: 0x6f7d8c, metal: 0x5c6773, trim: 0x2c3440, glass: 0x9fd8ff, base: 0x7d8899, crate: 0xd9653b, island: 0x6aa36f, invisible: 0 },
   },
   ...docks,
@@ -101,15 +104,18 @@ export const GARDENS: MapDef = {
   name: 'Bloom Gardens',
   description: 'Spring gardens with hedge lanes, flower terraces and a gazebo to fight over.',
   theme: {
-    skyTop: 0x3f95da,
-    skyHorizon: 0xfff1c9,
-    skyBottom: 0xd6efe0,
-    fog: 0xd9efe0,
-    sunColor: 0xfff6e0,
-    sunIntensity: 2.9,
-    sunDir: [-0.4, 0.75, -0.5],
-    ambient: 0xa9d0c0,
-    ground: 0x6aa35a,
+    skyTop: 0x2f7fe0,
+    skyHorizon: 0xd5e9fb,
+    skyBottom: 0xb9d6ea,
+    fog: 0xcfe2f2,
+    sunColor: 0xfff4e0,
+    sunIntensity: 3.2,
+    sunDir: [-0.45, 0.8, -0.38],
+    ambient: 0xa6cff2,
+    ground: 0x8cb86a,
+    clouds: 0.4,
+    haze: 2,
+    sea: -1.5,
     materials: { floor: 0xe8dcc0, wall: 0x3f8f4a, metal: 0x9aa5b1, trim: 0x55603f, glass: 0x9fd8ff, base: 0xb8a47a, crate: 0xc98f5b, island: 0x7cc56a, invisible: 0 },
   },
   ...gardens,
@@ -152,17 +158,20 @@ const canyon = new MapBuilder()
 export const CANYON: MapDef = {
   id: 'canyon',
   name: 'Prism Canyon',
-  description: 'Sunset terraces of red rock, a central arch and crystals that shrug off paint.',
+  description: 'Sun-scorched terraces of red rock by the sea, a central arch and crystals that shrug off paint.',
   theme: {
-    skyTop: 0x5a3a96,
-    skyHorizon: 0xff9a5c,
-    skyBottom: 0x6a3a4a,
-    fog: 0xe7a07a,
-    sunColor: 0xffe0b8,
-    sunIntensity: 2.7,
-    sunDir: [0.35, 0.5, -0.8],
-    ambient: 0xc59a90,
-    ground: 0x9a5a3a,
+    skyTop: 0x2f7fe0,
+    skyHorizon: 0xdfeaf4,
+    skyBottom: 0xc9d8e2,
+    fog: 0xd8e2ea,
+    sunColor: 0xffefd2,
+    sunIntensity: 3.4,
+    sunDir: [0.42, 0.78, -0.46],
+    ambient: 0xa9c8ef,
+    ground: 0xd9a47a,
+    clouds: 0.28,
+    haze: 2.6,
+    sea: -1.6,
     materials: { floor: 0xe0b07a, wall: 0xb5653e, metal: 0x7a6a8c, trim: 0x5b3a2e, glass: 0x9fe8ff, base: 0xc98a5a, crate: 0x8f6a4a, island: 0xc2a35f, invisible: 0 },
   },
   ...canyon,
@@ -171,7 +180,7 @@ export const CANYON: MapDef = {
   extent: { minX: -20, maxX: 20, minZ: -36, maxZ: 36, maxY: 8 },
 };
 
-// A rooftop arcade at night: neon cabinets for cover, a stage, and balconies.
+// A rooftop arcade above the beach: neon cabinets for cover, a stage, and balconies.
 const arcade = new MapBuilder()
   .box(0, 0, 36, 64, -1, 0, { mat: 'floor', mirror: false })
   .box(0, -28.5, 12, 7, 0, 1.5, { mat: 'base' })
@@ -205,18 +214,22 @@ const arcade = new MapBuilder()
 export const ARCADE: MapDef = {
   id: 'arcade',
   name: 'Neon Arcade',
-  description: 'A rooftop arcade after dark: cabinet cover, a centre stage and high balconies.',
+  description: 'A rooftop arcade above the beach: cabinet cover, a centre stage and high balconies.',
   theme: {
-    skyTop: 0x0b0a2a,
-    skyHorizon: 0x5b2a86,
-    skyBottom: 0x120c24,
-    fog: 0x2a1a4a,
-    sunColor: 0xc9b8ff,
-    sunIntensity: 1.6,
-    sunDir: [-0.3, 0.8, -0.5],
-    ambient: 0x7a6ad8,
-    ground: 0x1c1630,
-    materials: { floor: 0x4a4466, wall: 0x4a4366, metal: 0x5c5a78, trim: 0xff4d94, glass: 0x6ff3ff, base: 0x3a3456, crate: 0x2fd3d0, island: 0x35305a, invisible: 0 },
+    skyTop: 0x2f7fe0,
+    skyHorizon: 0xd5e9fb,
+    skyBottom: 0xb9d6ea,
+    fog: 0xcfe2f2,
+    sunColor: 0xfff2dc,
+    sunIntensity: 3.2,
+    sunDir: [-0.38, 0.8, -0.46],
+    ambient: 0x9cc7ff,
+    ground: 0xd8c8b0,
+    clouds: 0.36,
+    haze: 2.1,
+    sea: -48,
+    land: 140,
+    materials: { floor: 0xd9d1c4, wall: 0x7fc4d8, metal: 0x9aa0b8, trim: 0xff4d94, glass: 0x6ff3ff, base: 0xf2c27a, crate: 0x2fd3d0, island: 0x7cc56a, invisible: 0 },
   },
   ...arcade,
   spawns: spawnRow(1.5, -28.5, [-3, -1, 1, 3]),

@@ -203,3 +203,61 @@ export function disposeTextures() {
   for (const t of cache.values()) t.dispose();
   cache.clear();
 }
+
+/** Daytime facade for background towers: sunlit concrete frames around blue-green glass. */
+export function facadeTexture(seed: number): THREE.Texture {
+  const key = `facade:${seed}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const n = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = n;
+  const ctx = c.getContext('2d')!;
+  const warm = hash(seed, 1, 3) > 0.5;
+  ctx.fillStyle = warm ? '#efe6d6' : '#e3e8ec';
+  ctx.fillRect(0, 0, n, n);
+  for (let y = 0; y < 16; y++)
+    for (let x = 0; x < 8; x++) {
+      const r = hash(x, y, seed);
+      // Glass, catching more or less of the sky; now and then a blind drawn against the sun.
+      const l = 38 + Math.floor(r * 22);
+      ctx.fillStyle = r > 0.9 ? '#d8d2c6' : `hsl(${warm ? 195 : 205}, 38%, ${l}%)`;
+      ctx.fillRect(x * 16 + 2, y * 8 + 1, 12, 6);
+      ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      ctx.fillRect(x * 16 + 2, y * 8 + 1, 12, 1);
+    }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  cache.set(key, tex);
+  return tex;
+}
+
+/** A soft cumulus puff for cloud sprites: sunlit on top, shaded underneath. */
+export function puffTexture(): THREE.Texture {
+  const hit = cache.get('puff');
+  if (hit) return hit;
+  const n = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = n;
+  const ctx = c.getContext('2d')!;
+  const img = ctx.createImageData(n, n);
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++) {
+      const dx = x / n - 0.5, dy = y / n - 0.5;
+      const d = Math.hypot(dx, dy) * 2;
+      const edge = fbm(x / n, y / n, 4, 11) * 0.5;
+      const a = Math.max(0, Math.min(1, (1 - d - edge * 0.55 + 0.18) * 2.2));
+      const shade = 0.72 + (0.5 - y / n) * 0.5;
+      const i = (y * n + x) * 4;
+      img.data[i] = Math.round(255 * Math.min(1, shade + 0.06));
+      img.data[i + 1] = Math.round(255 * Math.min(1, shade + 0.08));
+      img.data[i + 2] = Math.round(255 * Math.min(1, shade + 0.14));
+      img.data[i + 3] = Math.round(255 * a);
+    }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  cache.set('puff', tex);
+  return tex;
+}

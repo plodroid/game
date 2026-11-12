@@ -25,6 +25,7 @@ import { audio } from '../audio/audio';
 import { Animator, type AnimState } from '../characters/animator';
 import { buildCharacter, type Rig } from '../characters/model';
 import { buildEnvironment, type Environment } from '../rendering/environment';
+import { visualTier } from '../rendering/sky';
 import { Effects } from '../rendering/effects';
 import { buildMapMeshes } from '../rendering/mapMesh';
 import { PaintAtlas, type PaintUniforms } from '../rendering/paintAtlas';
@@ -155,6 +156,7 @@ export class MatchView implements View {
       drawDistance: g.drawDistance,
       reflections: g.reflections,
       lambert: shading === 0,
+      tier: visualTier(g),
     });
     this.mapGroup = buildMapMeshes(source.world, map.theme, this.uniforms, {
       textureQuality: g.textureQuality,
@@ -361,6 +363,7 @@ export class MatchView implements View {
     this.fx.setProjectiles(src.projectiles());
     this.fx.syncEffects(src.effects());
     this.fx.update(dt);
+    this.env.update(dt);
 
     for (const seat of this.seats) this.follow(seat, dt);
     const me = this.me();
@@ -929,6 +932,7 @@ export class MatchView implements View {
     if (q > 0 && this.frame % (q >= 3 ? 1 : q === 2 ? 2 : 3) === 0) r.shadowMap.needsUpdate = true;
     this.atlas.flush();
     if (this.seats.length === 1) {
+      this.waterline(this.seats[0]);
       this.seats[0].post.render(dt);
       return;
     }
@@ -940,10 +944,18 @@ export class MatchView implements View {
     this.seats.forEach((seat, i) => {
       r.setViewport(i * w, 0, w, size.y);
       r.setScissor(i * w, 0, w, size.y);
+      this.waterline(seat);
       seat.post.render(dt);
     });
     r.setScissorTest(false);
     r.setViewport(0, 0, size.x, size.y);
+  }
+
+  /** Below the sea's surface the air becomes water (per camera, so split screen can differ). */
+  private waterline(seat: Seat) {
+    this.env.sky.fitTo(seat.cam.camera, engine.renderer.getDrawingBufferSize(tmpSize).y);
+    const sea = this.env.seaLevel;
+    this.env.underwater(sea !== null && seat.cam.camera.position.y < sea);
   }
 
   resize() {
@@ -954,7 +966,7 @@ export class MatchView implements View {
   applyGraphics(g: GraphicsSettings) {
     const r = engine.renderer;
     this.buildPosts(g);
-    this.scene.fog = new THREE.Fog(this.source.world.map.theme.fog, g.drawDistance * 0.3, g.drawDistance);
+    this.env.setDrawDistance(g.drawDistance);
     for (const s of this.seats) {
       s.cam.camera.far = Math.max(200, g.drawDistance * 1.6);
       s.cam.camera.updateProjectionMatrix();
