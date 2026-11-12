@@ -3127,3 +3127,35 @@ textarea {
   width: 100%;
   min-width: 0;
 }
+
+/* The owner's test version: a bar along the bottom saying so, with the release button. */
+.test-bar {
+  position: fixed;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 16px);
+  padding: 6px 6px 6px 14px;
+  border-radius: 999px;
+  background: #ffcf3a;
+  color: #1a1020;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+.test-bar b {
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.test-bar__note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.test-bar .btn--ghost {
+  color: inherit;
+  border-color: rgba(26, 16, 32, 0.35);
+}

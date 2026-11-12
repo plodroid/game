@@ -5,6 +5,7 @@ import { isOwner } from '../auth/admin';
 import type { Note } from '../auth/social';
 import { acceptInvite, joinFromInvite, social, useSocial } from '../state/social';
 import { useUi } from '../state/ui';
+import { TestUpdateButton } from '../release';
 import { AdminAccounts } from './AdminAccounts';
 import { Avatar } from './Avatar';
 import { Icon } from './icons';
@@ -113,6 +114,7 @@ export function SocialBar() {
           <Icon.crown />
         </button>
       )}
+      {me && <TestUpdateButton />}
       {admin && <AdminAccounts onClose={() => setAdmin(false)} />}
       {open && (
         <div className="notes" role="dialog" aria-label="Notifications">

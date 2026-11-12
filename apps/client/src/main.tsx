@@ -21,7 +21,8 @@ if (import.meta.env.DEV)
   );
 
 // Service worker: offline caching plus an explicit, user-confirmed update.
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+// (Not on the owner's test version: its pages go straight to the network.)
+if ('serviceWorker' in navigator && import.meta.env.PROD && import.meta.env.VITE_CHANNEL !== 'test') {
   void import('virtual:pwa-register').then(({ registerSW }) => {
     const update = registerSW({
       onNeedRefresh() {

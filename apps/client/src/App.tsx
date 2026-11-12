@@ -12,6 +12,7 @@ import { Home } from './ui/screens/Home';
 import { Custom, Play } from './ui/screens/Play';
 import { useMenuGamepad } from './ui/useMenuGamepad';
 import { SocialBar } from './ui/SocialBar';
+import { checkRelease, TestVersionBar } from './release';
 import { CallUi } from './ui/CallUi';
 import { useSocial } from './state/social';
 import { useSplit } from './game/split';
@@ -66,6 +67,7 @@ export function App({ webgl2 }: { webgl2: boolean }) {
     }
     void detectServer();
     void accounts();
+    void checkRelease();
     const params = new URLSearchParams(location.search);
     const join = params.get('join');
     if (join) {
@@ -138,6 +140,7 @@ export function App({ webgl2 }: { webgl2: boolean }) {
       {!gated && screen !== 'match' && !splitMenu && <SocialBar />}
       {!gated && <SplitPrompt />}
       <Viewing />
+      {!gated && screen !== 'match' && <TestVersionBar />}
       <Toasts />
       {!gated && <CallUi />}
       <Reconnecting />

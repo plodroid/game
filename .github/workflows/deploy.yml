@@ -1,4 +1,6 @@
 # Builds, checks and publishes the web client to GitHub Pages (https://plodroid.github.io/game/).
+# Each push becomes the owner's test version (/game/beta/); players get it only once the owner
+# presses "Update for everyone" in it (see apps/client/src/release.tsx).
 # Only the static frontend is deployed here — the Node.js multiplayer server is hosted separately.
 name: Deploy to GitHub Pages
 
@@ -21,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the released commit may be an older one
 
       - uses: actions/setup-node@v7
         with:
@@ -49,20 +53,51 @@ jobs:
           npx playwright install --with-deps chromium
           npm run test:e2e
 
-      - name: Build production client
-        run: npm run build
+      # Public Firebase web config and default server, from repository Variables, for the real builds.
+      # The web API key may be stored as a Secret or a Variable; it ships in the bundle either way.
+      - name: Use the production settings
+        run: |
+          {
+            echo "VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY || vars.VITE_FIREBASE_API_KEY }}"
+            echo "VITE_FIREBASE_AUTH_DOMAIN=${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}"
+            echo "VITE_FIREBASE_PROJECT_ID=${{ vars.VITE_FIREBASE_PROJECT_ID }}"
+            echo "VITE_FIREBASE_APP_ID=${{ vars.VITE_FIREBASE_APP_ID }}"
+            echo "VITE_FIREBASE_MESSAGING_SENDER_ID=${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}"
+            echo "VITE_DEFAULT_SERVER_URL=${{ vars.VITE_DEFAULT_SERVER_URL }}"
+            echo "VITE_TURN_URLS=${{ vars.VITE_TURN_URLS }}"
+            echo "VITE_TURN_USERNAME=${{ vars.VITE_TURN_USERNAME }}"
+            echo "VITE_TURN_CREDENTIAL=${{ secrets.VITE_TURN_CREDENTIAL || vars.VITE_TURN_CREDENTIAL }}"
+          } >> "$GITHUB_ENV"
+
+      # This push becomes the owner's test version at /game/beta/. Players keep the released one.
+      - name: Build the test version
+        run: |
+          note=$(git log -1 --format=%s)
+          VITE_BUILD_NOTE="$note" npm run build
+          mv apps/client/dist "$RUNNER_TEMP/test"
+          jq -n --arg sha "$GITHUB_SHA" --arg note "$note" '{sha: $sha, note: $note}' > "$RUNNER_TEMP/test/version.json"
         env:
-          # Public Firebase web config and default server, from repository Variables.
-          # The web API key may be stored as a Secret or a Variable; it ships in the bundle either way.
-          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY || vars.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_DEFAULT_SERVER_URL: ${{ vars.VITE_DEFAULT_SERVER_URL }}
-          VITE_TURN_URLS: ${{ vars.VITE_TURN_URLS }}
-          VITE_TURN_USERNAME: ${{ vars.VITE_TURN_USERNAME }}
-          VITE_TURN_CREDENTIAL: ${{ secrets.VITE_TURN_CREDENTIAL || vars.VITE_TURN_CREDENTIAL }}
+          BASE_PATH: /game/beta/
+          VITE_CHANNEL: test
+          VITE_BUILD_SHA: ${{ github.sha }}
+
+      # The released commit: what the owner last chose with "Update for everyone" (config/release in
+      # Firestore), else what the site already serves, else (the very first time) this push.
+      - name: Build the released version
+        run: |
+          doc=$(curl -fsS "https://firestore.googleapis.com/v1/projects/$VITE_FIREBASE_PROJECT_ID/databases/(default)/documents/config/release" || true)
+          sha=$(echo "$doc" | jq -r '.fields.json.stringValue // empty' 2>/dev/null | jq -r '.sha // empty' 2>/dev/null || true)
+          [ -n "$sha" ] || sha=$(curl -fsS https://plodroid.github.io/game/version.json | jq -r '.sha // empty' 2>/dev/null || true)
+          if [ -z "$sha" ] || ! git cat-file -e "$sha^{commit}" 2>/dev/null; then sha=$GITHUB_SHA; fi
+          echo "Released version: $sha"
+          if [ "$sha" != "$GITHUB_SHA" ]; then
+            git checkout --quiet "$sha"
+            npm ci
+          fi
+          note=$(git log -1 --format=%s)
+          VITE_BUILD_SHA="$sha" VITE_BUILD_NOTE="$note" npm run build
+          jq -n --arg sha "$sha" --arg note "$note" '{sha: $sha, note: $note}' > apps/client/dist/version.json
+          mv "$RUNNER_TEMP/test" apps/client/dist/beta
 
       - uses: actions/configure-pages@v6
 

@@ -2,8 +2,9 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// GitHub Pages serves the site from /game/. The self-hosted server mirrors that path.
-const base = '/game/';
+// GitHub Pages serves the site from /game/ (and the owner's test version from /game/beta/). The
+// self-hosted server mirrors that path.
+const base = process.env.BASE_PATH || '/game/';
 
 export default defineConfig({
   base,
@@ -40,6 +41,8 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         cleanupOutdatedCaches: true,
         navigateFallback: `${base}index.html`,
+        // The test version is a separate site under this one.
+        navigateFallbackDenylist: [/\/beta\//],
       },
     }),
   ],

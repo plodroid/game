@@ -607,6 +607,19 @@ export async function saveWeaponConfig(json: string) {
   setWeaponConfig(json);
 }
 
+/* ---------- Which version everyone plays ---------- */
+
+/** The commit the owner released to everyone (null before the first release). */
+export async function loadLiveSha(): Promise<string | null> {
+  const s = await getDoc(doc(db, 'config', 'release'));
+  return s.exists() ? ((JSON.parse(String(s.data().json)) as { sha?: string }).sha ?? null) : null;
+}
+
+/** Owner only: releases this commit to everyone. The deploy workflow reads it too. */
+export async function saveLiveSha(sha: string) {
+  await setDoc(doc(db, 'config', 'release'), { json: JSON.stringify({ sha }), updatedAt: serverTimestamp() });
+}
+
 /* ---------- The owner joining a game ---------- */
 
 /** The owner leaves a short note that they are about to join this game, so its host lets them in (full or not). */
