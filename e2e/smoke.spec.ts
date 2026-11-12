@@ -6,8 +6,11 @@ test.beforeEach(async ({ page }, info) => {
 });
 
 test("shows what's new once, and closes", async ({ page }) => {
+  test.setTimeout(150_000);
   await page.goto('./');
-  await expect(page.getByText('MASSIVE UPDATE!')).toBeVisible({ timeout: 20_000 });
+  // The first page load is slow on a software renderer: wait for the menu, then the update screen over it.
+  await expect(page.locator('.menu__label', { hasText: 'Play' })).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByText('MASSIVE UPDATE!')).toBeVisible({ timeout: 30_000 });
   await page.getByRole('button', { name: 'Close' }).click();
   await expect(page.getByText('MASSIVE UPDATE!')).toHaveCount(0);
   await page.reload();
