@@ -4,6 +4,8 @@ import type { MapDef, PropDef } from '@chromashift/shared';
 import { buildBeach, buildStilts, seedOf, type Beach } from './beach';
 import { Ocean } from './ocean';
 import { SummerSky, type SkyLook } from './sky';
+import { buildAsset } from '../modeling/assetBuild';
+import { publishedAsset } from '../modeling/library';
 import { buildPropModel, islandBelly } from './props';
 import { puffTexture } from './textures';
 
@@ -125,8 +127,20 @@ export function buildEnvironment(scene: THREE.Scene, renderer: THREE.WebGLRender
     group.add(ocean.mesh);
   }
 
+  const assets: { dispose(): void; group: THREE.Group }[] = [];
   for (const p of map.props) {
-    const prop = p.kind === 'cloud' ? buildProp(p, map, o.lambert, o.tier) : buildPropModel(p, map, { lambert: o.lambert, tier: o.tier, shadows: o.shadowQuality > 0 });
+    let prop: THREE.Object3D | null;
+    if (p.kind === 'asset') {
+      // A model the owner published from the Studio, placed as scenery.
+      const a = p.asset ? publishedAsset(p.asset) : undefined;
+      if (!a) continue;
+      const built = buildAsset(a, { lambert: o.lambert, size: o.lambert ? 0 : o.tier >= 3 ? 256 : 128, shadows: o.shadowQuality > 0 });
+      built.group.position.set(p.x, p.y, p.z);
+      built.group.rotation.y = p.yaw ?? 0;
+      built.group.scale.setScalar(p.s);
+      assets.push(built);
+      prop = built.group;
+    } else prop = p.kind === 'cloud' ? buildProp(p, map, o.lambert, o.tier) : buildPropModel(p, map, { lambert: o.lambert, tier: o.tier, shadows: o.shadowQuality > 0 });
     if (prop) group.add(prop);
   }
   // Rock bellies under floating islands.
@@ -169,6 +183,8 @@ export function buildEnvironment(scene: THREE.Scene, renderer: THREE.WebGLRender
       ocean?.setFar(far);
     },
     dispose() {
+      // Studio assets own their geometry and materials: they clean up after themselves.
+      for (const a of assets) a.dispose();
       group.traverse((x) => {
         if (x === sky.mesh || x === ocean?.mesh || x === stilts) return;
         const m = x as THREE.Mesh;

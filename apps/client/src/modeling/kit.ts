@@ -278,6 +278,30 @@ export class Parts {
     return this;
   }
 
+  /**
+   * Everything as one geometry, with each material's colour baked into the vertices: for scenery
+   * drawn many times over (instanced), where one shape and one material is what keeps it cheap.
+   */
+  colored(colors: Record<string, number>): THREE.BufferGeometry {
+    const list: THREE.BufferGeometry[] = [];
+    const c = new THREE.Color();
+    for (const [mat, g] of this.merged()) {
+      c.setHex(colors[mat] ?? 0xffffff);
+      const n = g.attributes.position.count, col = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        col[i * 3] = c.r;
+        col[i * 3 + 1] = c.g;
+        col[i * 3 + 2] = c.b;
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      list.push(g);
+    }
+    const out = list.length === 1 ? list[0] : mergeGeometries(list, false);
+    if (list.length > 1) for (const g of list) g.dispose();
+    out.computeBoundingSphere();
+    return out;
+  }
+
   /** One merged geometry per material. */
   merged(): Map<string, THREE.BufferGeometry> {
     const out = new Map<string, THREE.BufferGeometry>();

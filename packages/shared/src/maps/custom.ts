@@ -1,6 +1,6 @@
 import { v3 } from '../vec';
 import { MAPS } from './index';
-import type { Block, BuiltinMapId, MapDef, MapId, MaterialId } from './types';
+import type { Block, BuiltinMapId, MapDef, MapId, MaterialId, PropDef } from './types';
 
 /*
  * Player-made maps. A map is plain data (so it can be saved, copied and sent to guests), turned into
@@ -39,9 +39,12 @@ export interface CustomMap {
   pads: { x: number; y: number; z: number; vx: number; vy: number; vz: number }[];
   /** Objective zones, placed exactly where you put them. */
   zones: { x: number; y: number; z: number; w: number; d: number }[];
+  /** Scenery: looks only, never in the way. A built-in kind, or a model published from the Studio. */
+  props?: PropDef[];
 }
 
-export const CUSTOM_LIMITS = { blocks: 400, spawns: 4, pads: 12, zones: 4, span: 90 } as const;
+export const CUSTOM_LIMITS = { blocks: 400, spawns: 4, pads: 12, zones: 4, span: 90, props: 40 } as const;
+export const PROP_KINDS: PropDef['kind'][] = ['tree', 'rock', 'lamp', 'crystal', 'tank', 'antenna', 'billboard', 'pipe', 'building', 'asset'];
 export const BUILTIN_LOOKS: BuiltinMapId[] = ['skyline', 'core', 'float', 'docks', 'gardens', 'canyon', 'arcade'];
 const MATERIALS: MaterialId[] = ['floor', 'wall', 'metal', 'trim', 'glass', 'base', 'crate', 'island', 'invisible'];
 const ID = /^c-[a-z0-9]{4,16}$/;
@@ -99,6 +102,13 @@ export function sanitizeCustomMap(raw: unknown): CustomMap | null {
     vx: num(p?.vx, -30, 30, 0), vy: num(p?.vy, 0, 40, 16), vz: num(p?.vz, -30, 30, 0),
   }));
   const zones = (Array.isArray(r.zones) ? r.zones : []).slice(0, CUSTOM_LIMITS.zones).map((z) => ({ x: num(z?.x, -S, S, 0), y: num(z?.y, -40, 80, 0.6), z: num(z?.z, -S, S, 0), w: num(z?.w, 1, 40, 8), d: num(z?.d, 1, 40, 8) }));
+  const props: PropDef[] = (Array.isArray(r.props) ? r.props : []).slice(0, CUSTOM_LIMITS.props).flatMap((p): PropDef[] => {
+    const kind = PROP_KINDS.includes(p?.kind) ? p.kind : null;
+    if (!kind) return [];
+    const asset = kind === 'asset' && typeof p.asset === 'string' && /^[a-z0-9][a-z0-9-]{1,31}$/.test(p.asset) ? p.asset : undefined;
+    if (kind === 'asset' && !asset) return [];
+    return [{ kind, x: num(p.x, -S * 2, S * 2, 0), y: num(p.y, -40, 80, 0), z: num(p.z, -S * 2, S * 2, 0), s: num(p.s, 0.1, 30, 1), yaw: num(p.yaw, -7, 7, 0), h: num(p.h, 0.5, 120, 6), ...(asset ? { asset } : {}) }];
+  });
   return {
     id: r.id,
     name: text(r.name, 28, 'My map') || 'My map',
@@ -108,6 +118,7 @@ export function sanitizeCustomMap(raw: unknown): CustomMap | null {
     spawns,
     pads,
     zones,
+    ...(props.length ? { props } : {}),
   };
 }
 
@@ -161,7 +172,7 @@ export function buildCustomMap(c: CustomMap): MapDef {
       { x: p.x, y: p.y, z: p.z, r: 1.2, vx: p.vx, vy: p.vy, vz: p.vz },
       { x: -p.x, y: p.y, z: -p.z, r: 1.2, vx: -p.vx, vy: p.vy, vz: -p.vz },
     ]),
-    props: [],
+    props: (c.props ?? []).map((p) => ({ ...p })),
   };
 }
 

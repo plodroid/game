@@ -100,7 +100,7 @@ export function Play() {
       run: () => void startOffline({ map: MAP_IDS[Math.floor(Math.random() * MAP_IDS.length)], mode: 'turf', duration: 180, difficulty: 'normal', allies: 3, rivals: 4 }),
     },
     { title: 'Custom Match', desc: 'Pick the map, mode, length and every bot slot.', run: () => go('custom') },
-    { title: 'Maps', desc: 'Build your own maps in 3D (keep three presets), or play maps others made public.', run: () => setMaps(true) },
+    { title: 'Map Studio', desc: 'Build your own maps in 3D (keep three presets), or play maps others made public.', run: () => setMaps(true) },
   ];
   return (
     <main className="screen" data-pig="magenta">

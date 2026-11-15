@@ -152,6 +152,80 @@ function loft(st: Station[], n: number, seg: number, z0: number, z1: number, cap
   return g;
 }
 
+/**
+ * Cuts wheel arches into a lofted hull and raises a lip round each one. Vertices low on the flanks
+ * near a wheel are lifted to an arch over it (leaving a wheel well behind the flank), and the metal
+ * just above is pushed out into a flare that covers the tyre.
+ */
+function cutArches(g: THREE.BufferGeometry) {
+  const pos = g.attributes.position;
+  const R = WHEEL_R + 0.1, capY = 0.085;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const ax = Math.abs(x);
+    if (ax < 0.5) continue;
+    for (const wz of [WHEEL_Z, -WHEEL_Z]) {
+      const dz = Math.abs(z - wz);
+      if (dz > R + 0.14) continue;
+      const arch = dz < R ? Math.min(capY, WHEEL_Y + Math.sqrt(R * R - dz * dz)) : -1;
+      let ny = y, nx = ax;
+      if (dz < R && y < arch) ny = arch;
+      // The flare: strongest right at the arch edge, fading upwards and to either side.
+      const edge = dz < R ? arch : WHEEL_Y;
+      const up = ny - edge;
+      if (up >= -0.01 && up < 0.16 && ax > 0.7) {
+        const k = (1 - up / 0.16) * Math.min(1, (R + 0.14 - dz) / 0.14);
+        nx = Math.max(ax, ax + (WHEEL_X + 0.15 - ax) * Math.max(0, k));
+      }
+      pos.setXYZ(i, Math.sign(x) * nx, ny, z);
+    }
+  }
+  pos.needsUpdate = true;
+  g.computeVertexNormals();
+}
+
+/**
+ * The painted frame of the glasshouse: the corner posts and roof rails (one strip along each upper
+ * corner of the cabin, front to back) and a centre post on each side. Built from the cabin's own
+ * surface, lifted a hair so it sits on the glass.
+ */
+function cabinFrame(cab: THREE.BufferGeometry, rings: number, seg: number, postZ: number): THREE.BufferGeometry {
+  const src = cab.attributes.position, nor = cab.attributes.normal, uv = cab.attributes.uv;
+  const ring = seg + 1;
+  const pos = new Float32Array(rings * ring * 3);
+  for (let i = 0; i < rings * ring; i++) {
+    pos[i * 3] = src.getX(i) + nor.getX(i) * 0.012;
+    pos[i * 3 + 1] = src.getY(i) + nor.getY(i) * 0.012;
+    pos[i * 3 + 2] = src.getZ(i) + nor.getZ(i) * 0.012;
+  }
+  const idx: number[] = [];
+  const corner = (th: number) => Math.round(((th + Math.PI / 2) / (Math.PI * 2)) * seg - 0.5);
+  const posts = new Set([corner(Math.PI / 4), corner((3 * Math.PI) / 4)]);
+  // The ring nearest the centre post.
+  let pi = 0, best = Infinity;
+  for (let i = 0; i < rings - 1; i++) {
+    const d = Math.abs((src.getZ(i * ring) + src.getZ((i + 1) * ring)) / 2 - postZ);
+    if (d < best) {
+      best = d;
+      pi = i;
+    }
+  }
+  for (let i = 0; i < rings - 1; i++)
+    for (let j = 0; j < seg; j++) {
+      const th = -Math.PI / 2 + ((j + 0.5) / seg) * Math.PI * 2;
+      const side = Math.abs(th) < 0.62 || Math.abs(th - Math.PI) < 0.62;
+      if (!posts.has(j) && !(i === pi && side)) continue;
+      const a = i * ring + j, b = a + ring;
+      idx.push(a, a + 1, b, a + 1, b + 1, b);
+    }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute((uv.array as Float32Array).slice(0, rings * ring * 2), 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
 /** The cabin: a trapezoid section that rises from the beltline to the roof and back down. */
 function cabinStations(c: Cabin): Station[] {
   const st: Station[] = [];
@@ -399,12 +473,15 @@ export class CarModel {
     const identColor = RACE_IDENTITIES[o.identity % 6].color;
     const finish = CAR_FINISHES[l.finish] ?? CAR_FINISHES.gloss;
     this.animated = !!finish.animated;
-    this.paint = paintTexture(l, o.identity, o.showIdentity ? identColor : hex(l.accent), o.texSize);
+    const span = sh.noseZ - sh.tailZ, u = (z: number) => (z - sh.tailZ) / span;
+    const cb = sh.cabin;
+    this.paint = paintTexture(l, o.identity, o.showIdentity ? identColor : hex(l.accent), o.texSize, { doorBack: u(cb.r0 + 0.08), doorFront: u(cb.z1 - 0.06), hood: u(cb.z1 + 0.07), boot: u(cb.z0 - 0.07) });
     this.disposables.push(this.paint.texture);
     this.bodyMat = this.mat(bodyMaterial(finish, this.paint.texture, o.lambert));
     const z0 = sh.tailZ, z1 = sh.noseZ;
     const seg = o.detail > 0 ? 28 : 16;
-    const hullGeo = loft(sampleStations(sh.hull, o.detail > 0 ? 6 : 3), sh.n, seg, z0, z1);
+    const hullGeo = loft(sampleStations(sh.hull, o.detail > 0 ? 8 : 4), sh.n, seg, z0, z1);
+    cutArches(hullGeo);
     this.disposables.push(hullGeo);
     this.hull = new THREE.Mesh(hullGeo, this.bodyMat);
     this.hull.castShadow = true;
@@ -433,6 +510,12 @@ export class CarModel {
     const cabin = new THREE.Mesh(cabGeo, o.lambert ? this.mat(new THREE.MeshLambertMaterial({ color: tint.color, transparent: true, opacity: 0.9 })) : this.glassMat);
     this.group.add(cabin);
     const c = sh.cabin;
+    // Posts and roof rails in body colour over the glass.
+    const frameGeo = cabinFrame(cabGeo, cab.length, seg, (c.r0 + c.r1) / 2 + 0.12);
+    this.disposables.push(frameGeo);
+    const frame = new THREE.Mesh(frameGeo, this.bodyMat);
+    frame.castShadow = true;
+    this.group.add(frame);
     const roofSt = sampleStations(
       [
         { z: c.r0 - 0.05, w: c.wt * 0.9, b: c.yt - 0.03, t: c.yt + 0.025 },

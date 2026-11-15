@@ -7,7 +7,7 @@ import { deleteTrackPreset, MAX_TRACK_PRESETS, newTrackId, publishTrack, saveTra
 import { Button, Segmented, Setting, Slider, Toggle } from '../kit';
 
 /*
- * The VELOCITY track editor. Seen from above: drag the points to shape the road, pick a point to
+ * Map Studio for VELOCITY tracks. Seen from above: drag the points to shape the road, pick a point to
  * set its height, width, banking and surface, and mark tunnels, pickup rows and obstacles. The
  * track is checked as you go (closed loop, room for six, no road running into itself unless one
  * part passes over the other as a bridge), and Test drive takes it straight onto the road.
@@ -145,7 +145,7 @@ export function TrackEditor({ onClose, onPlay }: { onClose: () => void; onPlay: 
   const ok = problems.length === 0;
 
   return createPortal(
-    <div className="overlay" style={{ zIndex: 80, alignItems: 'stretch', padding: 0 }} role="dialog" aria-label="Track editor">
+    <div className="overlay" style={{ zIndex: 80, alignItems: 'stretch', padding: 0 }} role="dialog" aria-label="Map Studio: racing track">
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(280px, 360px)', width: '100%', height: '100%', background: 'var(--bg)' }} className="track-editor">
         <div style={{ position: 'relative', minHeight: 0 }}>
           <svg
@@ -216,7 +216,7 @@ export function TrackEditor({ onClose, onPlay }: { onClose: () => void; onPlay: 
           </svg>
         </div>
         <aside className="panel" style={{ margin: 0, borderRadius: 0, overflow: 'auto' }}>
-          <h2 className="panel__title" style={{ marginTop: 0 }}>Track editor</h2>
+          <h2 className="panel__title" style={{ marginTop: 0 }}>Map Studio · Racing track</h2>
           <Setting name="Name">
             <input className="input" value={def.name} maxLength={28} onChange={(e) => change({ ...def, name: e.target.value }, false)} />
           </Setting>

@@ -40,7 +40,9 @@ export interface ZoneDef {
 
 /** Visual-only decoration, rendered by the client and ignored by the simulation. */
 export interface PropDef {
-  kind: 'building' | 'tank' | 'antenna' | 'billboard' | 'lamp' | 'cloud' | 'crystal' | 'tree' | 'rock' | 'panel' | 'pipe';
+  kind: 'building' | 'tank' | 'antenna' | 'billboard' | 'lamp' | 'cloud' | 'crystal' | 'tree' | 'rock' | 'panel' | 'pipe' | 'asset';
+  /** For kind `asset`: the id of a model published from the Studio. */
+  asset?: string;
   x: number;
   y: number;
   z: number;

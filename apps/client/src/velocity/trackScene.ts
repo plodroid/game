@@ -4,6 +4,8 @@ import { SHADOW_LAYER } from '../characters/compact';
 import { Ocean } from '../rendering/ocean';
 import { SummerSky, type SkyLook } from '../rendering/sky';
 import { facadeTexture } from '../rendering/textures';
+import { treeParts } from '../rendering/props';
+import { chamferBox, Parts, roughen, tube, turned } from '../modeling/kit';
 
 /*
  * What a track looks like: the road with its markings and kerbs, the verges, the walls, bridges
@@ -515,80 +517,159 @@ function scenery(
   const trunk = (h: number) => new THREE.CylinderGeometry(0.18, 0.28, h, 7).translate(0, h / 2, 0);
   const n = (k: number) => Math.round(k * density);
 
+  // Modelled scenery, one merged shape per kind (colours baked into the vertices), drawn instanced.
+  const tint = keep(o.lambert ? new THREE.MeshLambertMaterial({ vertexColors: true }) : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true }));
+  const smooth = keep(o.lambert ? new THREE.MeshLambertMaterial({ vertexColors: true }) : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.15 }));
+  const uni = (s: number) => new THREE.Vector3(s, s, s);
+  const one = () => new THREE.Vector3(1, 1, 1);
+  const up = -Math.PI / 2;
+
   switch (def.theme) {
     case 'coast':
     case 'sunset': {
       const palms = spots(n(90), 3, 40);
-      instanced(trunk(7), M({ color: 0x8a6a48, roughness: 0.9 }), palms, (s) => new THREE.Vector3(s, s, s));
-      instanced(palmCrown(), M({ color: 0x2f9a4a, roughness: 0.75, side: THREE.DoubleSide }), palms, (s) => new THREE.Vector3(s, s, s));
-      instanced(new THREE.SphereGeometry(0.35, 8, 6).translate(0, 7.05, 0), M({ color: 0x7a5a2a, roughness: 0.9 }), palms, (s) => new THREE.Vector3(s, s, s));
-      const huts = spots(n(12), 8, 45);
-      instanced(new THREE.BoxGeometry(4, 3, 4).translate(0, 1.5, 0), M({ color: 0xf2e6cf, roughness: 0.8 }), huts, () => new THREE.Vector3(1, 1, 1));
-      instanced(new THREE.ConeGeometry(3.4, 1.6, 4).translate(0, 3.8, 0).rotateY(Math.PI / 4), M({ color: look.accent, roughness: 0.7 }), huts, () => new THREE.Vector3(1, 1, 1));
+      instanced(trunk(7), M({ color: 0x8a6a48, roughness: 0.9 }), palms, uni);
+      instanced(palmCrown(), M({ color: 0x2f9a4a, roughness: 0.75, side: THREE.DoubleSide }), palms, uni);
+      instanced(new THREE.SphereGeometry(0.35, 8, 6).translate(0, 7.05, 0), M({ color: 0x7a5a2a, roughness: 0.9 }), palms, uni);
+      // Beach huts: boarded walls on a plinth, a hipped roof with eaves, a door, a window and a striped awning.
+      const hut = new Parts();
+      hut.add('wall', chamferBox(4, 2.7, 4, 0.08), 0, 1.55, 0);
+      hut.add('base', chamferBox(4.5, 0.25, 4.5, 0.06), 0, 0.12, 0);
+      hut.add('roof', new THREE.ConeGeometry(3.5, 1.7, 4).rotateY(Math.PI / 4), 0, 3.75, 0);
+      hut.add('trim', chamferBox(4.5, 0.14, 4.5, 0.04), 0, 2.94, 0);
+      hut.add('dark', chamferBox(0.95, 1.9, 0.08, 0.02), -0.8, 1.2, 2.02);
+      hut.add('glass', chamferBox(1.1, 0.9, 0.08, 0.02), 0.95, 1.75, 2.02);
+      hut.add('trim', chamferBox(1.3, 0.1, 0.16, 0.02), 0.95, 1.25, 2.05);
+      hut.add('accent', chamferBox(1.5, 0.06, 0.9, 0.02), 0.95, 2.4, 2.4, 0.35);
+      for (const sx of [-1.9, 1.9]) hut.add('trim', chamferBox(0.16, 2.7, 0.16, 0.03), sx, 1.55, 1.95);
+      instanced(hut.colored({ wall: 0xf4ead6, base: 0xcbb994, roof: look.accent, trim: 0xffffff, dark: 0x6a4a34, glass: 0x8fd0e6, accent: 0xff7ab8 }), tint, spots(n(12), 8, 45), one);
       const umbrellas = spots(n(30), 3, 25);
-      instanced(new THREE.ConeGeometry(1.6, 0.6, 8).translate(0, 2.4, 0), M({ color: 0xff7ab8, roughness: 0.7 }), umbrellas.filter((_, k) => k % 2 === 0), () => new THREE.Vector3(1, 1, 1), 0, false);
-      instanced(new THREE.ConeGeometry(1.6, 0.6, 8).translate(0, 2.4, 0), M({ color: 0x19d3be, roughness: 0.7 }), umbrellas.filter((_, k) => k % 2 === 1), () => new THREE.Vector3(1, 1, 1), 0, false);
-      instanced(new THREE.CylinderGeometry(0.04, 0.04, 2.4, 6).translate(0, 1.2, 0), M({ color: 0xf2f2ee, roughness: 0.5 }), umbrellas, () => new THREE.Vector3(1, 1, 1), 0, false);
+      instanced(new THREE.ConeGeometry(1.6, 0.6, 8).translate(0, 2.4, 0), M({ color: 0xff7ab8, roughness: 0.7 }), umbrellas.filter((_, k) => k % 2 === 0), one, 0, false);
+      instanced(new THREE.ConeGeometry(1.6, 0.6, 8).translate(0, 2.4, 0), M({ color: 0x19d3be, roughness: 0.7 }), umbrellas.filter((_, k) => k % 2 === 1), one, 0, false);
+      instanced(new THREE.CylinderGeometry(0.04, 0.04, 2.4, 6).translate(0, 1.2, 0), M({ color: 0xf2f2ee, roughness: 0.5 }), umbrellas, one, 0, false);
       break;
     }
     case 'neon':
-    case 'core': {
-      const towers = spots(n(60), 24, 130);
-      const tex = keep(facadeTexture(def.id.length));
-      instanced(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), M({ map: tex, color: 0x3a3f58, roughness: 0.3, metalness: 0.6, emissive: new THREE.Color(look.accent), emissiveIntensity: 0.03 }), towers, (s) => new THREE.Vector3(9 + s * 6, 18 + s * 46, 9 + s * 6));
-      const pylons = spots(n(50), 2, 10);
-      instanced(new THREE.BoxGeometry(0.3, 6, 0.3).translate(0, 3, 0), keep(new THREE.MeshBasicMaterial({ color: look.accent })), pylons, () => new THREE.Vector3(1, 1, 1), 0, false);
-      const rings = spots(n(14), 1, 3);
-      instanced(new THREE.TorusGeometry(4, 0.2, 6, 24).translate(0, 4, 0), keep(new THREE.MeshBasicMaterial({ color: 0xff3f8e })), rings, () => new THREE.Vector3(1, 1, 1), 0, false);
-      break;
-    }
+    case 'core':
     case 'city': {
-      const towers = spots(n(80), 30, 160);
-      const tex = keep(facadeTexture(5));
-      instanced(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), M({ map: tex, color: 0xb9c6d8, roughness: 0.3, metalness: 0.45 }), towers, (s) => new THREE.Vector3(12 + s * 8, 30 + s * 80, 12 + s * 8));
+      const city = def.theme === 'city';
+      const towers = spots(n(city ? 80 : 60), city ? 30 : 24, city ? 160 : 130);
+      const tex = keep(facadeTexture(city ? 5 : def.id.length));
+      const facade = city ? M({ map: tex, color: 0xb9c6d8, roughness: 0.3, metalness: 0.45 }) : M({ map: tex, color: 0x3a3f58, roughness: 0.3, metalness: 0.6, emissive: new THREE.Color(look.accent), emissiveIntensity: 0.03 });
+      const size = (s: number) => (city ? new THREE.Vector3(12 + s * 8, 30 + s * 80, 12 + s * 8) : new THREE.Vector3(9 + s * 6, 18 + s * 46, 9 + s * 6));
+      instanced(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), facade, towers, size);
+      // Each tower gets a plinth, a set-back top storey and a parapet, so none is a bare box.
+      const stone = M({ color: city ? 0xd9dee4 : 0x23263a, roughness: 0.8 });
+      instanced(new THREE.BoxGeometry(1.06, 0.04, 1.06).translate(0, 0.02, 0), stone, towers, size);
+      instanced(new THREE.BoxGeometry(1.04, 0.016, 1.04).translate(0, 1.008, 0), stone, towers, size);
+      instanced(new THREE.BoxGeometry(0.7, 0.1, 0.7).translate(0, 1.066, 0), facade, towers, size);
+      instanced(new THREE.BoxGeometry(0.74, 0.012, 0.74).translate(0, 1.122, 0), stone, towers, size);
+      if (!city) {
+        const pylons = spots(n(50), 2, 10);
+        const py = new Parts();
+        py.add('dark', turned([[0.3, 0], [0.34, 0.1], [0.16, 0.4], [0.1, 5.6], [0.2, 5.75], [0.2, 6], [0, 6]], 6), 0, 0, 0, up);
+        instanced(py.colored({ dark: 0x1c1e2a }), smooth, pylons, one, 0, false);
+        instanced(turned([[0.12, 0.6], [0.2, 0.62], [0.2, 5.4], [0.12, 5.42]], 6).rotateX(up), keep(new THREE.MeshBasicMaterial({ color: look.accent })), pylons, () => new THREE.Vector3(0.75, 1, 0.75), 0, false);
+        const rings = spots(n(14), 1, 3);
+        instanced(new THREE.TorusGeometry(4, 0.2, 6, 24).translate(0, 4, 0), keep(new THREE.MeshBasicMaterial({ color: 0xff3f8e })), rings, one, 0, false);
+      }
       break;
     }
     case 'docks': {
+      // Shipping containers: corrugated sides, corner posts and door bars; stacked two high here and there.
+      const box = new Parts();
+      box.add('body', chamferBox(2.44, 2.6, 6.06, 0.04), 0, 1.3, 0);
+      for (let z = -2.8; z <= 2.8; z += 0.35) for (const sx of [-1.23, 1.23]) box.add('rib', chamferBox(0.05, 2.3, 0.16, 0.02), sx, 1.3, z);
+      for (const sx of [-1.19, 1.19]) for (const sz of [-3, 3]) box.add('post', chamferBox(0.16, 2.66, 0.16, 0.02), sx, 1.3, sz);
+      for (const sx of [-0.7, -0.25, 0.25, 0.7]) box.add('post', chamferBox(0.05, 2.3, 0.05, 0.01), sx, 1.3, 3.06);
+      box.add('post', chamferBox(0.04, 2.4, 0.03, 0.01), 0, 1.3, 3.05);
+      const boxGeo = box.colored({ body: 0xffffff, rib: 0xd9d9d9, post: 0x8c8c8c });
       const boxes = spots(n(140), 3, 40);
       const cols = [0xd7192f, 0x1f5fe0, 0xffc21a, 0x19d3be, 0x2fbf4f, 0xff7a1a];
-      for (let c = 0; c < cols.length; c++)
-        instanced(new THREE.BoxGeometry(2.5, 2.6, 6).translate(0, 1.3, 0), M({ color: cols[c], roughness: 0.7, metalness: 0.3 }), boxes.filter((_, k) => k % cols.length === c), (s) => new THREE.Vector3(1, s > 1.1 ? 2 : 1, 1));
-      const cranes = spots(n(8), 20, 60);
-      instanced(new THREE.BoxGeometry(1.2, 30, 1.2).translate(0, 15, 0), M({ color: 0xffc21a, roughness: 0.5, metalness: 0.5 }), cranes, () => new THREE.Vector3(1, 1, 1));
-      instanced(new THREE.BoxGeometry(1, 1, 26).translate(0, 30, 8), M({ color: 0xffc21a, roughness: 0.5, metalness: 0.5 }), cranes, () => new THREE.Vector3(1, 1, 1));
+      for (let c = 0; c < cols.length; c++) {
+        const m = keep(o.lambert ? new THREE.MeshLambertMaterial({ vertexColors: true, color: cols[c] }) : new THREE.MeshStandardMaterial({ vertexColors: true, color: cols[c], roughness: 0.65, metalness: 0.3 }));
+        const mine = boxes.filter((_, k) => k % cols.length === c);
+        instanced(c === 0 ? boxGeo : boxGeo.clone(), m, mine, one);
+        instanced(boxGeo.clone(), m, mine.filter((b) => b.s > 1.1), one, 2.62);
+      }
+      // Gantry cranes: braced legs, a cab, a boom with a trolley and a hook block.
+      const crane = new Parts();
+      for (const sx of [-4, 4]) for (const sz of [-3, 3]) crane.add('steel', chamferBox(0.7, 26, 0.7, 0.1), sx, 13, sz);
+      for (const sx of [-4, 4]) {
+        crane.add('steel', chamferBox(0.6, 0.8, 6.6, 0.08), sx, 25.6, 0);
+        crane.add('steel', tube([[sx, 2, -3], [sx, 14, 3]], 0.16, 5));
+        crane.add('steel', tube([[sx, 14, -3], [sx, 25, 3]], 0.16, 5));
+      }
+      crane.add('steel', chamferBox(8.6, 0.9, 0.7, 0.08), 0, 25.6, -3);
+      crane.add('steel', chamferBox(8.6, 0.9, 0.7, 0.08), 0, 25.6, 3);
+      crane.add('steel', chamferBox(1.4, 1.6, 38, 0.12), 0, 27.2, 6);
+      crane.add('steel', tube([[0, 33, 0], [0, 28, 22]], 0.14, 5));
+      crane.add('steel', tube([[0, 33, 0], [0, 28, -10]], 0.14, 5));
+      crane.add('steel', chamferBox(0.8, 6.5, 0.8, 0.1), 0, 30, 0);
+      crane.add('cab', chamferBox(2.6, 2.4, 3, 0.15), 0, 25.4, 12);
+      crane.add('glass', chamferBox(2.3, 1.1, 0.1, 0.02), 0, 25.6, 13.5);
+      crane.add('dark', chamferBox(1.6, 0.7, 1.6, 0.1), 0, 26.1, 18);
+      crane.add('dark', tube([[0, 26, 18], [0, 12, 18]], 0.05, 4));
+      crane.add('dark', chamferBox(1.2, 1, 0.6, 0.1), 0, 11.6, 18);
+      instanced(crane.colored({ steel: 0xffc21a, cab: 0xf2f2ee, glass: 0x7ac0dc, dark: 0x2c2f38 }), smooth, spots(n(8), 20, 60), one);
       break;
     }
     case 'garden': {
+      const tree = new Parts();
+      treeParts(tree, 2.6, 11);
+      const tree2 = new Parts();
+      treeParts(tree2, 3.1, 29);
+      const leaf = { bark: 0x7a5a3a, leaf: 0x358a40, leaf2: 0x4aa550 };
       const trees = spots(n(110), 3, 50);
-      instanced(trunk(4), M({ color: 0x7a5a3a, roughness: 0.9 }), trees, (s) => new THREE.Vector3(s, s, s));
-      instanced(new THREE.IcosahedronGeometry(2.4, 1).translate(0, 5.2, 0), M({ color: 0x3f9a48, roughness: 0.85 }), trees, (s) => new THREE.Vector3(s, s, s));
+      instanced(tree.colored(leaf), tint, trees.filter((_, k) => k % 2 === 0), (s) => uni(0.8 + s * 0.3));
+      instanced(tree2.colored({ ...leaf, leaf: 0x2f7d44, leaf2: 0x5bb04e }), tint, trees.filter((_, k) => k % 2 === 1), (s) => uni(0.8 + s * 0.3));
       const beds = spots(n(80), 1, 14);
       const fl = [0xff7ab8, 0xffd23f, 0xff5a3a, 0xb98cff];
       for (let c = 0; c < fl.length; c++) instanced(new THREE.SphereGeometry(0.9, 8, 6).scale(1, 0.4, 1), M({ color: fl[c], roughness: 0.8 }), beds.filter((_, k) => k % fl.length === c), (s) => new THREE.Vector3(s * 1.4, s, s * 1.4), 0, false);
       break;
     }
     case 'canyon': {
-      const rocks = spots(n(70), 6, 90);
-      instanced(new THREE.CylinderGeometry(1, 1.3, 1, 7).translate(0, 0.5, 0), M({ color: 0xb5663f, roughness: 0.95 }), rocks, (s) => new THREE.Vector3(8 + s * 10, 10 + s * 30, 8 + s * 10));
-      const cacti = spots(n(60), 2, 25);
-      instanced(new THREE.CylinderGeometry(0.3, 0.35, 3, 8).translate(0, 1.5, 0), M({ color: 0x3f8f4a, roughness: 0.8 }), cacti, (s) => new THREE.Vector3(s, s, s));
+      // Mesas: stepped strata, weathered.
+      const mesa = new Parts();
+      mesa.add('rock', roughen(turned([[0, 0], [1.25, 0], [1.1, 0.16], [1.12, 0.3], [0.96, 0.36], [0.98, 0.58], [0.84, 0.64], [0.86, 0.86], [0.7, 0.92], [0.62, 1], [0, 1]], 9, false), 0.1, 2.2, 5), 0, 0, 0, up);
+      instanced(mesa.colored({ rock: 0xb5663f }), tint, spots(n(70), 6, 90), (s) => new THREE.Vector3(8 + s * 10, 10 + s * 30, 8 + s * 10));
+      // Saguaro cacti: a ribbed trunk and two upturned arms.
+      const cactus = new Parts();
+      cactus.add('green', turned([[0, 0], [0.3, 0], [0.33, 0.3], [0.33, 2.7], [0.24, 3.05], [0, 3.15]], 8), 0, 0, 0, up);
+      cactus.add('green', tube([[0.3, 1.3, 0], [0.75, 1.35, 0], [0.85, 1.7, 0], [0.85, 2.4, 0]], 0.17, 6));
+      cactus.add('green', tube([[-0.3, 1.7, 0], [-0.7, 1.75, 0], [-0.78, 2.05, 0], [-0.78, 2.6, 0]], 0.15, 6));
+      cactus.add('green', new THREE.SphereGeometry(0.17, 6, 5), 0.85, 2.4, 0);
+      cactus.add('green', new THREE.SphereGeometry(0.15, 6, 5), -0.78, 2.6, 0);
+      instanced(cactus.colored({ green: 0x3f8f4a }), tint, spots(n(60), 2, 25), uni);
       break;
     }
     case 'snow': {
-      const pines = spots(n(160), 2, 60);
-      instanced(trunk(2), M({ color: 0x5a3f2a, roughness: 0.9 }), pines, (s) => new THREE.Vector3(s, s, s));
-      instanced(new THREE.ConeGeometry(2.2, 6, 8).translate(0, 5, 0), M({ color: 0x24543a, roughness: 0.85 }), pines, (s) => new THREE.Vector3(s, s, s));
-      instanced(new THREE.ConeGeometry(1.4, 2.2, 8).translate(0, 7.2, 0), M({ color: 0xf2f6fb, roughness: 0.6 }), pines, (s) => new THREE.Vector3(s, s, s));
-      const peaks = spots(n(16), 80, 160);
-      instanced(new THREE.ConeGeometry(1, 1, 6).translate(0, 0.5, 0), M({ color: 0xdfe8f2, roughness: 0.8 }), peaks, (s) => new THREE.Vector3(60 + s * 40, 40 + s * 50, 60 + s * 40));
+      // Pines: a trunk and three drooping tiers of boughs, each with snow lying on it.
+      const pine = new Parts();
+      pine.add('bark', turned([[0, 0], [0.3, 0], [0.2, 0.3], [0.14, 2.2], [0, 2.2]], 6), 0, 0, 0, up);
+      for (const [y, r, h] of [[1.6, 2.3, 2.6], [3.3, 1.75, 2.3], [4.9, 1.15, 2.2]]) {
+        pine.add('green', roughen(turned([[0, h], [r * 0.5, h * 0.45], [r, 0], [r * 0.55, 0.22], [0, 0.3]], 8, false), 0.18, 1.6, y), 0, y, 0, up);
+        pine.add('snow', roughen(turned([[0, h + 0.05], [r * 0.34, h * 0.62], [r * 0.2, h * 0.6], [0, h * 0.7]], 8, false), 0.08, 2, y + 3), 0, y, 0, up);
+      }
+      instanced(pine.colored({ bark: 0x5a3f2a, green: 0x24543a, snow: 0xf2f6fb }), tint, spots(n(160), 2, 60), uni);
+      const peak = new Parts();
+      peak.add('rock', roughen(new THREE.ConeGeometry(1, 1, 9, 4).translate(0, 0.5, 0), 0.16, 2.4, 3));
+      peak.add('snow', roughen(new THREE.ConeGeometry(0.46, 0.46, 9, 2).translate(0, 0.79, 0), 0.05, 3, 4));
+      instanced(peak.colored({ rock: 0xb9c6d6, snow: 0xffffff }), tint, spots(n(16), 80, 160), (s) => new THREE.Vector3(60 + s * 40, 40 + s * 50, 60 + s * 40));
       break;
     }
     case 'arcade': {
       const blocks = spots(n(90), 4, 60);
       const cols = [0xff3f8e, 0x19d3be, 0xffc21a, 0x8b5cff, 0x2fbf4f];
-      for (let c = 0; c < cols.length; c++) instanced(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), M({ color: cols[c], roughness: 0.4, metalness: 0.2, emissive: new THREE.Color(cols[c]), emissiveIntensity: 0.15 }), blocks.filter((_, k) => k % cols.length === c), (s) => new THREE.Vector3(3 + s * 6, 3 + s * 14, 3 + s * 6));
+      // Toy blocks with chamfered edges and a raised stud on top.
+      const block = new Parts();
+      block.add('body', chamferBox(1, 1, 1, 0.06), 0, 0.5, 0);
+      block.add('body', turned([[0, 0.12], [0.26, 0.12], [0.3, 0.08], [0.3, 0], [0, 0]], 10), 0, 1, 0, up);
+      const blockGeo = block.colored({ body: 0xffffff });
+      for (let c = 0; c < cols.length; c++)
+        instanced(c === 0 ? blockGeo : blockGeo.clone(), keep(o.lambert ? new THREE.MeshLambertMaterial({ vertexColors: true, color: cols[c] }) : new THREE.MeshStandardMaterial({ vertexColors: true, color: cols[c], roughness: 0.4, metalness: 0.2, emissive: new THREE.Color(cols[c]), emissiveIntensity: 0.15 })), blocks.filter((_, k) => k % cols.length === c), (s) => new THREE.Vector3(3 + s * 6, 3 + s * 14, 3 + s * 6));
       const arches = spots(n(10), 0.5, 2);
-      instanced(new THREE.TorusGeometry(10, 0.5, 8, 32, Math.PI).translate(0, 0, 0), keep(new THREE.MeshBasicMaterial({ color: 0xffc21a })), arches, () => new THREE.Vector3(1, 1, 1), 0, false);
+      instanced(new THREE.TorusGeometry(10, 0.5, 8, 32, Math.PI).translate(0, 0, 0), keep(new THREE.MeshBasicMaterial({ color: 0xffc21a })), arches, one, 0, false);
       break;
     }
   }

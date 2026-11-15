@@ -12,7 +12,7 @@ import { TrackEditor } from './velocity/TrackEditor';
 
 /**
  * Maps. Everyone can build maps and keep up to three presets; the owner can also publish maps for
- * everyone. Public maps can be played by anyone, and copied into the editor to remix.
+ * everyone. Public maps can be played by anyone, and copied into Map Studio to remix.
  */
 export function MyMaps({ onClose }: { onClose: () => void }) {
   const { presets, publics } = useMaps();
@@ -75,7 +75,7 @@ export function MyMaps({ onClose }: { onClose: () => void }) {
           </button>
         )}
         {isPublic && !owner && (
-          <button className="btn btn--sm" title="Open a copy in the editor" onClick={() => setEditing({ ...m, id: newMapId(), name: `${m.name} copy`.slice(0, 28) })}>
+          <button className="btn btn--sm" title="Open a copy in Map Studio" onClick={() => setEditing({ ...m, id: newMapId(), name: `${m.name} copy`.slice(0, 28) })}>
             Remix
           </button>
         )}

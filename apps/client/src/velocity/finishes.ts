@@ -477,7 +477,66 @@ export interface Paint {
 }
 
 /** Builds the body texture for a loadout. */
-export function paintTexture(l: CarLoadout, identity: number, identColor: number, size: number): Paint {
+/** Where the shut lines fall along the body, as fractions of its length from the tail. */
+export interface Seams {
+  doorBack: number;
+  doorFront: number;
+  hood: number;
+  boot: number;
+}
+
+/**
+ * Shut lines: the gaps round the doors, bonnet and boot, a door handle and a filler flap. Drawn as
+ * a dark groove with a thin highlight beside it, so panels read as separate pieces of metal.
+ */
+function shutLines(g: CanvasRenderingContext2D, S: number, m: Seams) {
+  const groove = (path: () => void) => {
+    g.lineCap = 'round';
+    g.strokeStyle = 'rgba(0,0,0,0.42)';
+    g.lineWidth = 3.2;
+    g.beginPath();
+    path();
+    g.stroke();
+    g.save();
+    g.translate(1.6, 1.6);
+    g.strokeStyle = 'rgba(255,255,255,0.16)';
+    g.lineWidth = 1.2;
+    g.beginPath();
+    path();
+    g.stroke();
+    g.restore();
+  };
+  const x = (u: number) => u * S;
+  // v runs round the body: 0.25 is the left flank, 0.5 the top, 0.75 the right flank.
+  for (const [sill, belt, dir] of [[0.135, 0.365, 1], [0.865, 0.635, -1]] as const) {
+    groove(() => {
+      g.moveTo(x(m.doorBack), sill * S);
+      g.lineTo(x(m.doorBack) + 6, belt * S);
+      g.moveTo(x(m.doorFront), sill * S);
+      g.lineTo(x(m.doorFront) - 10, belt * S);
+      g.moveTo(x(m.doorBack), sill * S);
+      g.lineTo(x(m.doorFront), sill * S);
+    });
+    // Handle.
+    g.fillStyle = 'rgba(0,0,0,0.5)';
+    g.fillRect(x(m.doorBack) + 22, (belt - dir * 0.035) * S - 3, 34, 6);
+    g.fillStyle = 'rgba(255,255,255,0.22)';
+    g.fillRect(x(m.doorBack) + 22, (belt - dir * 0.035) * S - 3, 34, 1.5);
+  }
+  // Bonnet and boot lines run over the top from flank to flank.
+  for (const u of [m.hood, m.boot]) groove(() => {
+    g.moveTo(x(u), 0.36 * S);
+    g.lineTo(x(u), 0.64 * S);
+  });
+  for (const v of [0.365, 0.635]) groove(() => {
+    g.moveTo(x(m.hood), v * S);
+    g.lineTo(x(Math.min(0.97, m.hood + 0.2)), (v + (v < 0.5 ? 0.02 : -0.02)) * S);
+  });
+  // Filler flap on the left rear quarter.
+  groove(() => g.roundRect(x(Math.max(0.06, m.doorBack - 0.11)), 0.3 * S, 30, 26, 6));
+}
+
+export function paintTexture(l: CarLoadout, identity: number, identColor: number, size: number, seams?: Seams): Paint {
   // Square: the body is about as far round as it is long, so shapes stay round.
   const W = size, H = size;
   const canvas = document.createElement('canvas');
@@ -490,6 +549,7 @@ export function paintTexture(l: CarLoadout, identity: number, identColor: number
   g.scale(W / 1024, H / 1024);
   pattern(g, 1024, 1024, f, hex(l.paint), hex(l.accent), seed);
   livery(g, 1024, 1024, l, identity, identColor);
+  if (seams) shutLines(g, 1024, seams);
   g.restore();
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;

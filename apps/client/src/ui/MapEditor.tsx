@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
-import { BUILTIN_LOOKS, CUSTOM_LIMITS, MAPS, type CustomBlock, type CustomMap, type MaterialId } from '@chromashift/shared';
+import { BUILTIN_LOOKS, CUSTOM_LIMITS, MAPS, PROP_KINDS, type CustomBlock, type CustomMap, type MaterialId, type PropDef } from '@chromashift/shared';
+import { publishedAssets } from '../modeling/library';
 import { Icon } from './icons';
 import { Help, toolForKey, typing, useUndo } from './editorKit';
 import { Num } from './ModelEditor';
 
 /*
- * A 3D editor for maps, in the style of Blockbench: add blocks, ramps, spawn points, jump pads and
+ * Map Studio: a 3D editor for maps, in the style of Blockbench: add blocks, ramps, spawn points, jump pads and
  * objective zones, drag the coloured arrows to move them, resize or turn them, and edit exact
  * numbers, names and materials in the sidebar. Blocks marked "Mirror" get a copy for the other
  * team (shown as a faint ghost), like the built-in maps.
@@ -490,13 +491,13 @@ export function MapEditor({
   const n = (k: string) => (typeof cur?.[k] === 'number' ? (cur[k] as number) : 0);
 
   return (
-    <div className="me" role="dialog" aria-label="Map editor">
+    <div className="me" role="dialog" aria-label="Map Studio">
       <header className="me__bar">
         <button className="btn btn--ghost btn--sm" onClick={close}>
           <Icon.back size={16} /> Close
         </button>
         <strong className="me__title">
-          Map editor{dirty ? ' •' : ''} <span className="muted small">{note}</span>
+          Map Studio{dirty ? ' •' : ''} <span className="muted small">{note}</span>
         </strong>
         <span className="me__tools" role="toolbar" aria-label="Tools">
           {([['translate', 'Move', 'V'], ['scale', 'Resize', 'S'], ['rotate', 'Rotate', 'R']] as [Mode, string, string][]).map(([m, label, k]) => (
@@ -520,7 +521,7 @@ export function MapEditor({
           <button className="btn btn--sm" onClick={() => api.current?.frame()}>
             Reset view
           </button>
-          <button className="btn btn--sm" onClick={() => setHelp(true)} title="How to use the editor (?)">
+          <button className="btn btn--sm" onClick={() => setHelp(true)} title="How to use Map Studio (?)">
             Help
           </button>
           <button className="btn btn--sm" onClick={() => onPlay(draft)} title="Play this map against bots right now">
@@ -606,6 +607,47 @@ export function MapEditor({
             </select>
           </label>
 
+          <div className="me__head">Scenery ({draft.props?.length ?? 0}/{CUSTOM_LIMITS.props})</div>
+          <div style={{ padding: '0 12px 8px', display: 'grid', gap: 8 }}>
+            {(draft.props ?? []).map((p, i) => {
+              const setProp = (patch: Partial<PropDef>) => setDraft({ ...draft, props: (draft.props ?? []).map((q, j) => (j === i ? { ...q, ...patch } : q)) });
+              return (
+                <div key={i} style={{ display: 'grid', gap: 6, padding: 8, borderRadius: 10, background: 'var(--s3)' }}>
+                  <div className="row" style={{ gap: 6 }}>
+                    <select className="input" aria-label="Scenery kind" value={p.kind === 'asset' ? `asset:${p.asset}` : p.kind} onChange={(e) => (e.target.value.startsWith('asset:') ? setProp({ kind: 'asset', asset: e.target.value.slice(6) }) : setProp({ kind: e.target.value as PropDef['kind'], asset: undefined }))}>
+                      {PROP_KINDS.filter((k) => k !== 'asset').map((k) => (
+                        <option key={k} value={k}>
+                          {k}
+                        </option>
+                      ))}
+                      {publishedAssets('prop').map((a) => (
+                        <option key={a.id} value={`asset:${a.id}`}>
+                          Studio: {a.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button className="btn btn--sm btn--danger" aria-label="Remove this scenery" onClick={() => setDraft({ ...draft, props: (draft.props ?? []).filter((_, j) => j !== i) })}>
+                      <Icon.close size={12} />
+                    </button>
+                  </div>
+                  <div className="me__grid me__grid--3">
+                    <Num label="X" step={0.5} value={p.x} onChange={(v) => setProp({ x: v })} />
+                    <Num label="Y" step={0.5} value={p.y} onChange={(v) => setProp({ y: v })} />
+                    <Num label="Z" step={0.5} value={p.z} onChange={(v) => setProp({ z: v })} />
+                    <Num label="Size" step={0.1} value={p.s} onChange={(v) => setProp({ s: Math.max(0.1, v) })} />
+                    <Num label="Turn °" step={15} value={deg(p.yaw ?? 0)} onChange={(v) => setProp({ yaw: rad(v) })} />
+                    <Num label="Height" step={1} value={p.h ?? 6} onChange={(v) => setProp({ h: Math.max(0.5, v) })} />
+                  </div>
+                </div>
+              );
+            })}
+            <button className="btn btn--sm" disabled={(draft.props?.length ?? 0) >= CUSTOM_LIMITS.props} onClick={() => setDraft({ ...draft, props: [...(draft.props ?? []), { kind: 'tree', x: 0, y: 0, z: 0, s: 1.5, yaw: 0, h: 6 }] })}>
+              <Icon.plus size={14} /> Add scenery
+            </button>
+            <p className="muted small" style={{ margin: 0 }}>
+              Scenery is for looks only: players pass through it and it can’t be painted. It appears when you play the map.
+            </p>
+          </div>
           <div className="me__head">{sel && cur ? `Selected ${KIND_LABEL[sel.k].toLowerCase()}` : 'Nothing selected'}</div>
           {sel && cur && (
             <>
