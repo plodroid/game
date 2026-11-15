@@ -141,9 +141,9 @@ describe('voxels', () => {
   it('a 48-cube sculpt meshes quickly into far fewer quads than faces', () => {
     const g = new VoxelGrid(48, 48, 48);
     g.brush(24, 24, 24, 20, 1, 'add');
-    const t0 = performance.now();
+    const t0 = Date.now();
     const s = greedyMesh(g);
-    expect(performance.now() - t0).toBeLessThan(400);
+    expect(Date.now() - t0).toBeLessThan(400);
     expect(s.quads).toBeLessThan(area(s) / 2);
   });
 });
