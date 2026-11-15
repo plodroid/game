@@ -146,7 +146,7 @@ export default function StudioHub() {
             </div>
             {kind === 'weapon' && <p className="muted small" style={{ margin: '10px 0 0' }}>To put a published model on a weapon, open the weapon under Admin weapons and choose it as its Studio model.</p>}
             {kind === 'prop' && <p className="muted small" style={{ margin: '10px 0 0' }}>Published props can be placed on maps in Map Studio, under Scenery.</p>}
-            {kind === 'accessory' && <p className="muted small" style={{ margin: '10px 0 0' }}>Published accessories appear in the Garage, in the slot you gave them.</p>}
+            {kind === 'accessory' && <p className="muted small" style={{ margin: '10px 0 0' }}>Published accessories are saved in the library; fitting them to cars in the Garage is not wired up yet.</p>}
           </section>
 
           {legacy.length > 0 && (
