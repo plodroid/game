@@ -52,6 +52,7 @@ import { settingsSnapshot, useSettings, type Settings } from '../settings/settin
 import { mergeSynced, same, type Synced } from '../state/merge';
 import { newProfile, useProfile, type Profile, type Stats } from '../state/profile';
 import { setWeaponConfig } from '../weapons/custom';
+import { setPublishedAssets } from '../modeling/library';
 import { emptyRacing, sanitizeRacing } from '../velocity/racing';
 import { applyTuningJson } from '../velocity/tuning';
 import { useAccount, type AccountUser } from './account';
@@ -110,6 +111,7 @@ export async function start() {
   }
   await getRedirectResult(auth).catch(() => null);
   await loadWeaponConfig();
+  void loadPublishedAssets();
   void loadVelocityConfig().then(applyTuningJson);
   onAuthStateChanged(auth, (u) => void onUser(u));
 }
@@ -612,6 +614,49 @@ async function loadWeaponConfig() {
 export async function saveWeaponConfig(json: string) {
   await setDoc(doc(db, 'config', 'weapons'), { json, updatedAt: serverTimestamp() });
   setWeaponConfig(json);
+}
+
+/* ---------- Studio assets ---------- */
+
+/** The official assets the owner published: everyone reads them; a slow or missing list never holds the game up. */
+export async function loadPublishedAssets() {
+  try {
+    const snap = await getDocs(collection(db, 'assets'));
+    const list: unknown[] = [];
+    for (const d of snap.docs) {
+      try {
+        list.push(JSON.parse(String(d.data().json)));
+      } catch {
+        /* one bad asset doesn't lose the rest */
+      }
+    }
+    setPublishedAssets(list);
+  } catch {
+    /* offline: the built-in models */
+  }
+}
+
+/** Owner only (the rules refuse anyone else): makes an asset official, for everyone. */
+export async function savePublishedAsset(id: string, name: string, kind: string, json: string) {
+  await setDoc(doc(db, 'assets', id), { json, name, kind, updatedAt: serverTimestamp() });
+}
+
+export async function deletePublishedAsset(id: string) {
+  await deleteDoc(doc(db, 'assets', id));
+}
+
+/** Owner only: unfinished work, kept apart from what is live. Nobody else can read these. */
+export async function loadAssetDrafts(): Promise<string[]> {
+  const snap = await getDocs(collection(db, 'assetDrafts'));
+  return snap.docs.map((d) => String(d.data().json));
+}
+
+export async function saveAssetDraft(id: string, name: string, kind: string, json: string) {
+  await setDoc(doc(db, 'assetDrafts', id), { json, name, kind, updatedAt: serverTimestamp() });
+}
+
+export async function deleteAssetDraft(id: string) {
+  await deleteDoc(doc(db, 'assetDrafts', id));
 }
 
 /* ---------- Which version everyone plays ---------- */

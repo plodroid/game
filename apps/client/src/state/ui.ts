@@ -3,7 +3,7 @@ import type { Cosmetics, MatchResult, SpecialId, WeaponId } from '@chromashift/s
 
 export type Screen =
   | 'home' | 'play' | 'custom' | 'online' | 'lobby' | 'locker' | 'progression' | 'profile' | 'settings' | 'auth' | 'social'
-  | 'match' | 'results' | 'garage' | 'raceResults';
+  | 'match' | 'results' | 'garage' | 'raceResults' | 'studio';
 
 export interface Toast {
   id: number;

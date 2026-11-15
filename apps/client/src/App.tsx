@@ -33,6 +33,7 @@ const Social = lazy(() => import('./ui/screens/Social'));
 const PlayerCard = lazy(() => import('./ui/PlayerCard'));
 const Garage = lazy(() => import('./ui/velocity/Garage'));
 const RaceResults = lazy(() => import('./ui/velocity/RaceResults'));
+const StudioHub = lazy(() => import('./studio/StudioHub'));
 
 const SCREENS: Record<Exclude<Screen, 'match'>, ComponentType> = {
   home: Home,
@@ -49,6 +50,7 @@ const SCREENS: Record<Exclude<Screen, 'match'>, ComponentType> = {
   social: Social,
   garage: Garage,
   raceResults: RaceResults,
+  studio: StudioHub,
 };
 
 export function App({ webgl2 }: { webgl2: boolean }) {

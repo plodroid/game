@@ -4,6 +4,7 @@ import './styles/global.css';
 import './styles/hud.css';
 import './styles/social.css';
 import './styles/velocity.css';
+import './styles/studio.css';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { webgl2Available } from './settings/hardware';
@@ -18,7 +19,17 @@ else createRoot(document.getElementById('root')!).render(<App webgl2={webgl2Avai
 // Dev-only handle for debugging in the console; stripped from production builds.
 if (import.meta.env.DEV)
   void Promise.all([import('./game/engine'), import('./settings/settings'), import('./multiplayer/net')]).then(([{ engine }, { useSettings }, net]) =>
-    Object.assign(window, { __cs: { engine, useUi, useSettings, net } }),
+    Object.assign(window, {
+      __cs: { engine, useUi, useSettings, net },
+      // Opens the modelling workspace on a blank asset, for trying it without the owner's account.
+      __studio: async (kind: 'weapon' | 'vehicle' | 'accessory' | 'prop' | 'material' = 'weapon') => {
+        const [{ Studio }, { blankAsset }] = await Promise.all([import('./studio/Studio'), import('@chromashift/shared')]);
+        const box = document.createElement('div');
+        document.body.appendChild(box);
+        const root = createRoot(box);
+        root.render(<Studio asset={blankAsset(kind)} onClose={() => (root.unmount(), box.remove())} />);
+      },
+    }),
   );
 
 // Service worker: offline caching plus an explicit, user-confirmed update.

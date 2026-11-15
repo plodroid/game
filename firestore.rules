@@ -393,6 +393,25 @@ service cloud.firestore {
       allow delete: if isOwner(uid);
     }
 
+    // Studio assets (weapon, vehicle, accessory and prop models, materials). Published ones are the
+    // owner's alone to write and everyone's to read; drafts are private to the owner.
+    function validAsset(d) {
+      return d.keys().hasOnly(['json', 'name', 'kind', 'updatedAt'])
+        && d.json is string && d.json.size() < 950000
+        && d.name is string && d.name.size() <= 28
+        && d.kind in ['weapon', 'vehicle', 'accessory', 'prop', 'material']
+        && d.updatedAt == request.time;
+    }
+    match /assets/{id} {
+      allow read: if true;
+      allow write: if isAdmin() && validAsset(request.resource.data);
+      allow delete: if isAdmin();
+    }
+    match /assetDrafts/{id} {
+      allow read, delete: if isAdmin();
+      allow write: if isAdmin() && validAsset(request.resource.data);
+    }
+
     // Maps. Public maps are the owner's alone to publish; everyone can read and play them.
     match /publicMaps/{id} {
       allow read: if true;

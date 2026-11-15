@@ -1,0 +1,405 @@
+/*
+ * The Studio: a modelling workspace in the familiar layout of 3D tools. It reuses the editor
+ * shell (.me) and adds the tool rail, mode tabs, outliner rows and the hub's cards.
+ */
+.st__bar {
+  gap: 8px;
+}
+.st__name {
+  width: 170px;
+  height: 34px;
+  font-weight: 750;
+}
+.st__select {
+  height: 32px;
+  width: auto;
+  padding: 0 8px;
+  font-size: 0.82rem;
+}
+.st__modes {
+  display: flex;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--bg);
+}
+.st__modes button {
+  border: 0;
+  border-radius: 9px;
+  padding: 6px 16px;
+  background: transparent;
+  color: var(--tx-2);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 160ms var(--ease-out), color 160ms var(--ease-out);
+}
+.st__modes button[data-on='true'] {
+  background: var(--pig);
+  color: var(--on-paint);
+}
+.st .me__tools .btn[data-on='true'] {
+  background: var(--pig);
+  color: var(--on-paint);
+}
+.st__body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 48px 250px minmax(0, 1fr) 300px;
+}
+.st__rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0;
+  background: var(--bg);
+  overflow-y: auto;
+}
+.st__tool {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--tx-2);
+  cursor: pointer;
+  transition: background 140ms var(--ease-out), color 140ms var(--ease-out), transform 100ms var(--ease-out);
+}
+.st__tool:active {
+  transform: scale(0.94);
+}
+.st__tool[data-on='true'] {
+  background: var(--pig);
+  color: var(--on-paint);
+}
+.st__gap {
+  width: 24px;
+  height: 1px;
+  margin: 6px 0;
+  background: var(--s3);
+}
+.st__view {
+  background: #17141c;
+}
+.st__sec {
+  display: grid;
+  gap: 8px;
+  padding: 0 12px 8px;
+}
+.st__outline {
+  max-height: 30vh;
+}
+.st__row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 9px;
+}
+.st__row[data-on='true'] {
+  background: var(--s3);
+}
+.st__row[data-child='true'] {
+  margin-left: 14px;
+}
+.st__row[data-hidden='true'] .st__rowname {
+  opacity: 0.45;
+}
+.st__rowname {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--tx);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.st__rowname span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.st__rowname em {
+  font-style: normal;
+  font-size: 0.7rem;
+  color: var(--tx-3);
+}
+.st__mini {
+  width: 24px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tx-3);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.st__mini[data-on='true'] {
+  color: var(--tx);
+}
+.st__swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.st__swatch {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+.st__swatch[data-on='true'] {
+  box-shadow: 0 0 0 2px var(--s2), 0 0 0 4px var(--tx);
+}
+.st__swatch--add {
+  display: grid;
+  place-items: center;
+  background: var(--s3);
+  color: var(--tx-2);
+}
+.st__color {
+  width: 100%;
+  height: 40px;
+  padding: 2px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--bg);
+  cursor: pointer;
+}
+.st__slider {
+  display: grid;
+  gap: 2px;
+  font-size: 0.78rem;
+  color: var(--tx-2);
+}
+.st__slider span {
+  display: flex;
+  justify-content: space-between;
+}
+.st__slider input {
+  width: 100%;
+  accent-color: var(--pig);
+}
+.st__ops,
+.st__nudge {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.st__nudge {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.st__nudge .btn {
+  padding: 0;
+}
+.st__layers {
+  display: grid;
+  gap: 2px;
+}
+.st__tex canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  background: repeating-conic-gradient(#2a2630 0% 25%, #201c26 0% 50%) 50% / 16px 16px;
+}
+.st__menu {
+  position: fixed;
+  z-index: 120;
+  min-width: 190px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--s3);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+}
+.st__menu button,
+.st__searchbox button {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tx);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.st__menu kbd,
+.st__searchbox kbd {
+  font: 700 0.7rem/1.4 inherit;
+  color: var(--tx-3);
+}
+.st__search {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: grid;
+  place-items: start center;
+  padding-top: 14vh;
+  background: rgba(10, 8, 14, 0.5);
+}
+.st__searchbox {
+  width: min(420px, calc(100vw - 32px));
+  padding: 8px;
+  border-radius: 16px;
+  background: var(--s2);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+}
+.st__searchbox .input {
+  margin-bottom: 6px;
+}
+.st__only-narrow {
+  display: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .st__tool:hover,
+  .st__mini:hover {
+    background: var(--s3);
+    color: var(--tx);
+  }
+  .st__tool[data-on='true']:hover {
+    background: var(--pig);
+    color: var(--on-paint);
+  }
+  .st__menu button:hover,
+  .st__searchbox button:hover {
+    background: var(--s2);
+  }
+  .st__searchbox button:hover {
+    background: var(--s3);
+  }
+  .st__rowname:hover {
+    color: var(--pig);
+  }
+}
+/* Smaller screens: the two side panels become drawers over the view, opened from the top bar. */
+@media (max-width: 1000px) {
+  .st__body {
+    grid-template-columns: 44px minmax(0, 1fr);
+    position: relative;
+  }
+  .st__left,
+  .st__right {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 3;
+    width: min(300px, 82vw);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+  }
+  .st__left {
+    left: 44px;
+  }
+  .st__right {
+    right: 0;
+  }
+  .st__body[data-left='false'] .st__left,
+  .st__body[data-right='false'] .st__right {
+    display: none;
+  }
+  .st__only-narrow {
+    display: inline-flex;
+  }
+  .st__name {
+    width: 120px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .st__tool,
+  .st__modes button {
+    transition: none;
+  }
+}
+
+/* ---------- Studio hub ---------- */
+.studio-kinds {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 12px;
+  width: min(900px, 100%);
+  margin: 0 auto;
+}
+.studio-kind {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  padding: 18px;
+  border: 0;
+  border-radius: var(--blob);
+  background: var(--s2);
+  color: var(--tx);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 140ms var(--ease-out), background 180ms var(--ease-out);
+}
+.studio-kind:active {
+  transform: scale(0.98);
+}
+.studio-kind__icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--pig);
+  color: var(--on-paint);
+}
+.studio-kind__title {
+  font-size: 1.15rem;
+  font-weight: 900;
+}
+.studio-kind__desc {
+  font-size: 0.82rem;
+  color: var(--tx-2);
+}
+@media (hover: hover) and (pointer: fine) {
+  .studio-kind:hover {
+    background: var(--s3);
+  }
+}
+.studio-list {
+  display: grid;
+  gap: 8px;
+}
+.studio-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px;
+  border-radius: var(--blob-sm);
+  background: var(--s3);
+}
+.studio-item img,
+.studio-item__blank {
+  width: 72px;
+  height: 54px;
+  flex: none;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--bg);
+}
+.studio-item__blank[data-live='true'] {
+  background: var(--pig);
+  opacity: 0.6;
+}
+.studio-item__name {
+  flex: 1;
+  min-width: 120px;
+  display: grid;
+  font-weight: 750;
+}

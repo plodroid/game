@@ -8,6 +8,7 @@ import { useUi } from '../state/ui';
 import { configList, useWeapons } from '../weapons/custom';
 import { Icon } from './icons';
 import { ModelEditor } from './ModelEditor';
+import { publishedAssets, useLibrary } from '../modeling/library';
 
 type Draft = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -44,6 +45,8 @@ const slug = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(
 /** Owner only: add, tune and model weapons, and set limited sales. Saved for every player. */
 export function AdminWeapons({ onClose }: { onClose: () => void }) {
   useWeapons((s) => s.v);
+  useLibrary((s) => s.v);
+  const models = publishedAssets('weapon');
   const toast = useUi((s) => s.toast);
   const [q, setQ] = useState('');
   const [d, setD] = useState<Draft | null>(null);
@@ -207,6 +210,17 @@ export function AdminWeapons({ onClose }: { onClose: () => void }) {
                 </label>
               )}
             </div>
+            <label className="admin-field">
+              <span className="muted small">Studio model (made and published in the Studio)</span>
+              <select className="input" value={d.look.asset ?? ''} onChange={(e) => setLook('asset', e.target.value || undefined)}>
+                <option value="">None: use the built-in model</option>
+                {models.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className="row admin-tools__row">
               <button className="btn btn--primary" onClick={() => (parts.length || setParts(STARTER), setEditing(true))}>
                 {parts.length ? `Open model editor (${parts.length} parts)` : 'Model it by hand'}

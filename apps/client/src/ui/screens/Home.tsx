@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { GAME_VERSION, levelInfo } from '@chromashift/shared';
 import { audio } from '../../audio/audio';
 import { useAccount } from '../../auth/account';
+import { isOwner } from '../../auth/admin';
 import { menu, startOffline } from '../../game/session';
 import { useNet } from '../../multiplayer/net';
 import { publicName, useProfile } from '../../state/profile';
@@ -26,6 +27,9 @@ const ITEMS: { label: string; desc: string; pig: string; to?: Screen; run?: () =
   { label: 'Settings', desc: 'Graphics, audio, controls, accessibility', pig: 'graphite', to: 'settings' },
 ];
 
+/** The owner's content workshop: shown to the owner's signed-in account only. */
+const STUDIO: (typeof ITEMS)[number] = { label: 'Studio', desc: 'Make maps, weapons, vehicles and props (owner only)', pig: 'graphite', to: 'studio' };
+
 export function Home() {
   const go = useUi((s) => s.go);
   const online = useUi((s) => s.online);
@@ -47,7 +51,7 @@ export function Home() {
       </h1>
 
       <nav className="menu stagger" aria-label="Main menu">
-        {ITEMS.map((it, i) => (
+        {(isOwner() ? [...ITEMS, STUDIO] : ITEMS).map((it, i) => (
           <button
             key={it.label}
             ref={i === 0 ? first : undefined}
