@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ATLAS_COLS, blockFaces, type GameWorld, type MaterialId, type MapTheme, type Surface } from '@chromashift/shared';
 import { injectPaint, type PaintUniforms } from './paintAtlas';
-import { surfaceTexture } from './textures';
+import { surfaceSet } from './textures';
 
 const PROPS: Record<MaterialId, { rough: number; metal: number }> = {
   floor: { rough: 0.82, metal: 0 },
@@ -103,7 +103,8 @@ export function buildMapMeshes(world: GameWorld, theme: MapTheme, paint: PaintUn
     g.setAttribute('color', new THREE.Float32BufferAttribute(d.col, 3));
     g.setIndex(d.idx);
     g.computeBoundingSphere();
-    const tex = surfaceTexture(mat, o.textureQuality, o.anisotropy);
+    const set = surfaceSet(mat, o.textureQuality, o.anisotropy);
+    const tex = set?.map ?? null;
     const color = mat === 'island' ? 0xffffff : theme.materials[mat];
     const glass = mat === 'glass';
     const m =
@@ -115,6 +116,9 @@ export function buildMapMeshes(world: GameWorld, theme: MapTheme, paint: PaintUn
             vertexColors: true,
             roughness: PROPS[mat].rough,
             metalness: PROPS[mat].metal,
+            // Relief from the height field of the surface (paving joints, rivets, plank gaps).
+            normalMap: set?.normalMap ?? null,
+            roughnessMap: set?.roughnessMap ?? null,
             transparent: glass,
             opacity: glass ? 0.45 : 1,
             depthWrite: !glass,

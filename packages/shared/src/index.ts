@@ -24,3 +24,4 @@ export * from './validation';
 export * from './progression';
 export * from './commands';
 export * from './velocity';
+export * from './model';

@@ -4,7 +4,8 @@ import type { MapDef, PropDef } from '@chromashift/shared';
 import { buildBeach, buildStilts, seedOf, type Beach } from './beach';
 import { Ocean } from './ocean';
 import { SummerSky, type SkyLook } from './sky';
-import { facadeTexture, logoTexture, puffTexture } from './textures';
+import { buildPropModel, islandBelly } from './props';
+import { puffTexture } from './textures';
 
 export interface EnvOptions {
   shadowQuality: number;
@@ -125,7 +126,7 @@ export function buildEnvironment(scene: THREE.Scene, renderer: THREE.WebGLRender
   }
 
   for (const p of map.props) {
-    const prop = buildProp(p, map, o.lambert, o.tier);
+    const prop = p.kind === 'cloud' ? buildProp(p, map, o.lambert, o.tier) : buildPropModel(p, map, { lambert: o.lambert, tier: o.tier, shadows: o.shadowQuality > 0 });
     if (prop) group.add(prop);
   }
   // Rock bellies under floating islands.
@@ -133,9 +134,7 @@ export function buildEnvironment(scene: THREE.Scene, renderer: THREE.WebGLRender
     for (const b of map.blocks) {
       if (b.mat !== 'island' || b.h.x < 2) continue;
       const r = Math.min(b.h.x, b.h.z) * 1.15;
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(r, r * 1.6, 7), mat(0x7a6b5c, o.lambert));
-      cone.rotation.x = Math.PI;
-      cone.scale.set(b.h.x / r, 1, b.h.z / r);
+      const cone = islandBelly(b.h.x, b.h.z, { lambert: o.lambert, tier: o.tier }, Math.round(b.c.x * 7 + b.c.z * 3));
       cone.position.set(b.c.x, b.c.y - b.h.y - r * 0.8 + 0.05, b.c.z);
       group.add(cone);
     }
@@ -205,43 +204,7 @@ function buildProp(p: PropDef, map: MapDef, lambert: boolean, tier: number): THR
     g.add(me);
     return me;
   };
-  const h = p.h ?? 1;
   switch (p.kind) {
-    case 'building': {
-      // A sunlit tower: concrete frames and glass that reflects the sky.
-      const tex = facadeTexture(Math.round(p.x * 7 + p.z));
-      tex.repeat.set(p.s / 8, h / 8);
-      add(new THREE.BoxGeometry(p.s, h, p.s), mat(0xffffff, lambert, { map: tex, roughness: 0.32, metalness: 0.35 }), 0, h / 2, 0);
-      add(new THREE.BoxGeometry(p.s * 1.04, 1.2, p.s * 1.04), mat(0xe9e2d4, lambert, { roughness: 0.8 }), 0, h + 0.6, 0);
-      break;
-    }
-    case 'tank':
-      add(new THREE.CylinderGeometry(p.s, p.s, h, 20), mat(0x9aa4b5, lambert, { metalness: 0.3 }), 0, h / 2 + 0.6, 0);
-      add(new THREE.ConeGeometry(p.s * 1.05, 1.1, 20), mat(0x5b6378, lambert), 0, h + 1.15, 0);
-      for (const [sx, sz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) add(new THREE.CylinderGeometry(0.08, 0.08, 0.7, 6), mat(0x3d4459, lambert), sx * p.s * 0.6, 0.35, sz * p.s * 0.6);
-      break;
-    case 'antenna':
-      add(new THREE.CylinderGeometry(0.06, 0.12, h, 6), mat(0x8a93a6, lambert), 0, h / 2, 0);
-      add(new THREE.SphereGeometry(0.16, 8, 6), mat(0xff3355, lambert, { emissive: 0xff3355, emissiveIntensity: 2 }), 0, h, 0);
-      break;
-    case 'billboard': {
-      add(new THREE.BoxGeometry(5.2, 2.6, 0.2), mat(0x1b1d30, lambert), 0, 2.6, 0);
-      const face = add(new THREE.PlaneGeometry(4.8, 2.3), new THREE.MeshBasicMaterial({ map: logoTexture(), toneMapped: false }), 0, 2.6, -0.11);
-      face.rotation.y = Math.PI;
-      for (const sx of [-2, 2]) add(new THREE.BoxGeometry(0.15, 1.4, 0.15), mat(0x3d4459, lambert), sx, 0.7, 0);
-      break;
-    }
-    case 'lamp':
-      add(new THREE.CylinderGeometry(0.05, 0.05, 1.6, 6), mat(0x3d4459, lambert), 0, 0.8, 0);
-      add(new THREE.SphereGeometry(0.16, 10, 8), mat(0xffe2b0, lambert, { emissive: 0xffd28a, emissiveIntensity: 2.5 }), 0, 1.65, 0);
-      break;
-    case 'pipe':
-      add(new THREE.CylinderGeometry(0.22, 0.22, h, 12), mat(0x7d8799, lambert, { metalness: 0.4 }), 0, h / 2, 0);
-      break;
-    case 'panel':
-      add(new THREE.BoxGeometry(0.1, 3, 6), mat(0x1b2040, lambert), 0, 0, 0);
-      for (const y of [-1, 0, 1]) add(new THREE.BoxGeometry(0.12, 0.08, 5.6), mat(0x5fd3ff, lambert, { emissive: 0x5fd3ff, emissiveIntensity: 1.6 }), 0, y, 0);
-      break;
     case 'cloud': {
       if (tier >= 2) {
         // Soft cumulus made of sunlit puffs (sprites always face the camera, so it reads as volume from anywhere).
@@ -260,17 +223,6 @@ function buildProp(p: PropDef, map: MapDef, lambert: boolean, tier: number): THR
         add(new THREE.IcosahedronGeometry(p.s * (0.25 + (i % 3) * 0.08), 1), m, (i - 2.5) * p.s * 0.22, Math.sin(i * 1.7) * p.s * 0.08, Math.cos(i * 2.3) * p.s * 0.15);
       break;
     }
-    case 'crystal':
-      add(new THREE.OctahedronGeometry(0.5 * p.s, 0), mat(0x9ff3ff, lambert, { emissive: 0x5fd3ff, emissiveIntensity: 1.2, roughness: 0.1 }), 0, 0.6 * p.s, 0).scale.y = 1.8;
-      break;
-    case 'tree':
-      add(new THREE.CylinderGeometry(0.12 * p.s, 0.18 * p.s, 1.2 * p.s, 6), mat(0x7a5a3c, lambert), 0, 0.6 * p.s, 0);
-      add(new THREE.IcosahedronGeometry(0.9 * p.s, 0), mat(map.theme.materials.island, lambert, { roughness: 0.9, flatShading: true }), 0, 1.7 * p.s, 0);
-      break;
-    case 'rock':
-      add(new THREE.DodecahedronGeometry(p.s, 0), mat(0x8a7b6a, lambert, { flatShading: true }), 0, 0, 0);
-      add(new THREE.ConeGeometry(p.s * 0.9, p.s * 1.8, 7), mat(0x7a6b5c, lambert, { flatShading: true }), 0, -p.s * 1.2, 0).rotation.x = Math.PI;
-      break;
   }
   g.traverse((x) => {
     x.matrixAutoUpdate = false;

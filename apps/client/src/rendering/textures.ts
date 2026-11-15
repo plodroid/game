@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { MaterialId } from '@chromashift/shared';
 
-// Procedural, original surface textures. Greyscale detail only — colour comes from each map's theme.
+// Procedural, original surface textures. Greyscale detail only: colour comes from each map's theme.
 const cache = new Map<string, THREE.Texture>();
 
 function hash(x: number, y: number, s: number) {
@@ -31,122 +31,170 @@ function fbm(x: number, y: number, base: number, seed: number) {
   return v;
 }
 
-type Painter = (ctx: CanvasRenderingContext2D, n: number, img: ImageData) => void;
+/*
+ * Each arena material is drawn as a height field over one 2 m tile (u, v in 0 … 1): paving with
+ * bevelled joints, cast concrete panels with tie holes, riveted plate, planked crates … From the
+ * height come three maps: tone (what the colour is multiplied by), normal (how it catches light)
+ * and roughness (worn high spots are smoother). `flat` is the height of the untouched surface, so
+ * the average brightness stays where the colours of each theme were chosen.
+ */
+interface Relief {
+  height(u: number, v: number): number;
+  flat: number;
+  /** Strength of the bumps, of the darkening in the low parts, and of the roughness change. */
+  bump: number;
+  tone: number;
+  rough: number;
+}
 
-const painters: Partial<Record<MaterialId, Painter>> = {
-  floor(ctx, n, img) {
-    noiseFill(img, n, 6, 1, 0.86, 0.12);
-    ctx.putImageData(img, 0, 0);
-    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
-    ctx.lineWidth = Math.max(1, n / 128);
-    for (let i = 0; i <= 2; i++) {
-      line(ctx, (i * n) / 2, 0, (i * n) / 2, n);
-      line(ctx, 0, (i * n) / 2, n, (i * n) / 2);
-    }
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    for (let i = 0; i <= 2; i++) line(ctx, (i * n) / 2 + 1.5, 0, (i * n) / 2 + 1.5, n);
-  },
-  wall(ctx, n, img) {
-    noiseFill(img, n, 4, 2, 0.84, 0.16);
-    ctx.putImageData(img, 0, 0);
-    ctx.fillStyle = 'rgba(0,0,0,0.14)';
-    ctx.fillRect(0, n * 0.48, n, Math.max(1, n / 96));
-    ctx.fillStyle = 'rgba(255,255,255,0.06)';
-    ctx.fillRect(0, 0, n, n * 0.06);
-  },
-  metal(ctx, n, img) {
-    noiseFill(img, n, 16, 3, 0.8, 0.08, 4);
-    ctx.putImageData(img, 0, 0);
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-    ctx.lineWidth = Math.max(1, n / 160);
-    ctx.strokeRect(n * 0.02, n * 0.02, n * 0.96, n * 0.96);
-    ctx.fillStyle = 'rgba(0,0,0,0.22)';
-    const r = n / 64;
-    for (const [x, y] of [[0.08, 0.08], [0.92, 0.08], [0.08, 0.92], [0.92, 0.92]]) {
-      ctx.beginPath();
-      ctx.arc(x * n, y * n, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  },
-  trim(ctx, n, img) {
-    noiseFill(img, n, 8, 4, 0.9, 0.06);
-    ctx.putImageData(img, 0, 0);
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    for (let i = -2; i < 6; i++) {
-      ctx.beginPath();
-      ctx.moveTo((i * n) / 4, n);
-      ctx.lineTo((i * n) / 4 + n / 8, n);
-      ctx.lineTo((i * n) / 4 + n / 8 + n / 2, 0);
-      ctx.lineTo((i * n) / 4 + n / 2, 0);
-      ctx.fill();
-    }
-  },
-  base(ctx, n, img) {
-    noiseFill(img, n, 6, 5, 0.86, 0.1);
-    ctx.putImageData(img, 0, 0);
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-    ctx.lineWidth = Math.max(1, n / 90);
-    ctx.beginPath();
-    ctx.arc(n / 2, n / 2, n * 0.32, 0, Math.PI * 2);
-    ctx.stroke();
-  },
-  crate(ctx, n, img) {
-    noiseFill(img, n, 3, 6, 0.82, 0.14, 0.25);
-    ctx.putImageData(img, 0, 0);
-    ctx.fillStyle = 'rgba(0,0,0,0.16)';
-    for (let i = 1; i < 4; i++) ctx.fillRect(0, (i * n) / 4, n, Math.max(1, n / 128));
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-    ctx.lineWidth = Math.max(2, n / 40);
-    ctx.strokeRect(0, 0, n, n);
-  },
-  island(ctx, n, img) {
-    noiseFill(img, n, 5, 7, 0.82, 0.22);
-    ctx.putImageData(img, 0, 0);
-  },
+const tri = (t: number) => 1 - Math.abs((((t % 1) + 1) % 1) * 2 - 1);
+/** 0 in a joint of half-width `w`, rising smoothly to 1 on the flat. */
+const joint = (d: number, w: number) => {
+  const t = Math.min(1, Math.max(0, d / w));
+  return t * t * (3 - 2 * t);
+};
+/** Distance (0 … 0.5) from the nearest line of a grid with `n` cells across. */
+const toLine = (t: number, n: number) => {
+  const f = (((t * n) % 1) + 1) % 1;
+  return Math.min(f, 1 - f) / n;
 };
 
-function line(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number) {
-  ctx.beginPath();
-  ctx.moveTo(x0, y0);
-  ctx.lineTo(x1, y1);
-  ctx.stroke();
-}
-
-function noiseFill(img: ImageData, n: number, scale: number, seed: number, base: number, amp: number, stretch = 1) {
-  const d = img.data;
-  for (let y = 0; y < n; y++)
-    for (let x = 0; x < n; x++) {
-      const v = base + (fbm(x / n, (y / n) * stretch, scale, seed) - 0.5) * amp * 2;
-      const c = Math.max(0, Math.min(255, v * 255));
-      const i = (y * n + x) * 4;
-      d[i] = d[i + 1] = d[i + 2] = c;
-      d[i + 3] = 255;
-    }
-}
+const RELIEF: Partial<Record<MaterialId, Relief>> = {
+  // Paving: four slabs to the tile, slightly uneven, with chamfered joints and a fine speckle.
+  floor: {
+    flat: 0.78, bump: 1.1, tone: 0.34, rough: 0.3,
+    height(u, v) {
+      const j = Math.min(joint(toLine(u, 2), 0.012), joint(toLine(v, 2), 0.012));
+      const slab = hash(Math.floor(u * 2), Math.floor(v * 2), 3) * 0.06;
+      return j * (0.72 + slab) + (fbm(u, v, 24, 1) - 0.5) * 0.1 + (fbm(u, v, 5, 2) - 0.5) * 0.08;
+    },
+  },
+  // Cast concrete: panels a metre high, staggered seams, tie holes, soft blotches.
+  wall: {
+    flat: 0.76, bump: 1, tone: 0.36, rough: 0.28,
+    height(u, v) {
+      const row = Math.floor(v * 2), fu = u + (row % 2) * 0.25;
+      const seam = Math.min(joint(toLine(v, 2), 0.008), joint(toLine(fu, 2), 0.008));
+      const hx = toLine(fu + 0.125, 4), hy = toLine(v + 0.125, 4);
+      const hole = Math.hypot(hx, hy) < 0.012 ? -0.45 : 0;
+      return seam * 0.76 + hole + (fbm(u, v, 6, 5) - 0.5) * 0.14 + (fbm(u, v, 40, 6) - 0.5) * 0.07;
+    },
+  },
+  // Steel plate: a rolled-in border, rivets, and brushing along the plate.
+  metal: {
+    flat: 0.74, bump: 0.9, tone: 0.3, rough: 0.4,
+    height(u, v) {
+      const edge = Math.min(joint(toLine(u, 1), 0.016), joint(toLine(v, 1), 0.016));
+      let rivet = 0;
+      for (const [x, y] of [[0.07, 0.07], [0.5, 0.07], [0.93, 0.07], [0.07, 0.5], [0.93, 0.5], [0.07, 0.93], [0.5, 0.93], [0.93, 0.93]]) {
+        const d = Math.hypot(u - x, v - y);
+        if (d < 0.022) rivet = Math.max(rivet, Math.cos((d / 0.022) * Math.PI * 0.5) * 0.3);
+      }
+      const brush = (valueNoise(u * 3, v * 90, 90, 9) - 0.5) * 0.07;
+      return edge * 0.74 + rivet + brush + (fbm(u, v, 4, 10) - 0.5) * 0.06;
+    },
+  },
+  // Trim: pressed diagonal chevrons, as on a kick plate.
+  trim: {
+    flat: 0.8, bump: 0.8, tone: 0.24, rough: 0.3,
+    height(u, v) {
+      const band = tri((u + v) * 4);
+      return 0.68 + (band > 0.5 ? 0.14 : 0) * joint(Math.abs(band - 0.5), 0.06) + (fbm(u, v, 28, 12) - 0.5) * 0.06;
+    },
+  },
+  // Base pad: anti-slip plate, a fine grid of low round studs.
+  base: {
+    flat: 0.7, bump: 0.7, tone: 0.2, rough: 0.3,
+    height(u, v) {
+      const fu = ((u * 10) % 1) - 0.5, fv = ((v * 10) % 1) - 0.5, d = Math.hypot(fu, fv);
+      const stud = d < 0.3 ? Math.cos((d / 0.3) * Math.PI * 0.5) * 0.16 : 0;
+      return 0.7 + stud + (fbm(u, v, 20, 14) - 0.5) * 0.06;
+    },
+  },
+  // Crate: planks with grain, a raised frame and a cross brace.
+  crate: {
+    flat: 0.62, bump: 1.4, tone: 0.42, rough: 0.3,
+    height(u, v) {
+      const plank = joint(toLine(v, 5), 0.01);
+      const grain = (valueNoise(u * 60, v * 5 + Math.floor(v * 5) * 7.3, 60, 16) - 0.5) * 0.12 + (fbm(u, v, 3, 17) - 0.5) * 0.1;
+      const frame = Math.min(u, 1 - u, v, 1 - v) < 0.07 ? 0.3 : 0;
+      const brace = Math.abs(u - v) < 0.05 ? 0.26 : 0;
+      return plank * 0.55 + grain + Math.max(frame, brace);
+    },
+  },
+  // Grass: tufts in clumps.
+  island: {
+    flat: 0.62, bump: 1.2, tone: 0.5, rough: 0.2,
+    height(u, v) {
+      const clump = fbm(u, v, 5, 20);
+      const blade = valueNoise(u * 70, v * 22, 70, 21) * valueNoise(u * 31, v * 64, 64, 22);
+      return 0.3 + clump * 0.45 + blade * 0.5;
+    },
+  },
+};
 
 /** Size per texture-quality level. */
 export const textureSize = (q: number) => [128, 256, 512, 1024][Math.max(0, Math.min(3, q))];
 
-export function surfaceTexture(mat: MaterialId, quality: number, anisotropy: number): THREE.Texture | null {
-  const paint = painters[mat];
-  if (!paint) return null;
-  const n = textureSize(quality);
-  const key = `${mat}:${n}`;
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = n;
-  const ctx = canvas.getContext('2d')!;
-  paint(ctx, n, ctx.createImageData(n, n));
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = anisotropy;
-  tex.generateMipmaps = true;
-  tex.minFilter = THREE.LinearMipmapLinearFilter;
-  cache.set(key, tex);
-  return tex;
+export interface SurfaceSet {
+  map: THREE.Texture;
+  normalMap: THREE.Texture;
+  roughnessMap: THREE.Texture;
 }
+const sets = new Map<string, SurfaceSet>();
+
+/** Tone, normal and roughness maps of an arena material; null for glass and invisible walls. */
+export function surfaceSet(mat: MaterialId, quality: number, anisotropy: number): SurfaceSet | null {
+  const rel = RELIEF[mat];
+  if (!rel) return null;
+  // Past 512 the relief gains nothing and the maps cost four times the memory.
+  const n = Math.min(512, textureSize(quality));
+  const key = `${mat}:${n}`;
+  const hit = sets.get(key);
+  if (hit) return hit;
+  const h = new Float32Array(n * n);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) h[y * n + x] = rel.height(x / n, y / n);
+  const at = (x: number, y: number) => h[((y + n) % n) * n + ((x + n) % n)];
+  const make = () => {
+    const c = document.createElement('canvas');
+    c.width = c.height = n;
+    const ctx = c.getContext('2d')!;
+    return { c, ctx, img: ctx.createImageData(n, n) };
+  };
+  const tone = make(), nrm = make(), rgh = make();
+  const k = rel.bump * (n / 128) * 1.6;
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++) {
+      const i = (y * n + x) * 4, v = h[y * n + x];
+      const dx = (at(x + 1, y) - at(x - 1, y)) * k, dy = (at(x, y + 1) - at(x, y - 1)) * k;
+      const l = Math.hypot(dx, dy, 1);
+      nrm.img.data[i] = Math.round((-dx / l) * 127.5 + 127.5);
+      nrm.img.data[i + 1] = Math.round((dy / l) * 127.5 + 127.5);
+      nrm.img.data[i + 2] = Math.round((1 / l) * 127.5 + 127.5);
+      nrm.img.data[i + 3] = 255;
+      const t = Math.max(0, Math.min(255, Math.round(255 * (0.86 + (v - rel.flat) * rel.tone * 2))));
+      tone.img.data[i] = tone.img.data[i + 1] = tone.img.data[i + 2] = t;
+      tone.img.data[i + 3] = 255;
+      const r = Math.max(0, Math.min(255, Math.round(255 * (1 - Math.max(0, v - rel.flat + 0.1) * rel.rough))));
+      rgh.img.data[i] = rgh.img.data[i + 1] = rgh.img.data[i + 2] = r;
+      rgh.img.data[i + 3] = 255;
+    }
+  const tex = (m: ReturnType<typeof make>, srgb: boolean) => {
+    m.ctx.putImageData(m.img, 0, 0);
+    const t = new THREE.CanvasTexture(m.c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = anisotropy;
+    t.generateMipmaps = true;
+    t.minFilter = THREE.LinearMipmapLinearFilter;
+    return t;
+  };
+  const set: SurfaceSet = { map: tex(tone, true), normalMap: tex(nrm, false), roughnessMap: tex(rgh, false) };
+  sets.set(key, set);
+  return set;
+}
+
+export const surfaceTexture = (mat: MaterialId, quality: number, anisotropy: number): THREE.Texture | null => surfaceSet(mat, quality, anisotropy)?.map ?? null;
 
 /** Lit-window facade for background buildings. */
 export function windowsTexture(seed: number): THREE.Texture {
@@ -202,33 +250,60 @@ export function logoTexture(): THREE.Texture {
 export function disposeTextures() {
   for (const t of cache.values()) t.dispose();
   cache.clear();
+  for (const x of sets.values()) {
+    x.map.dispose();
+    x.normalMap.dispose();
+    x.roughnessMap.dispose();
+  }
+  sets.clear();
 }
 
-/** Daytime facade for background towers: sunlit concrete frames around blue-green glass. */
+/**
+ * Daytime facade for background towers, one 8 m tile: floor bands and mullions in pale concrete,
+ * glass that picks up the sky in different amounts, blinds drawn here and there, a sill shadow
+ * under every window.
+ */
 export function facadeTexture(seed: number): THREE.Texture {
   const key = `facade:${seed}`;
   const hit = cache.get(key);
   if (hit) return hit;
-  const n = 128;
+  const n = 256, cols = 8, rows = 16, cw = n / cols, rh = n / rows;
   const c = document.createElement('canvas');
   c.width = c.height = n;
   const ctx = c.getContext('2d')!;
   const warm = hash(seed, 1, 3) > 0.5;
   ctx.fillStyle = warm ? '#efe6d6' : '#e3e8ec';
   ctx.fillRect(0, 0, n, n);
-  for (let y = 0; y < 16; y++)
-    for (let x = 0; x < 8; x++) {
-      const r = hash(x, y, seed);
-      // Glass, catching more or less of the sky; now and then a blind drawn against the sun.
-      const l = 38 + Math.floor(r * 22);
-      ctx.fillStyle = r > 0.9 ? '#d8d2c6' : `hsl(${warm ? 195 : 205}, 38%, ${l}%)`;
-      ctx.fillRect(x * 16 + 2, y * 8 + 1, 12, 6);
-      ctx.fillStyle = 'rgba(255,255,255,0.22)';
-      ctx.fillRect(x * 16 + 2, y * 8 + 1, 12, 1);
+  // A darker spandrel band under each floor.
+  ctx.fillStyle = warm ? '#d9cdb8' : '#cbd3da';
+  for (let y = 0; y < rows; y++) ctx.fillRect(0, y * rh + rh - 3, n, 3);
+  for (let y = 0; y < rows; y++)
+    for (let x = 0; x < cols; x++) {
+      const r = hash(x, y, seed), r2 = hash(x, y, seed + 9);
+      const wx = x * cw + 4, wy = y * rh + 2, ww = cw - 8, wh = rh - 6;
+      const l = 34 + Math.floor(r * 24);
+      const g = ctx.createLinearGradient(0, wy, 0, wy + wh);
+      g.addColorStop(0, `hsl(${warm ? 196 : 206}, 42%, ${l + 12}%)`);
+      g.addColorStop(1, `hsl(${warm ? 200 : 210}, 40%, ${l - 4}%)`);
+      ctx.fillStyle = g;
+      ctx.fillRect(wx, wy, ww, wh);
+      // Blinds part-way down on some, fully down on a few.
+      if (r2 > 0.72) {
+        ctx.fillStyle = warm ? '#e4dccb' : '#d6dce1';
+        ctx.fillRect(wx, wy, ww, wh * (r2 > 0.93 ? 1 : 0.25 + (r2 - 0.72) * 2));
+      }
+      // Centre mullion, top highlight, sill shadow.
+      ctx.fillStyle = warm ? '#f4eee2' : '#eef2f5';
+      ctx.fillRect(wx + ww / 2 - 1, wy, 2, wh);
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.fillRect(wx, wy, ww, 1);
+      ctx.fillStyle = 'rgba(40,50,70,0.3)';
+      ctx.fillRect(wx, wy + wh, ww, 1.5);
     }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
   cache.set(key, tex);
   return tex;
 }

@@ -15,6 +15,8 @@ export interface WeaponLook {
   parts?: WeaponPart[];
   /** Where shots leave a hand-modelled gun: [y, z]. */
   muzzle?: [number, number];
+  /** A model made in the Studio (its published id): replaces the base shape and any parts. */
+  asset?: string;
 }
 
 /** One primitive of a hand-modelled gun: position, size (x, y, z) and colour. */
@@ -522,6 +524,7 @@ function cleanDef(raw: Record<string, unknown>): WeaponDef | null {
       extra: (['none', 'scope', 'drum', 'fins', 'tank', 'spikes', 'rings', 'grip'].includes(look.extra as string) ? look.extra : 'none') as WeaponLook['extra'],
       ...(parts?.length ? { parts } : {}),
       ...(parts?.length && Array.isArray(m) ? { muzzle: [num(m[0], -1, 1, 0.1), num(m[1], -2, 0.5, -0.4)] as [number, number] } : {}),
+      ...(typeof look.asset === 'string' && /^[a-z0-9][a-z0-9-]{1,31}$/.test(look.asset) ? { asset: look.asset } : {}),
     },
     roll: b.roll && { ...b.roll, ...(raw.roll as object) },
     ratings: { range: num(r.range, 1, 5, 3), damage: num(r.damage, 1, 5, 3), paint: num(r.paint, 1, 5, 3), mobility: num(r.mobility, 1, 5, 3) },
