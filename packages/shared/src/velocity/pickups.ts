@@ -12,7 +12,7 @@ export const ITEM_INFO: Record<ItemId, { name: string; text: string }> = {
   shield: { name: 'Prism Shield', text: 'Bumps can’t hurt you for five seconds, and you shove others aside.' },
   slick: { name: 'Paint Slick', text: 'Drops a slippery splat behind you. Cars that hit it lose grip for a moment.' },
   shock: { name: 'Shockwave', text: 'Pushes nearby cars away from you.' },
-  repair: { name: 'Repair Burst', text: 'Fixes some of your car’s damage.' },
+  repair: { name: 'Bounce Back', text: 'Shakes off a bump at once and tops up your boost.' },
   slipstream: { name: 'Slipstream Charge', text: 'For six seconds, following close behind another car gives you extra speed.' },
   decoy: { name: 'Decoy Beacon', text: 'Leaves a fake pickup box. Whoever drives into it gets bounced and loses their item.' },
 };

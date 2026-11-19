@@ -87,6 +87,8 @@ export class Car {
   /** Pickup effects. */
   shieldT = 0;
   spunT = 0;
+  /** Seconds left of the daze after bouncing off a wall (drive is weaker). */
+  bonkT = 0;
   slipT = 0;
   draftT = 0;
   ghostT = 0;
@@ -265,7 +267,7 @@ export class Car {
     // Engine force falls away towards top speed; reverse is gentle.
     const top = h.topSpeed * (this.boosting ? 1.22 : 1);
     const curve = Math.max(0, 1 - (Math.max(0, vf) / top) ** 2);
-    let driveF = throttle * h.engine * fx.power * curve * (1 - SURFACE_DRAG[this.surface] * 0.6);
+    let driveF = throttle * h.engine * fx.power * curve * (1 - SURFACE_DRAG[this.surface] * 0.6) * (this.bonkT > 0 ? 0.35 : 1);
     if (reverse) driveF = -reverse * h.engine * 0.45 * Math.max(0, 1 - Math.max(0, -vf) / h.reverseSpeed);
     driveF += boostF;
 

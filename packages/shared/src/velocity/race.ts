@@ -5,8 +5,7 @@ import { mulberry32 } from '../rng';
 import { RaceBot } from './bot';
 import { Car, emptyRaceInput, RB, rotate, type RaceInput } from './car';
 import { sanitizeCarLoadout, type CarLoadout } from './catalog';
-import { CAR_HALF, COUNTDOWN, DEFAULT_HANDLING, FINISH_GRACE, MAX_RACERS, sanitizeHandling, type DamageMode, type Handling, type RacePreset } from './config';
-import { applyImpact, PART_INDEX } from './damage';
+import { COUNTDOWN, DEFAULT_HANDLING, FINISH_GRACE, MAX_RACERS, sanitizeHandling, type DamageMode, type Handling, type RacePreset } from './config';
 import { BOX_RESPAWN, DECOY_LIFE, rollItem, SHOCK_RADIUS, SLICK_LIFE, type ItemId } from './pickups';
 import { lateralOffset, nearestSample, type TrackPath } from './track';
 import { trackPath } from './tracks';
@@ -100,6 +99,7 @@ export type RaceEvent =
   | { t: 'horn'; id: number }
   | { t: 'overtake'; id: number; pos: number }
   | { t: 'spin'; id: number }
+  | { t: 'bonk'; id: number; x: number; y: number; z: number }
   | { t: 'wrong'; id: number; on: boolean };
 
 export interface Box {
@@ -312,6 +312,7 @@ export class RaceSim {
       if (car.drift > 0) r.stats.driftTime += DT;
       car.shieldT = Math.max(0, car.shieldT - DT);
       car.spunT = Math.max(0, car.spunT - DT);
+      car.bonkT = Math.max(0, car.bonkT - DT);
       car.slipT = Math.max(0, car.slipT - DT);
       car.draftT = Math.max(0, car.draftT - DT);
       if (car.ghostT > 0) {
@@ -490,7 +491,10 @@ export class RaceSim {
     this.emit({ t: 'respawn', id: r.id });
   }
 
-  /** Real impact data → damage (and the shield's shove). */
+  /**
+   * Impacts. Cars never take damage: hitting a wall bounces the car back off it like a kart, with a
+   * hop and a wobble and a moment of lost drive; car-to-car bumps just push. A shield shoves others.
+   */
   private contact(h1: number, h2: number, force: number) {
     const a = this.byCollider.get(h1), b = this.byCollider.get(h2);
     for (const [me, other] of [
@@ -501,13 +505,17 @@ export class RaceSim {
       const otherCol = other ? other.car.collider : this.world.getCollider(me === a ? h2 : h1);
       if (!otherCol) continue;
       const dv = (force * DT) / this.handling.mass;
-      let lx = 0, lz = 0, found = false;
+      let lx = 0, lz = 0, nx = 0, ny = 0, nz = 0, found = false;
       this.world.contactPair(me.car.collider, otherCol, (m, flipped) => {
         if (found || m.numContacts() === 0) return;
         const c = flipped ? m.localContactPoint2(0) : m.localContactPoint1(0);
         if (!c) return;
         lx = c.x;
         lz = c.z;
+        const n = m.normal();
+        nx = n.x;
+        ny = n.y;
+        nz = n.z;
         found = true;
       });
       if (!found) continue;
@@ -527,19 +535,42 @@ export class RaceSim {
         }
         continue;
       }
-      let part = -1;
-      if (this.config.damage !== 'off' && this.phase !== 'grid' && this.phase !== 'countdown') {
-        const hit = applyImpact(me.car.damage, lx, lz, dv, CAR_HALF.x, CAR_HALF.z);
-        if (hit) {
-          part = PART_INDEX[hit];
-          me.car.refreshDamage(this.config.damage === 'full');
-        }
-      }
+      const part = -1;
+      // A wall (not another car, not the road underfoot): bounce off it.
+      if (!other && Math.abs(ny) < 0.6 && this.phase !== 'grid' && this.phase !== 'countdown') this.bounce(me, nx, nz);
       if ((dv > 3 || part >= 0) && me.hitCd === 0) {
         me.hitCd = 0.25;
         this.emit({ t: 'impact', id: me.id, x: wx, y: wy, z: wz, dv, part });
       }
     }
+  }
+
+  /**
+   * The kart-style wall bump: the part of the car's speed going into the wall is turned round (and
+   * mostly kept), the rest is trimmed, the car hops and wobbles, and for a moment the engine pulls
+   * less. Gentle scrapes along a wall barely do anything.
+   */
+  private bounce(r: Racer, nx: number, nz: number) {
+    const car = r.car, b = car.body, v = b.linvel();
+    const l = Math.hypot(nx, nz) || 1;
+    let ux = nx / l, uz = nz / l;
+    // Point the normal away from the wall: the car is moving into it.
+    if (v.x * ux + v.z * uz > 0) {
+      ux = -ux;
+      uz = -uz;
+    }
+    const into = v.x * ux + v.z * uz;
+    if (into > -2.2 || car.bonkT > 0.25) return;
+    const e = 0.55;
+    const tx = v.x - into * ux, tz = v.z - into * uz;
+    b.setLinvel({ x: tx * 0.82 - into * e * ux, y: Math.max(v.y, 0) + Math.min(3.2, -into * 0.18), z: tz * 0.82 - into * e * uz }, true);
+    const w = b.angvel();
+    // Wobble: a spin away from the wall, more for a harder hit.
+    const side = Math.sign(tx * uz - tz * ux) || 1;
+    b.setAngvel({ x: w.x, y: w.y + side * Math.min(4, -into * 0.22), z: w.z }, true);
+    car.bonkT = Math.min(0.7, 0.25 + -into * 0.02);
+    car.drift = 0;
+    this.emit({ t: 'bonk', id: r.id, x: b.translation().x, y: b.translation().y, z: b.translation().z });
   }
 
   /** Following close behind another car cuts drag and fills the boost meter. */
@@ -666,8 +697,10 @@ export class RaceSim {
         }
         break;
       case 'repair':
-        for (let i = 0; i < car.damage.length; i++) car.damage[i] *= 0.45;
-        car.refreshDamage(this.config.damage === 'full');
+        // Shakes off a bump at once and tops up the boost meter.
+        car.bonkT = 0;
+        car.spunT = 0;
+        car.meter = Math.min(1, car.meter + 0.35);
         break;
       case 'slipstream':
         car.slipT = 6;

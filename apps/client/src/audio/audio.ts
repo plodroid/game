@@ -45,6 +45,7 @@ const SFX: Sfx[] = [
 ];
 const SHOT_BASES = ['pulse', 'arc', 'lobber', 'roller', 'dual'];
 const NOTE = (n: number) => 440 * Math.pow(2, (n - 69) / 12);
+export type MusicKind = 'menu' | 'match' | 'garage';
 
 /**
  * Procedural audio: every sound is synthesised at runtime, so there are no audio assets to
@@ -60,7 +61,9 @@ class AudioEngine {
   /** Every effect rendered once into a buffer: playing one is a single source, not a synth graph. */
   private bank = new Map<string, AudioBuffer>();
   private listener = { x: 0, y: 0, z: 0, yaw: 0 };
-  private music: { timer: number; step: number; next: number; kind: 'menu' | 'match' } | null = null;
+  private music: { timer: number; step: number; next: number; kind: MusicKind } | null = null;
+  /** The music the game wants playing. Kept even before audio is allowed, so it starts on the first tap. */
+  private wanted: MusicKind | null = null;
   private intensity = 0;
   private ambient: { src: AudioBufferSourceNode; lfo: OscillatorNode } | null = null;
   /** Fires for loud world sounds so the HUD can show visual audio cues. */
@@ -95,6 +98,7 @@ class AudioEngine {
       void this.prerender();
     }
     if (this.ctx.state !== 'running') void this.ctx.resume();
+    if (this.wanted && !this.music) this.startMusic(this.wanted);
   }
 
   applyVolumes() {
@@ -417,10 +421,13 @@ class AudioEngine {
   }
 
   /** Simple lookahead sequencer playing original patterns. */
-  startMusic(kind: 'menu' | 'match') {
+  startMusic(kind: MusicKind) {
+    this.wanted = kind;
     if (!this.ctx) return;
     if (this.music?.kind === kind) return;
-    this.stopMusic();
+    if (this.music) clearInterval(this.music.timer);
+    this.music = null;
+    if (kind === 'garage') return this.startGarage();
     const m = { timer: 0, step: 0, next: this.ctx.currentTime + 0.1, kind };
     this.music = m;
     const bpm = kind === 'menu' ? 96 : 128;
@@ -469,6 +476,129 @@ class AudioEngine {
   stopMusic() {
     if (this.music) clearInterval(this.music.timer);
     this.music = null;
+    this.wanted = null;
+  }
+
+  /**
+   * The garage tune: a slow desert shuffle in E, the kind you'd hear on a dusty Texas road.
+   * A walking upright bass, a twangy picked guitar that bends into its notes, brushed snare and a
+   * shaker on the off-beats, and a lonesome slide melody over the top. I, IV, I, V, twelve bars.
+   */
+  private startGarage() {
+    const ctx = this.ctx!;
+    const m = { timer: 0, step: 0, next: ctx.currentTime + 0.1, kind: 'garage' as MusicKind };
+    this.music = m;
+    const bpm = 84;
+    // Swung eighths: the first of each pair long, the second short.
+    const beat = 60 / bpm;
+    const E = 40, A = 45, B = 47;
+    // Twelve-bar form: E E E E | A A E E | B A E B
+    const bars = [E, E, E, E, A, A, E, E, B, A, E, B];
+    // The slide melody, one phrase per four bars (semitones over the bar's root; -1 is a rest).
+    const lead = [
+      [7, -1, 10, 7, 5, -1, 3, 0],
+      [12, -1, 10, -1, 7, 5, 7, -1],
+      [-1, -1, 7, 10, 12, -1, 10, 7],
+      [5, -1, 3, -1, 0, -1, -1, -1],
+      [7, 7, 10, -1, 12, -1, 15, 12],
+      [10, -1, 7, -1, 5, 3, 0, -1],
+    ];
+    m.timer = window.setInterval(() => {
+      if (!this.ctx || this.music !== m) return;
+      if (m.next < ctx.currentTime) {
+        const missed = Math.ceil((ctx.currentTime - m.next) / (beat / 2));
+        m.step += missed;
+        m.next += missed * (beat / 2);
+      }
+      while (m.next < ctx.currentTime + 0.2) {
+        const e = m.step % 8, barN = Math.floor(m.step / 8) % 12;
+        const root = bars[barN], t = m.next;
+        const dest = this.buses.music;
+        const half = e % 2 === 0 ? beat * 0.62 : beat * 0.38;
+        // Bass: root and fifth on the beats, a walk up into the next chord at the end of the bar.
+        if (e % 2 === 0) {
+          const walk = e === 6 && bars[(barN + 1) % 12] !== root ? 2 : e === 4 ? 7 : e === 2 ? 4 : 0;
+          this.pluck(dest, t, NOTE(root - 12 + walk), beat * 0.9, 0.2, 500, false);
+        }
+        // Guitar: boom-chick. Low string on the beat, a two-note chord on the off-beat.
+        if (e % 2 === 0) this.pluck(dest, t, NOTE(root + 12), beat * 0.5, 0.07, 2600, true);
+        else for (const n of [7, 12]) this.pluck(dest, t + (n === 12 ? 0.012 : 0), NOTE(root + 12 + n), beat * 0.35, 0.045, 3200, false);
+        // Brushes on two and four, a shaker on every off-beat, a soft kick on one and three.
+        if (e === 2 || e === 6) this.hiss(dest, t, 0.22, 'bandpass', 2400, 1400, 0.6, 0.16);
+        if (e % 2 === 1) this.hiss(dest, t, 0.05, 'highpass', 6500, 5500, 0.8, 0.07);
+        if (e === 0 || e === 4) this.tone(dest, t, 110, 48, 0.16, 'sine', 0.35);
+        // The slide melody comes in after the first time round.
+        const turn = Math.floor(m.step / 96);
+        if (turn > 0) {
+          const phrase = lead[(Math.floor(m.step / 32) + turn) % lead.length];
+          const n = phrase[e];
+          if (n >= 0) this.slide(dest, t, NOTE(E + 24 + n), half * (phrase[(e + 1) % 8] < 0 ? 1.9 : 1));
+        }
+        m.step++;
+        m.next += half;
+      }
+    }, 25);
+  }
+
+  /** A plucked string: bright attack, fast decay, a little bend up into pitch when `bend`. */
+  private pluck(dest: AudioNode, t: number, f: number, dur: number, vol: number, cutoff: number, bend: boolean) {
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(bend ? f * 0.97 : f, t);
+    if (bend) o.frequency.exponentialRampToValueAtTime(f, t + 0.06);
+    const o2 = ctx.createOscillator();
+    o2.type = 'square';
+    o2.frequency.setValueAtTime(f * 1.003, t);
+    const filt = ctx.createBiquadFilter();
+    filt.type = 'lowpass';
+    filt.Q.value = 3;
+    filt.frequency.setValueAtTime(cutoff, t);
+    filt.frequency.exponentialRampToValueAtTime(Math.max(180, cutoff * 0.18), t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const g2 = ctx.createGain();
+    g2.gain.value = 0.35;
+    o.connect(filt);
+    o2.connect(g2).connect(filt);
+    filt.connect(g).connect(dest);
+    for (const x of [o, o2]) {
+      x.start(t);
+      x.stop(t + dur + 0.05);
+    }
+    this.track(o);
+    this.track(o2);
+  }
+
+  /** A slide guitar note: glides up from below, with a slow vibrato and a long tail. */
+  private slide(dest: AudioNode, t: number, f: number, dur: number) {
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(f * 0.94, t);
+    o.frequency.exponentialRampToValueAtTime(f, t + 0.09);
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 5.2;
+    const depth = ctx.createGain();
+    depth.gain.setValueAtTime(0, t);
+    depth.gain.linearRampToValueAtTime(f * 0.012, t + dur * 0.6);
+    lfo.connect(depth).connect(o.frequency);
+    const filt = ctx.createBiquadFilter();
+    filt.type = 'bandpass';
+    filt.frequency.value = f * 2;
+    filt.Q.value = 0.7;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.08, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.25);
+    o.connect(filt).connect(g).connect(dest);
+    for (const x of [o, lfo]) {
+      x.start(t);
+      x.stop(t + dur + 0.3);
+    }
+    this.track(o);
   }
 
   private drum(dest: AudioNode, t: number, kind: 'kick' | 'snare' | 'hat') {
@@ -531,3 +661,13 @@ class AudioEngine {
 }
 
 export const audio = new AudioEngine();
+
+// Browsers only allow sound after the player has touched the page. The first tap, click or key
+// anywhere (not just on a menu button) switches audio on, and the music that was asked for starts.
+if (typeof window !== 'undefined') {
+  const first = () => {
+    audio.unlock();
+    for (const ev of ['pointerdown', 'keydown', 'touchend'] as const) removeEventListener(ev, first, true);
+  };
+  for (const ev of ['pointerdown', 'keydown', 'touchend'] as const) addEventListener(ev, first, true);
+}

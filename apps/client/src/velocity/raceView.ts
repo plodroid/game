@@ -626,6 +626,19 @@ export class RaceView implements View {
         }
         break;
       }
+      case 'bonk': {
+        // Bounced off a wall: a ring of little stars over the car and a springy boing.
+        for (let i = 0; i < 14; i++) {
+          const ang = (i / 14) * Math.PI * 2;
+          this.sparks.emit(e.x, e.y + 1.1, e.z, Math.cos(ang) * 3.2, 2.5 + Math.random() * 1.5, Math.sin(ang) * 3.2, i % 2 ? 0xffe066 : 0xffffff, 0.7);
+        }
+        this.sound.bonk(this.gainAt(e.x, e.y, e.z));
+        if (seat) {
+          seat.cam.shake = 0.45;
+          seat.input.rumble(0.6, 180);
+        }
+        break;
+      }
       case 'drift':
         if (car) {
           const m = this.models.get(e.id);

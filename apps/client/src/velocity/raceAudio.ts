@@ -114,6 +114,40 @@ export class RaceAudio {
   }
 
   /** A bump or crash: a noise crunch plus a thump, louder for harder hits. */
+  /** The wall bounce: a quick falling "boing" over a soft thud. */
+  bonk(gain: number) {
+    const ctx = this.ctx();
+    const out = audio.bus('sfx');
+    if (!ctx || !out || gain < 0.02) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(620, t);
+    o.frequency.exponentialRampToValueAtTime(180, t + 0.28);
+    const wob = ctx.createOscillator();
+    wob.frequency.value = 22;
+    const depth = ctx.createGain();
+    depth.gain.value = 40;
+    wob.connect(depth).connect(o.frequency);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.35 * gain, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+    o.connect(g).connect(out);
+    const th = ctx.createOscillator();
+    th.type = 'sine';
+    th.frequency.setValueAtTime(140, t);
+    th.frequency.exponentialRampToValueAtTime(50, t + 0.15);
+    const tg = ctx.createGain();
+    tg.gain.setValueAtTime(0.5 * gain, t);
+    tg.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    th.connect(tg).connect(out);
+    for (const x of [o, wob, th]) {
+      x.start(t);
+      x.stop(t + 0.35);
+    }
+  }
+
   impact(strength: number, gain: number) {
     const ctx = this.ctx(), out = audio.bus('sfx'), buf = audio.noiseBuffer;
     if (!ctx || !out || !buf || gain < 0.02) return;

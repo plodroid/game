@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as RPE, type ReactElement } from 'react';
-import { damageLevel, ITEM_INFO, PART_INDEX, PART_LABEL, PARTS, RACE_IDENTITIES, type Part } from '@chromashift/shared';
+import { damageLevel, ITEM_INFO, PART_INDEX, PART_LABEL, RACE_IDENTITIES, type Part } from '@chromashift/shared';
 import { audio } from '../../audio/audio';
 import { PAD_BUTTON, raceTouch } from '../../game/input';
 import { useButtonStyle, useDevice } from '../../game/devices';
@@ -315,7 +315,6 @@ export function RaceHud({ store = useRaceHud, side }: { store?: typeof useRaceHu
             {h.item && prompt('item') && <kbd>{prompt('item')}</kbd>}
           </div>
         )}
-        <DamageSchematic damage={h.damage.length ? h.damage : new Array(PARTS.length).fill(0)} hit={h.hit} />
         <div className="race-right">
           {h.driftTier > 0 && <div className={`race-drift race-drift--${h.driftTier}`}>{['', 'Drift', 'Drift ×2', 'Drift ×3'][h.driftTier]}</div>}
           <Speedo h={h} />

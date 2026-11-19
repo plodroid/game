@@ -223,19 +223,29 @@ describe('damage', () => {
     expect(Math.min(...fx.wheel)).toBeGreaterThan(0.6);
   });
 
-  it('comes from real collisions in a race', () => {
+  it('a wall is a kart-style bounce: the car comes back off it, undamaged', () => {
     const sim = new RaceSim({ track: 'coastal', laps: 1, preset: 'classic', damage: 'full', seed: 1 }, [{ id: 1, name: 'Me', bot: false, car: DEFAULT_CAR, identity: 0 }]);
     while (sim.phase !== 'racing') sim.step();
     const r = sim.racers[0];
     // Flat out down the first straight, straight on into the wall at the corner.
-    let impact = false;
-    for (let i = 0; i < 60 * 15 && !impact; i++) {
+    let bonk = false, speedBefore = 0;
+    for (let i = 0; i < 60 * 15 && !bonk; i++) {
       sim.setInput(1, { ...emptyRaceInput(), throttle: 1 });
+      const v = r.car.body.linvel();
+      speedBefore = Math.hypot(v.x, v.z);
       sim.step();
-      impact = sim.drainEvents().some((e) => e.t === 'impact');
+      bonk = sim.drainEvents().some((e) => e.t === 'bonk');
     }
-    expect(impact).toBe(true);
-    expect(r.car.damage.reduce((a, b) => a + b, 0)).toBeGreaterThan(0);
+    expect(bonk).toBe(true);
+    expect(r.car.bonkT).toBeGreaterThan(0);
+    // Slowed, but still rolling: thrown back, not stopped dead.
+    const v = r.car.body.linvel();
+    expect(Math.hypot(v.x, v.z)).toBeLessThan(speedBefore);
+    expect(Math.hypot(v.x, v.z)).toBeGreaterThan(speedBefore * 0.3);
+    expect(r.car.damage.reduce((x, y) => x + y, 0)).toBe(0);
+    // The daze wears off.
+    for (let i = 0; i < 60; i++) sim.step();
+    expect(r.car.bonkT).toBe(0);
     sim.dispose();
   });
 });

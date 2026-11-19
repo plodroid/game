@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  BODIES, CAR_COLORS, CAR_FINISHES, CAR_ITEM, carItemsFor, cleanPlate, DEFAULT_CAR, RARITY_ORDER, SLOT_LABEL, WHEELS, levelInfo,
+  BODIES, VEHICLE_TYPES, CAR_COLORS, CAR_FINISHES, CAR_ITEM, carItemsFor, cleanPlate, DEFAULT_CAR, RARITY_ORDER, SLOT_LABEL, WHEELS, levelInfo,
   type CarItem, type CarLoadout, type CarSlot,
 } from '@chromashift/shared';
 import { audio } from '../../audio/audio';
@@ -38,6 +38,12 @@ const ICON: Partial<Record<CarSlot, string>> = {
 };
 
 const hexCss = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+
+/** A picture for each kind of vehicle, for the body list. */
+const TYPE_ICON: Record<string, string> = {
+  'Coupé': '🚗', Hatchback: '🚗', Sedan: '🚘', Estate: '🚙', Muscle: '🏁', Classic: '🚖', 'Hot rod': '🔥', 'Grand tourer': '🏎️', Supercar: '🏎️', Hypercar: '⚡',
+  Rally: '🏔️', Buggy: '🏜️', SUV: '🚙', Pickup: '🛻', Van: '🚐', 'Kei car': '🚗', Roadster: '🌤️', 'Open-wheel': '🏆', Concept: '🛸',
+};
 
 /** Little pictures of finishes, drawn once with the player's colours. */
 const thumbs = new Map<string, string>();
@@ -87,12 +93,15 @@ export default function Garage() {
   const [slot, setSlot] = useState<CarSlot>('paint');
   const [picked, setPicked] = useState<string | null>(null);
   const [driver, setDriver] = useState(false);
+  /** The body list can be narrowed to one kind of vehicle. */
+  const [vtype, setVtype] = useState<string>('All');
 
   // The showroom replaces the menu backdrop while the garage is open.
   useEffect(() => {
     const v = new GarageView(saved);
     view.current = v;
     engine.setView(v);
+    audio.startMusic('garage');
     sound.current = new RaceAudio();
     // A controller's right stick orbits the car; triggers zoom.
     let raf = 0, last = performance.now();
@@ -122,9 +131,10 @@ export default function Garage() {
 
   const slots = CATS.find((c) => c.id === cat)?.slots ?? [];
   const items: CarItem[] = useMemo(() => {
-    const list = cat === 'favs' ? p.favs.filter((k) => k.startsWith('car:')).map((k) => CAR_ITEM[k]).filter(Boolean) : carItemsFor(slot);
+    let list = cat === 'favs' ? p.favs.filter((k) => k.startsWith('car:')).map((k) => CAR_ITEM[k]).filter(Boolean) : carItemsFor(slot);
+    if (slot === 'body' && cat !== 'favs' && vtype !== 'All') list = list.filter((i) => BODIES[i.id]?.type === vtype);
     return [...list].sort((a, b) => RARITY_ORDER[a.rarity] - RARITY_ORDER[b.rarity] || a.price - b.price);
-  }, [cat, slot, p.favs]);
+  }, [cat, slot, p.favs, vtype]);
   const item = picked ? CAR_ITEM[picked] : null;
   const st = p.racing.stats;
   const progressOf = (it: CarItem) => {
@@ -180,6 +190,7 @@ export default function Garage() {
     if (it.slot === 'paint' || it.slot === 'accent') return <span style={{ width: 30, height: 30, borderRadius: '50%', background: hexCss(CAR_COLORS[it.id]?.hex ?? 0), boxShadow: 'inset 0 -4px 8px rgba(0,0,0,0.3)' }} />;
     if (it.slot === 'finish') return <img src={finishThumb(it.id, draft)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 10 }} />;
     if (it.slot === 'wheel') return <WheelThumb id={it.id} />;
+    if (it.slot === 'body') return <span aria-hidden>{TYPE_ICON[BODIES[it.id]?.type ?? ''] ?? '🚗'}</span>;
     return <span aria-hidden>{ICON[it.slot] ?? '•'}</span>;
   };
 
@@ -273,7 +284,16 @@ export default function Garage() {
               </label>
             </div>
           )}
-          {items.length === 0 && <p className="muted small" style={{ gridColumn: '1 / -1' }}>Star items to keep them here.</p>}
+          {slot === 'body' && cat !== 'favs' && (
+            <div className="g-types" role="group" aria-label="Vehicle type" style={{ gridColumn: '1 / -1' }}>
+              {['All', ...VEHICLE_TYPES].map((t) => (
+                <button key={t} className="g-type" aria-pressed={vtype === t} onClick={() => setVtype(t)}>
+                  {t === 'All' ? `All ${Object.keys(BODIES).length}` : t}
+                </button>
+              ))}
+            </div>
+          )}
+          {items.length === 0 && <p className="muted small" style={{ gridColumn: '1 / -1' }}>{cat === 'favs' ? 'Star items to keep them here.' : 'Nothing here yet.'}</p>}
           {items.map((it) => (
             <button
               key={it.key}
@@ -304,7 +324,7 @@ export default function Garage() {
               </button>
             </div>
             <p>
-              {SLOT_LABEL[item.slot]} · {RARITY_LABEL[item.rarity]}. {item.desc}
+              {item.slot === 'body' ? BODIES[item.id]?.type : SLOT_LABEL[item.slot]} · {RARITY_LABEL[item.rarity]}. {item.desc}
             </p>
             {item.slot !== 'body' && CAR_FINISHES[saved.finish] && (
               <p className="muted small">Equipped now: {CAR_ITEM[`car:${item.slot}:${saved[item.slot]}`]?.name ?? '—'}</p>

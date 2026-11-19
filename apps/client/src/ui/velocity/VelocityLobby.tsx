@@ -160,9 +160,6 @@ export function VelocityLobby() {
           <Setting name="Laps">
             <Segmented value={st.laps} onChange={(laps) => host && setRace({ laps })} label="Laps" options={LAP_OPTIONS.map((n) => ({ value: n, label: String(n), disabled: !host }))} />
           </Setting>
-          <Setting name="Damage">
-            <Segmented value={st.damage} onChange={(damage) => host && setRace({ damage })} label="Damage" options={([{ value: 'full', label: 'Full' }, { value: 'visual', label: 'Visual' }, { value: 'off', label: 'Off' }] as const).map((o) => ({ ...o, disabled: !host }))} />
-          </Setting>
           <Setting name="Bots" hint="Bots fill grid slots nobody is using.">
             <Segmented value={st.bots} onChange={(b) => host && setRace({ bots: b })} label="Bots" options={[0, 1, 2, 3, 4, 5].map((n) => ({ value: n, label: String(n), disabled: !host }))} />
           </Setting>

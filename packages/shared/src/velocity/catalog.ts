@@ -156,13 +156,33 @@ export const CAR_FINISHES: Record<string, Finish> = {
 
 /* ---------- Bodies, wheels and parts ---------- */
 
-export const BODIES: Record<string, { name: string; rarity: Rarity; desc: string }> = {
-  sport: { name: 'Vela Sport', rarity: 'starter', desc: 'A balanced two-door sports coupé.' },
-  compact: { name: 'Pip Compact', rarity: 'starter', desc: 'A short, chunky hatchback.' },
-  muscle: { name: 'Brava Muscle', rarity: 'common', desc: 'Long bonnet, wide hips, loud.' },
-  rally: { name: 'Gravel Rally', rarity: 'rare', desc: 'High-riding rally hatch with arches.' },
-  super: { name: 'Apex Super', rarity: 'epic', desc: 'A low mid-engined wedge.' },
-  future: { name: 'Prism Concept', rarity: 'legendary', desc: 'A canopy pod with fins from the future.' },
+/** The kinds of vehicle the garage groups bodies by. */
+export const VEHICLE_TYPES = [
+  'Coupé', 'Hatchback', 'Sedan', 'Estate', 'Muscle', 'Classic', 'Hot rod', 'Grand tourer', 'Supercar', 'Hypercar',
+  'Rally', 'Buggy', 'SUV', 'Pickup', 'Van', 'Kei car', 'Roadster', 'Open-wheel', 'Concept',
+] as const;
+export type VehicleType = (typeof VEHICLE_TYPES)[number];
+
+export const BODIES: Record<string, { name: string; rarity: Rarity; desc: string; type: VehicleType }> = {
+  sport: { name: 'Vela Sport', rarity: 'starter', type: 'Coupé', desc: 'A balanced two-door sports coupé.' },
+  compact: { name: 'Pip Compact', rarity: 'starter', type: 'Hatchback', desc: 'A short, chunky hatchback.' },
+  sedan: { name: 'Corsa Sedan', rarity: 'starter', type: 'Sedan', desc: 'A four-door saloon with a proper boot.' },
+  kei: { name: 'Bubble Kei', rarity: 'common', type: 'Kei car', desc: 'A tall, tiny city box. Surprisingly brave.' },
+  roadster: { name: 'Breeze Roadster', rarity: 'common', type: 'Roadster', desc: 'No roof, a low windscreen and roll hoops.' },
+  muscle: { name: 'Brava Muscle', rarity: 'common', type: 'Muscle', desc: 'Long bonnet, wide hips, loud.' },
+  pickup: { name: 'Haul Pickup', rarity: 'common', type: 'Pickup', desc: 'A crew cab and an open load bed.' },
+  wagon: { name: 'Tourer Estate', rarity: 'rare', type: 'Estate', desc: 'A long-roof wagon with room for the dog.' },
+  suv: { name: 'Ridge SUV', rarity: 'rare', type: 'SUV', desc: 'Tall, square-shouldered and ready for gravel.' },
+  van: { name: 'Box Van', rarity: 'rare', type: 'Van', desc: 'A one-box delivery van. Big windscreen, bigger presence.' },
+  rally: { name: 'Gravel Rally', rarity: 'rare', type: 'Rally', desc: 'High-riding rally hatch with arches.' },
+  buggy: { name: 'Dune Buggy', rarity: 'rare', type: 'Buggy', desc: 'An open tub inside a tube roll cage. Built for sand.' },
+  classic: { name: 'Starliner Classic', rarity: 'rare', type: 'Classic', desc: 'Fifties chrome and tail fins.' },
+  hotrod: { name: 'Rust Rod', rarity: 'epic', type: 'Hot rod', desc: 'A chopped roof and the engine out in the open.' },
+  gt: { name: 'Strada GT', rarity: 'epic', type: 'Grand tourer', desc: 'A long nose and a fastback for crossing continents.' },
+  super: { name: 'Apex Super', rarity: 'epic', type: 'Supercar', desc: 'A low mid-engined wedge.' },
+  openwheel: { name: 'Formula Vortex', rarity: 'epic', type: 'Open-wheel', desc: 'Wheels out in the air, wings front and back.' },
+  hyper: { name: 'Nova Hyper', rarity: 'legendary', type: 'Hypercar', desc: 'A teardrop canopy over a body cut by the wind.' },
+  future: { name: 'Prism Concept', rarity: 'legendary', type: 'Concept', desc: 'A canopy pod with fins from the future.' },
 };
 
 export type RimStyle = 'spokes' | 'split' | 'twist' | 'mesh' | 'dish' | 'turbine' | 'star' | 'y' | 'block' | 'wire' | 'disc' | 'fan';
@@ -225,6 +245,10 @@ export const FRONT_BUMPERS = S([
   ['canard', 'Canards', 'rare', 'Aggressive vents with dive planes.'],
   ['round', 'Retro', 'common', 'A rounded chrome bar.'],
   ['wide', 'Wide Intake', 'epic', 'One huge open intake.'],
+  ['lip', 'Carbon Lip', 'common', 'A thin carbon lip under the nose.'],
+  ['grille', 'Chrome Grille', 'rare', 'A big chrome grille with vertical bars.'],
+  ['push', 'Push Bar', 'rare', 'A tubular bar to nudge with.'],
+  ['plow', 'Plough', 'epic', 'A yellow blade for clearing the way.'],
 ]);
 export const REAR_BUMPERS = S([
   ['stock', 'Stock', 'starter', 'The bumper it came with.'],
@@ -232,6 +256,9 @@ export const REAR_BUMPERS = S([
   ['tow', 'Tow Hook', 'common', 'With a bright tow strap.'],
   ['race', 'Race Cut', 'rare', 'Cut away to show the diffuser.'],
   ['retro', 'Retro', 'rare', 'A rounded chrome bar.'],
+  ['step', 'Step Bumper', 'common', 'A chrome step with a ribbed tread.'],
+  ['hitch', 'Tow Ball', 'common', 'A receiver hitch and tow ball.'],
+  ['spare', 'Spare Wheel', 'rare', 'A spare tyre on a swing-out carrier.'],
 ]);
 export const DIFFUSERS = S([
   ['none', 'None', 'starter', 'A clean underside.'],
@@ -239,6 +266,8 @@ export const DIFFUSERS = S([
   ['race', 'Race', 'rare', 'Tall fins under the rear.'],
   ['light', 'Light Bar', 'epic', 'Fins with a rain light in the middle.'],
   ['double', 'Twin Deck', 'epic', 'Two decks of fins.'],
+  ['blade', 'Blade', 'rare', 'One deep centre blade and a wide floor.'],
+  ['tunnel', 'Venturi', 'epic', 'Arched tunnels between tall strakes.'],
 ]);
 export const HOODS = S([
   ['stock', 'Stock', 'starter', 'Plain and smooth.'],
@@ -247,6 +276,10 @@ export const HOODS = S([
   ['bulge', 'Power Bulge', 'rare', 'A raised centre section.'],
   ['carbon', 'Carbon', 'rare', 'A bare carbon bonnet.'],
   ['blower', 'Blower', 'epic', 'A supercharger sticking through the bonnet.'],
+  ['louvres', 'Louvres', 'rare', 'Rows of pressed cooling louvres.'],
+  ['twin', 'Twin Scoops', 'rare', 'Two NACA-style scoops.'],
+  ['pins', 'Hood Pins', 'common', 'Race-style bonnet pins and cables.'],
+  ['snorkel', 'Snorkel', 'epic', 'An air intake up the windscreen pillar.'],
 ]);
 export const SPOILERS = S([
   ['none', 'None', 'starter', 'Clean tail.'],
@@ -257,6 +290,10 @@ export const SPOILERS = S([
   ['swan', 'Swan Neck', 'epic', 'A wing hung from above.'],
   ['double', 'Biplane', 'epic', 'Two stacked planes.'],
   ['light', 'Light Blade', 'legendary', 'A glowing blade in the accent colour.'],
+  ['gurney', 'Gurney Lip', 'common', 'A lip with a little upturned flap.'],
+  ['whale', 'Whale Tail', 'rare', 'A big flat tail with a rubber edge.'],
+  ['split', 'Split Wing', 'rare', 'Two wing halves with a gap in the middle.'],
+  ['drag', 'Drag Wing', 'epic', 'A tall wing high above the boot.'],
 ]);
 export const ROOFS = S([
   ['none', 'None', 'starter', 'Plain roof.'],
@@ -266,12 +303,18 @@ export const ROOFS = S([
   ['fin', 'Shark Fin', 'rare', 'A tall stabiliser fin.'],
   ['spoiler', 'Roof Spoiler', 'common', 'A spoiler at the back of the roof.'],
   ['box', 'Cargo Box', 'rare', 'For your holiday luggage.'],
+  ['sunroof', 'Sunroof', 'common', 'A tinted glass panel.'],
+  ['vents', 'Roof Vents', 'common', 'Two low cooling vents.'],
+  ['basket', 'Roof Basket', 'rare', 'A tubular basket for the camping gear.'],
+  ['surf', 'Surfboard', 'epic', 'A longboard strapped to the rack.'],
 ]);
 export const MIRRORS = S([
   ['stock', 'Stock', 'starter', 'Body-colour mirrors.'],
   ['aero', 'Aero', 'common', 'Slim mirrors on stalks.'],
   ['round', 'Round', 'common', 'Small round chrome mirrors.'],
   ['none', 'None', 'rare', 'Who needs to look back?'],
+  ['carbon', 'Carbon Aero', 'rare', 'Thin carbon blades.'],
+  ['camera', 'Camera Pods', 'epic', 'Tiny cameras instead of glass.'],
 ]);
 export const TINTS: Record<string, { name: string; rarity: Rarity; color: number; opacity: number }> = {
   clear: { name: 'Clear', rarity: 'starter', color: 0x9fb4c8, opacity: 0.6 },
@@ -343,6 +386,8 @@ export const EXHAUSTS = S([
   ['center', 'Centre', 'rare', 'A big pipe in the middle.'],
   ['side', 'Side Pipes', 'epic', 'Pipes out of the sills.'],
   ['shotgun', 'Shotgun', 'rare', 'Two big pipes side by side.'],
+  ['tri', 'Triple', 'rare', 'Three pipes in a row.'],
+  ['stack', 'Stacks', 'epic', 'Two chrome stacks standing up behind the cab.'],
 ]);
 export const HORNS: Record<string, { name: string; rarity: Rarity; notes: number[]; wave: 'square' | 'sawtooth' | 'triangle' | 'sine' }> = {
   beep: { name: 'Beep', rarity: 'starter', notes: [440, 554], wave: 'square' },
@@ -413,6 +458,10 @@ export const ACCESSORIES = S([
   ['propeller', 'Propeller', 'epic', 'A spinning propeller cap.'],
   ['halo', 'Halo', 'legendary', 'A glowing ring above the car.'],
   ['palm', 'Tiny Palm', 'rare', 'A potted palm, for the summer.'],
+  ['cactus', 'Desert Cactus', 'common', 'A potted saguaro from the long road out west.'],
+  ['cowboy', 'Cowboy Hat', 'rare', 'A ten-gallon hat on the roof.'],
+  ['longhorns', 'Longhorns', 'epic', 'A pair of steer horns on the bonnet.'],
+  ['dish', 'Satellite Dish', 'rare', 'For watching the race from the race.'],
 ]);
 export const VICTORIES = S([
   ['confetti', 'Confetti', 'starter', 'A shower of confetti.'],

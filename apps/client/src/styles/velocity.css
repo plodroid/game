@@ -1145,3 +1145,27 @@
   color: var(--gold);
   font-weight: 800;
 }
+
+/* Vehicle types above the body list. */
+.g-types {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+.g-type {
+  flex: none;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--s3);
+  color: var(--tx-2);
+  font: 700 0.78rem/1.2 inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.g-type[aria-pressed='true'] {
+  background: var(--pig);
+  color: var(--on-paint);
+}

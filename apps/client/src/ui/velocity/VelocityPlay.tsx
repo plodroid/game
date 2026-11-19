@@ -143,9 +143,6 @@ export function VelocityPlay() {
         <Setting name="Laps">
           <Segmented value={s.laps} onChange={(laps) => set({ laps })} label="Laps" options={LAP_OPTIONS.map((n) => ({ value: n, label: String(n) }))} />
         </Setting>
-        <Setting name="Damage" hint="Full: crashes slow you down a little too. Visual: dents and scratches only. Your car is always fixed after the race.">
-          <Segmented value={s.damage} onChange={(damage) => set({ damage })} label="Damage" options={[{ value: 'full', label: 'Full' }, { value: 'visual', label: 'Visual' }, { value: 'off', label: 'Off' }]} />
-        </Setting>
         <Setting name="Bots" hint={`Up to ${MAX_RACERS} cars on the grid.`}>
           <Segmented value={s.bots} onChange={(bots) => set({ bots })} label="Bots" options={[0, 1, 2, 3, 4, 5].map((n) => ({ value: n, label: String(n) }))} />
         </Setting>

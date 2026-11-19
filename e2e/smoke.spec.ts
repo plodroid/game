@@ -89,7 +89,7 @@ test('VELOCITY: picks racing on Play, starts a race against bots and drives', as
   await page.getByRole('button', { name: 'Race', exact: true }).click();
   await expect(page.locator('.race-hud')).toBeVisible({ timeout: 60_000 });
   await expect(page.locator('.race-board li')).toHaveCount(6);
-  await expect(page.locator('.dmg')).toBeVisible();
+  await expect(page.locator('.speedo')).toBeVisible();
   // Hold the accelerator once the lights go green: the speedometer climbs.
   await page.keyboard.down('KeyW');
   await expect

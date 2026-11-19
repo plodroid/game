@@ -483,6 +483,8 @@ export interface Seams {
   doorFront: number;
   hood: number;
   boot: number;
+  /** Four-door cars: where the front and rear doors meet. */
+  doorMid?: number;
 }
 
 /**
@@ -516,6 +518,10 @@ function shutLines(g: CanvasRenderingContext2D, S: number, m: Seams) {
       g.lineTo(x(m.doorFront) - 10, belt * S);
       g.moveTo(x(m.doorBack), sill * S);
       g.lineTo(x(m.doorFront), sill * S);
+      if (m.doorMid) {
+        g.moveTo(x(m.doorMid), sill * S);
+        g.lineTo(x(m.doorMid) - 4, belt * S);
+      }
     });
     // Handle.
     g.fillStyle = 'rgba(0,0,0,0.5)';
