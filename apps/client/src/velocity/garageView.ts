@@ -184,7 +184,10 @@ export class GarageView implements View {
     addEventListener('pointerup', this.up);
     addEventListener('pointercancel', this.up);
     el.addEventListener('wheel', this.wheel, { passive: false });
+    // Right-drag turns the car as well as left-drag: no browser menu in the way.
+    el.addEventListener('contextmenu', this.menu);
   }
+  private menu = (e: Event) => e.preventDefault();
   private detach() {
     const el = engine.renderer.domElement;
     el.removeEventListener('pointerdown', this.down);
@@ -192,6 +195,7 @@ export class GarageView implements View {
     removeEventListener('pointerup', this.up);
     removeEventListener('pointercancel', this.up);
     el.removeEventListener('wheel', this.wheel);
+    el.removeEventListener('contextmenu', this.menu);
   }
   private down = (e: PointerEvent) => {
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });

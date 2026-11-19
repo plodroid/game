@@ -35,17 +35,86 @@ const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), tmpQ = new THREE.
 const UP = new THREE.Vector3(0, 1, 0);
 const ray = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 });
 
+/**
+ * Hold the right mouse button and drag to swing the chase camera round the car (left drag swings it
+ * to the left, up and down tilt it). Only while the pointer is free, which it always is in a race.
+ * Angles live here, outside React, so dragging costs nothing but the next frame. Let go while
+ * driving and the camera eases back behind the car; parked, it stays where you left it.
+ */
+export class OrbitDrag {
+  /** Offsets from the normal chase angle, radians. */
+  yaw = 0;
+  pitch = 0;
+  dragging = false;
+  private idle = 0;
+  private id = -1;
+  private last = { x: 0, y: 0 };
+  constructor(private el: HTMLElement) {
+    el.addEventListener('pointerdown', this.down);
+    addEventListener('pointermove', this.move);
+    addEventListener('pointerup', this.up);
+    addEventListener('pointercancel', this.up);
+    el.addEventListener('contextmenu', this.menu);
+  }
+  private down = (e: PointerEvent) => {
+    if (e.button !== 2 || document.pointerLockElement) return;
+    e.preventDefault();
+    this.dragging = true;
+    this.id = e.pointerId;
+    this.last = { x: e.clientX, y: e.clientY };
+    this.idle = 0;
+  };
+  private move = (e: PointerEvent) => {
+    if (!this.dragging || e.pointerId !== this.id) return;
+    const dx = e.clientX - this.last.x, dy = e.clientY - this.last.y;
+    this.last = { x: e.clientX, y: e.clientY };
+    this.yaw += dx * 0.006;
+    if (this.yaw > Math.PI) this.yaw -= Math.PI * 2;
+    if (this.yaw < -Math.PI) this.yaw += Math.PI * 2;
+    // Never below the road, never straight down.
+    this.pitch = Math.max(-0.22, Math.min(0.95, this.pitch + dy * 0.004));
+  };
+  private up = (e: PointerEvent) => {
+    if (e.pointerId === this.id || e.button === 2) this.dragging = false;
+  };
+  private menu = (e: Event) => e.preventDefault();
+  /** Eases back behind the car once released, if the car is moving. */
+  update(dt: number, speed: number) {
+    if (this.dragging || speed < 3) {
+      this.idle = 0;
+      return;
+    }
+    this.idle += dt;
+    if (this.idle < 0.6) return;
+    const k = Math.exp(-dt * 2.4);
+    this.yaw *= k;
+    this.pitch *= k;
+    if (Math.abs(this.yaw) < 1e-3) this.yaw = 0;
+    if (Math.abs(this.pitch) < 1e-3) this.pitch = 0;
+  }
+  dispose() {
+    this.el.removeEventListener('pointerdown', this.down);
+    removeEventListener('pointermove', this.move);
+    removeEventListener('pointerup', this.up);
+    removeEventListener('pointercancel', this.up);
+    this.el.removeEventListener('contextmenu', this.menu);
+  }
+}
+
 /** Chase camera: behind and above, swinging with the car, wider at speed, never through a wall. */
 class RaceCamera {
   readonly camera: THREE.PerspectiveCamera;
   private pos = new THREE.Vector3();
   private yaw = 0;
   private ready = false;
+  /** The orbit offsets as shown (eased towards the dragged ones). */
+  private oYaw = 0;
+  private oPitch = 0;
   shake = 0;
   constructor(aspect: number, far: number) {
     this.camera = new THREE.PerspectiveCamera(64, aspect, 0.15, far);
   }
-  update(dt: number, car: CarView, world: RAPIER.World, preset: 'near' | 'far' | 'hood', lookBack: boolean, boosting: boolean, reduced: boolean) {
+  update(dt: number, car: CarView, world: RAPIER.World, preset: 'near' | 'far' | 'hood', lookBack: boolean, boosting: boolean, reduced: boolean, orbit?: OrbitDrag) {
     const cam = this.camera;
     const q = tmpQ.set(car.q.x, car.q.y, car.q.z, car.q.w);
     const fwd = tmpV.set(0, 0, 1).applyQuaternion(q);
@@ -77,9 +146,21 @@ class RaceCamera {
       this.ready = true;
       return;
     }
-    const dist = (preset === 'far' ? 8.6 : 6.3) + speed * 0.025;
-    const height = preset === 'far' ? 3 : 2.15;
-    const dx = Math.sin(this.yaw), dz = Math.cos(this.yaw);
+    const baseDist = (preset === 'far' ? 8.6 : 6.3) + speed * 0.025;
+    const baseHeight = preset === 'far' ? 3 : 2.15;
+    // Swing round by the dragged orbit, eased so it glides rather than jumps.
+    const ease = Math.min(1, dt * 12);
+    let dYaw = (orbit?.yaw ?? 0) - this.oYaw;
+    while (dYaw > Math.PI) dYaw -= Math.PI * 2;
+    while (dYaw < -Math.PI) dYaw += Math.PI * 2;
+    this.oYaw += dYaw * ease;
+    this.oPitch += ((orbit?.pitch ?? 0) - this.oPitch) * ease;
+    const r = Math.hypot(baseDist, baseHeight);
+    const pitch = Math.max(0.04, Math.min(1.25, Math.atan2(baseHeight, baseDist) + this.oPitch));
+    const dist = Math.cos(pitch) * r, height = Math.sin(pitch) * r;
+    const yaw = this.yaw - this.oYaw;
+    const dx = Math.sin(yaw), dz = Math.cos(yaw);
+    const orbiting = Math.abs(this.oYaw) + Math.abs(this.oPitch) > 0.05;
     const want = tmpV2.set(car.p.x - dx * dist, car.p.y + height, car.p.z - dz * dist);
     // Pull in if a wall is in the way.
     const ox = car.p.x, oy = car.p.y + 1.1, oz = car.p.z;
@@ -93,7 +174,7 @@ class RaceCamera {
       want.set(ox + rx * k, oy + ry * k, oz + rz * k);
     }
     if (!this.ready) this.pos.copy(want);
-    this.pos.lerp(want, Math.min(1, dt * 9));
+    this.pos.lerp(want, Math.min(1, dt * (orbiting ? 16 : 9)));
     this.pos.y = Math.max(this.pos.y, car.p.y + 0.6);
     cam.position.copy(this.pos);
     if (this.shake > 0 && !reduced) {
@@ -102,7 +183,9 @@ class RaceCamera {
       cam.position.y += (Math.random() - 0.5) * s;
       this.shake = Math.max(0, this.shake - dt * 2.5);
     }
-    cam.lookAt(car.p.x + dx * 4, car.p.y + 1, car.p.z + dz * 4);
+    // Look a little ahead of the car normally; at the car itself while swung round it.
+    const ahead = 4 * Math.max(0, 1 - Math.abs(this.oYaw) / 0.6);
+    cam.lookAt(car.p.x + Math.sin(this.yaw) * ahead, car.p.y + 1, car.p.z + Math.cos(this.yaw) * ahead);
     cam.updateProjectionMatrix();
     this.ready = true;
   }
@@ -246,6 +329,9 @@ export class RaceView implements View {
   private time = 0;
   private noticeId = 1;
   private endedAt = 0;
+  private orbit = new OrbitDrag(engine.renderer.domElement);
+  /** Set when the player asked for the results: no celebration pause. */
+  private skipOutro = false;
   private done = false;
   private frame = 0;
   private lastCount = -1;
@@ -306,7 +392,13 @@ export class RaceView implements View {
     r.shadowMap.autoUpdate = false;
     r.shadowMap.needsUpdate = true;
     audio.startMusic('match');
-    raceControl.finishNow = source.finishNow ? () => source.finishNow?.() : null;
+    // "See results": end the race and skip the finish-line pause, so the click is answered at once.
+    raceControl.finishNow = source.finishNow
+      ? () => {
+          source.finishNow?.();
+          this.skipOutro = true;
+        }
+      : null;
   }
 
   private far(g: GraphicsSettings) {
@@ -433,11 +525,15 @@ export class RaceView implements View {
     const preset = useSettings.getState().controls.raceCamera;
     for (const seat of this.seats) {
       const me = cars.find((c) => c.id === seat.localId);
-      if (me) seat.cam.update(dt, me, this.source.world, preset, seat.lookBack, me.boost, reduced);
+      if (!me) continue;
+      // The mouse orbit belongs to the first player (the one with the mouse).
+      const orbit = seat === this.seats[0] ? this.orbit : undefined;
+      orbit?.update(dt, Math.hypot(me.v.x, me.v.z));
+      seat.cam.update(dt, me, this.source.world, preset, seat.lookBack, me.boost, reduced, orbit);
     }
     const me0 = cars.find((c) => c.id === this.seats[0].localId);
     if (me0) this.track.follow(me0.p.x, me0.p.y, me0.p.z);
-    this.engineSounds(cars);
+    this.engineSounds(cars, dt);
     this.hudT += dt;
     if (this.hudT > 1 / 15) {
       this.pushHud(cars);
@@ -445,7 +541,7 @@ export class RaceView implements View {
     }
     if (this.source.phase() === 'ended' && this.source.result() && !this.done) {
       if (!this.endedAt) this.endedAt = this.time;
-      if (this.time - this.endedAt > 3.2) {
+      if (this.skipOutro || this.time - this.endedAt > 3.2) {
         this.done = true;
         const you = this.seats[0].localId;
         this.onEnd({ result: this.source.result()!, you, xp: this.source.xp(you), recorded: false });
@@ -555,7 +651,7 @@ export class RaceView implements View {
     void dt;
   }
 
-  private engineSounds(cars: CarView[]) {
+  private engineSounds(cars: CarView[], dt: number) {
     const cam = this.seats[0].cam.camera;
     const right = tmpV.set(1, 0, 0).applyQuaternion(cam.quaternion);
     const list = cars
@@ -572,9 +668,10 @@ export class RaceView implements View {
       list.map(({ c, d, local }) => {
         const info = this.source.roster.find((r) => r.id === c.id)!;
         const dx = c.p.x - cam.position.x, dz = c.p.z - cam.position.z;
-        return { id: c.id, loadout: info.car, rpm: c.rpm, throttle: c.throttle, gain: local ? 1 : 1 / (1 + d / 10), pan: local ? 0 : (dx * right.x + dz * right.z) / Math.max(1, d) };
+        return { id: c.id, loadout: info.car, speed: Math.hypot(c.v.x, c.v.z), throttle: c.throttle, gain: local ? 1 : 1 / (1 + d / 10), pan: local ? 0 : (dx * right.x + dz * right.z) / Math.max(1, d) };
       }),
       me ? { slip: me.drift ? Math.max(0.5, me.slip) : me.slip, speed: Math.hypot(me.v.x, me.v.z) } : null,
+      dt,
     );
   }
 
@@ -832,6 +929,7 @@ export class RaceView implements View {
 
   dispose() {
     raceControl.finishNow = null;
+    this.orbit.dispose();
     this.sound.dispose();
     for (const m of this.models.values()) m.dispose();
     this.models.clear();

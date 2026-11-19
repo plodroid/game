@@ -56,6 +56,7 @@ export async function startRace(s: RaceSetup) {
     online = false;
     const id = `off-${Date.now()}-${++raceSeq}`;
     const view = new RaceView(source, (o) => finish(o, id));
+    preloadResults();
     engine.setView(view);
     if (split) view.addSeat(2, input2, useRaceHud2);
     ui.setPaused(false);
@@ -76,6 +77,7 @@ export async function startRaceOnline(room: NetRoom, start: RaceStart) {
   const ui = useUi.getState();
   const id = `on-${start.config.seed}-${start.you}`;
   engine.setView(new RaceView(new OnlineRaceSource(room, start), (o) => finish(o, id)));
+  preloadResults();
   ui.setPaused(false);
   ui.go('match');
 }
@@ -89,14 +91,15 @@ function finish(o: RaceOutcome, raceId: string) {
   useRaceResults.setState({ data: { result: o.result, you: o.you, xp, coins: rec.coins, ...before, online, recorded: o.recorded, records: rec.records } });
   const me = o.result.players.find((p) => p.id === o.you);
   audio.jingle(!!me && me.position <= 3);
-  setTimeout(() => {
-    void import('../game/session').then((m) => {
-      m.showMenu(me && me.position === 1 ? 'win' : 'none');
-      ui.setPaused(false);
-      ui.go('raceResults');
-    });
-  }, 300);
+  // The results screen comes up at once; the menu backdrop (heavy to build) follows a frame later,
+  // behind it, so the click that ended the race is answered straight away.
+  ui.setPaused(false);
+  ui.go('raceResults');
+  void import('../game/session').then((m) => requestAnimationFrame(() => m.showMenu(me && me.position === 1 ? 'win' : 'none')));
 }
+
+/** Fetches the results screen's code while racing, so it isn't downloaded at the finish. */
+const preloadResults = () => void import('../ui/velocity/RaceResults').catch(() => undefined);
 
 export function leaveRace() {
   if (online) leaveRoom();

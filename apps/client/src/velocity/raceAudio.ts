@@ -1,24 +1,15 @@
-import { ENGINES, HORNS, type CarLoadout } from '@chromashift/shared';
+import { HORNS, type CarLoadout } from '@chromashift/shared';
 import { audio } from '../audio/audio';
+import { CarAudioController } from './carAudio';
 
 /*
- * Racing sound, all synthesised: each engine is two oscillators through a filter whose pitch
- * follows the revs and whose brightness and volume follow the throttle (so it sounds different
- * idling, pulling hard and coasting); tyre squeal and wind are filtered noise; hits, boosts and
- * horns are short one-off sounds. Only the cars closest to you get an engine voice.
+ * Racing sound. Each engine is a CarAudioController (sampled loops crossfaded by RPM through a
+ * virtual gearbox); tyre squeal and wind are filtered noise; hits, boosts and horns are short
+ * one-off sounds. Only the cars closest to you get an engine voice.
  */
 
-interface Voice {
-  a: OscillatorNode;
-  b: OscillatorNode;
-  filter: BiquadFilterNode;
-  gain: GainNode;
-  pan: StereoPannerNode;
-  profile: (typeof ENGINES)[string];
-}
-
 export class RaceAudio {
-  private voices = new Map<number, Voice>();
+  private voices = new Map<number, CarAudioController>();
   private squeal: { src: AudioBufferSourceNode; filter: BiquadFilterNode; gain: GainNode } | null = null;
   private wind: { src: AudioBufferSourceNode; filter: BiquadFilterNode; gain: GainNode } | null = null;
   private dead = false;
@@ -27,30 +18,16 @@ export class RaceAudio {
     return this.dead ? null : audio.ctx;
   }
 
-  private voice(id: number, loadout: CarLoadout): Voice | null {
+  private voice(id: number, loadout: CarLoadout): CarAudioController | null {
     const ctx = this.ctx(), out = audio.bus('sfx');
     if (!ctx || !out) return null;
     let v = this.voices.get(id);
-    if (v) return v;
-    const profile = ENGINES[loadout.engine] ?? ENGINES.inline4;
-    const a = ctx.createOscillator(), b = ctx.createOscillator();
-    a.type = profile.wave;
-    b.type = 'square';
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.Q.value = 2 + profile.grit * 6;
-    const gain = ctx.createGain();
-    gain.gain.value = 0;
-    const pan = ctx.createStereoPanner();
-    const bg = ctx.createGain();
-    bg.gain.value = 0.35 + profile.grit * 0.5;
-    a.connect(filter);
-    b.connect(bg).connect(filter);
-    filter.connect(gain).connect(pan).connect(out);
-    a.start();
-    b.start();
-    v = { a, b, filter, gain, pan, profile };
-    this.voices.set(id, v);
+    // A car that changed engine (the garage) gets a new voice.
+    if (v && v.engine !== loadout.engine) {
+      v.dispose();
+      v = undefined;
+    }
+    if (!v) this.voices.set(id, (v = new CarAudioController(ctx, out, loadout.engine)));
     return v;
   }
 
@@ -72,7 +49,7 @@ export class RaceAudio {
   }
 
   /** Per frame: engines of the given cars (gain already includes distance), squeal and wind for the player. */
-  engines(list: { id: number; loadout: CarLoadout; rpm: number; throttle: number; gain: number; pan: number }[], player: { slip: number; speed: number } | null) {
+  engines(list: { id: number; loadout: CarLoadout; speed: number; throttle: number; gain: number; pan: number }[], player: { slip: number; speed: number } | null, dt = 1 / 60) {
     const ctx = this.ctx();
     if (!ctx) return;
     const t = ctx.currentTime;
@@ -81,24 +58,11 @@ export class RaceAudio {
       const v = this.voice(c.id, c.loadout);
       if (!v) continue;
       live.add(c.id);
-      const f = v.profile.base + v.profile.spread * c.rpm;
-      v.a.frequency.setTargetAtTime(f, t, 0.04);
-      v.b.frequency.setTargetAtTime(f * 0.5, t, 0.04);
-      v.filter.frequency.setTargetAtTime(500 + 3200 * (0.25 + c.throttle * 0.75) * (0.5 + c.rpm * 0.5), t, 0.05);
-      v.gain.gain.setTargetAtTime(c.gain * (0.035 + 0.075 * c.throttle + 0.02 * c.rpm), t, 0.05);
-      v.pan.pan.setTargetAtTime(Math.max(-1, Math.min(1, c.pan)), t, 0.05);
+      v.update(dt, { speed: c.speed, throttle: c.throttle, gain: c.gain, pan: c.pan });
     }
     for (const [id, v] of this.voices)
       if (!live.has(id)) {
-        v.gain.gain.setTargetAtTime(0, t, 0.08);
-        setTimeout(() => {
-          try {
-            v.a.stop();
-            v.b.stop();
-          } catch {
-            /* already stopped */
-          }
-        }, 400);
+        v.dispose();
         this.voices.delete(id);
       }
     this.squeal ??= this.loop(1900, 'bandpass');
@@ -220,15 +184,7 @@ export class RaceAudio {
 
   dispose() {
     this.dead = true;
-    for (const v of this.voices.values()) {
-      try {
-        v.gain.gain.value = 0;
-        v.a.stop();
-        v.b.stop();
-      } catch {
-        /* stopped */
-      }
-    }
+    for (const v of this.voices.values()) v.dispose();
     this.voices.clear();
     for (const l of [this.squeal, this.wind]) {
       try {
