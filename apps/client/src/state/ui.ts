@@ -46,6 +46,12 @@ interface UiStore {
 
 let toastId = 1;
 
+/** Screens that exist only for one game: never a place to return to. */
+const TRANSIENT = new Set<Screen>(['match', 'results', 'raceResults']);
+
+/** Filled in by the network code, so the screen history can tell whether a lobby still has a room. */
+export const uiHooks = { hasRoom: () => false };
+
 export const useUi = create<UiStore>()((set, get) => ({
   screen: 'home',
   history: [],
@@ -56,17 +62,25 @@ export const useUi = create<UiStore>()((set, get) => ({
   online: typeof navigator === 'undefined' ? true : navigator.onLine,
   tryOn: null,
   setTryOn: (tryOn) => set({ tryOn }),
-  // Going to the screen you just came from steps back instead of stacking, so Lobby -> Online -> Back
-  // can't bounce between the two (the lobby sends you to Online when it has no room).
+  // Back must only ever lead to somewhere that still makes sense:
+  //  - in-game screens (the match, its results) are never places to go back to;
+  //  - going to a screen that is already in the history returns to it, dropping everything after it,
+  //    so Play -> Lobby -> ... -> Play can't leave a lobby behind that Back then walks into;
+  //  - a lobby with no room behind it is skipped.
   go: (s) =>
     set((st) => {
       if (st.screen === s) return st;
-      if (st.history[st.history.length - 1] === s) return { screen: s, history: st.history.slice(0, -1) };
-      return { screen: s, history: [...st.history, st.screen].slice(-12) };
+      const earlier = st.history.lastIndexOf(s);
+      if (earlier >= 0) return { screen: s, history: st.history.slice(0, earlier) };
+      const keep = TRANSIENT.has(st.screen) ? st.history : [...st.history, st.screen];
+      return { screen: s, history: keep.slice(-12) };
     }),
   back: () => {
-    const h = get().history;
-    set({ screen: h[h.length - 1] ?? 'home', history: h.slice(0, -1) });
+    const h = [...get().history];
+    let to: Screen | undefined = h.pop();
+    // Skip anything that has gone away (a lobby after its room closed, a finished match).
+    while (to && (TRANSIENT.has(to) || (to === 'lobby' && !uiHooks.hasRoom()))) to = h.pop();
+    set({ screen: to ?? 'home', history: h });
   },
   setPaused: (paused) => set({ paused }),
   setLoading: (loading) => set({ loading }),

@@ -19,7 +19,7 @@ import {
 import { env } from '../env';
 import { publicName, useProfile } from '../state/profile';
 import { useChat } from '../state/chat';
-import { afterLobby, useUi } from '../state/ui';
+import { afterLobby, uiHooks, useUi } from '../state/ui';
 import type { PeerHello } from './p2p';
 import { voice } from './voice';
 import { activeCar } from '../velocity/racing';
@@ -401,6 +401,8 @@ function bind(room: NetRoom, kind: RoomKind, endpoint?: string) {
     useUi.getState().toast({ text: friendly(message), kind: 'error' }),
   );
 }
+
+uiHooks.hasRoom = () => !!useNet.getState().room;
 
 export function leaveRoom() {
   const room = useNet.getState().room;
