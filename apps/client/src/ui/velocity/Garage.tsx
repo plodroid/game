@@ -14,6 +14,7 @@ import { activeCar } from '../../velocity/racing';
 import { Coin, Icon } from '../icons';
 import { Button } from '../kit';
 import { RARITY_LABEL } from '../screens/Locker';
+import { isUsablePad } from '../../tvFlag';
 
 const CATS: { id: string; label: string; slots: CarSlot[] }[] = [
   { id: 'body', label: 'Body', slots: ['body'] },
@@ -109,7 +110,7 @@ export default function Garage() {
       raf = requestAnimationFrame(tick);
       const dt = Math.min(0.05, (t - last) / 1000);
       last = t;
-      const pad = [...(navigator.getGamepads?.() ?? [])].find((x) => x?.connected);
+      const pad = [...(navigator.getGamepads?.() ?? [])].find(isUsablePad);
       if (pad) {
         const dz = (x: number) => (Math.abs(x) < 0.2 ? 0 : x);
         v.pad(dz(pad.axes[2] ?? 0), dz(pad.axes[3] ?? 0), (pad.buttons[6]?.value ?? 0) - (pad.buttons[7]?.value ?? 0), dt);

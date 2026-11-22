@@ -18,5 +18,12 @@ function detect(): boolean {
 
 export const isTv = detect();
 
+/**
+ * Is this a game controller we should use? On the TV edition the Bluetooth remote itself is listed as a
+ * gamepad (non-standard mapping, no triggers or sticks to drive with), so only "standard" controllers
+ * (Xbox, PlayStation and the like) count there; anywhere else every connected pad does.
+ */
+export const isUsablePad = (p: Gamepad | null | undefined): p is Gamepad => !!p && p.connected && (!isTv || p.mapping === 'standard');
+
 /** Screens the TV edition never opens: they belong to the paint shooter (or need a mouse and keyboard). */
 export const TV_BLOCKED = new Set(['custom', 'online', 'locker', 'progression', 'profile', 'social', 'results', 'studio']);

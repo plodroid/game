@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { BTN, WHEEL } from '@chromashift/shared';
 import { useSettings, type Action, type RaceAction } from '../settings/settings';
-import { isTv } from '../tvFlag';
+import { isTv, isUsablePad } from '../tvFlag';
 
 /** The emote wheel: open while the emote button is held; `pick` is the highlighted slot or -1. */
 export const useWheel = create<{ open: boolean; pick: number }>()(() => ({ open: false, pick: -1 }));
@@ -243,9 +243,9 @@ export class InputManager {
     const all = navigator.getGamepads?.() ?? [];
     if (this.padIndex >= 0) {
       const p = all[this.padIndex];
-      return p && p.connected ? p : null;
+      return isUsablePad(p) ? p : null;
     }
-    for (const p of all) if (p && p.connected) return p;
+    for (const p of all) if (isUsablePad(p)) return p;
     return null;
   }
 

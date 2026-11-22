@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { useSettings } from '../settings/settings';
 import { useUi } from '../state/ui';
+import { isUsablePad } from '../tvFlag';
 
 /*
  * Which kind of device the player is using right now, and which controller it is. Browsers only
@@ -31,7 +32,7 @@ interface DeviceStore {
   padName: string;
 }
 
-const connected = () => [...(navigator.getGamepads?.() ?? [])].find((p) => p?.connected) ?? null;
+const connected = () => [...(navigator.getGamepads?.() ?? [])].find(isUsablePad) ?? null;
 
 export const useDevice = create<DeviceStore>()(() => {
   const p = typeof navigator === 'undefined' ? null : connected();
@@ -52,6 +53,7 @@ if (typeof window !== 'undefined') {
   addEventListener('mousedown', (e) => (e as MouseEvent & { sourceCapabilities?: { firesTouchEvents?: boolean } }).sourceCapabilities?.firesTouchEvents || set('keyboard'), true);
   addEventListener('pointerdown', (e) => set(e.pointerType === 'touch' ? 'touch' : 'keyboard'), true);
   addEventListener('gamepadconnected', (e) => {
+    if (!isUsablePad(e.gamepad)) return; // the TV remote lists itself as a gamepad
     const style = padStyle(e.gamepad);
     useDevice.setState({ pad: style, padName: e.gamepad.id, last: 'pad' });
     useUi.getState().toast({ text: `${style === 'playstation' ? 'PlayStation-style controller' : 'Xbox controller'} detected. Buttons are shown for it.`, kind: 'success' });

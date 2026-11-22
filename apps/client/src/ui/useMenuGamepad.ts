@@ -3,6 +3,7 @@ import { audio } from '../audio/audio';
 import '../game/devices';
 import { useUi } from '../state/ui';
 import { useSplit } from '../game/split';
+import { isUsablePad } from '../tvFlag';
 
 const FOCUSABLE =
   'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])';
@@ -27,7 +28,7 @@ export function useMenuGamepad(enabled: boolean) {
       // In split screen this menu belongs to player 1's controller; player 2 has their own panel.
       const sp = useSplit.getState();
       const all = navigator.getGamepads?.() ?? [];
-      const pad = sp.on ? all[sp.a] : [...all].find((p) => p?.connected);
+      const pad = sp.on ? all[sp.a] : [...all].find(isUsablePad);
       if (!pad || !pad.connected) return;
       const pressed = (i: number) => !!pad.buttons[i]?.pressed;
       const edge = (i: number) => pressed(i) && !prev.has(i);
