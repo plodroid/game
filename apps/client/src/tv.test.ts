@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nearest } from './tv';
+import { codeOf, nearest } from './tv';
 
 const box = (left: number, top: number, w = 100, h = 40) => ({ left, top, width: w, height: h, right: left + w, bottom: top + h }) as DOMRect;
 const el = (r: DOMRect) => ({ getBoundingClientRect: () => r }) as unknown as HTMLElement;
@@ -24,5 +24,17 @@ describe('TV menu focus movement', () => {
   it('prefers the item in line over a nearer one off to the side', () => {
     const inLine = el(box(0, 200)), offside = el(box(180, 90));
     expect(nearest(box(0, 0), [inLine, offside], 0, 1)).toBe(inLine);
+  });
+});
+
+describe('TV remote key codes', () => {
+  it('fills in the code the remote leaves empty', () => {
+    expect(codeOf({ code: '', key: 'ArrowLeft' })).toBe('ArrowLeft');
+    expect(codeOf({ code: '', key: 'Enter' })).toBe('Enter');
+    expect(codeOf({ code: '', key: 'w' })).toBe('KeyW');
+    expect(codeOf({ code: '', key: ' ' })).toBe('Space');
+  });
+  it('keeps a code that is already there', () => {
+    expect(codeOf({ code: 'KeyA', key: 'q' })).toBe('KeyA');
   });
 });

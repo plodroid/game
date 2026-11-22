@@ -8,6 +8,7 @@ import { useSettings, type RaceAction } from '../../settings/settings';
 import { useUi } from '../../state/ui';
 import { raceControl, useRaceHud, useRaceMap, type RaceHudState } from '../../velocity/state';
 import { Button, keyLabel } from '../kit';
+import { isTv } from '../../tvFlag';
 
 const fmt = (s: number) => {
   if (!s || !Number.isFinite(s)) return '—';
@@ -322,7 +323,14 @@ export function RaceHud({ store = useRaceHud, side }: { store?: typeof useRaceHu
       </div>
       {h.phase !== 'ended' && !paused && h.phase !== 'racing' && (
         <div className="race-help">
-          {[
+          {isTv ? (
+            <>
+              <span><kbd>◀ ▶</kbd> Steer</span>
+              <span><kbd>▼</kbd> Brake</span>
+              <span><kbd>OK</kbd> Item</span>
+              <span><kbd>Back</kbd> Pause</span>
+            </>
+          ) : [
             ['accelerate', 'Go'],
             ['brake', 'Brake'],
             ['handbrake', 'Drift'],

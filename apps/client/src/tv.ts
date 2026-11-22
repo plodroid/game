@@ -72,29 +72,66 @@ function installNavigation() {
   );
 }
 
-/** The remote's Back key arrives as the browser going back: catch it and decide what it means. */
+/**
+ * A TV remote's D-pad and OK keys arrive with an empty `code` (only `key` and `keyCode` are set), but the
+ * game's bindings are written in codes. Fill the code in before any other listener sees the event.
+ */
+const KEY_CODE: Record<string, string> = { ' ': 'Space', Escape: 'Escape', Enter: 'Enter', Backspace: 'Backspace', Tab: 'Tab' };
+export const codeOf = (e: { code: string; key: string }): string => {
+  if (e.code) return e.code;
+  if (KEY_CODE[e.key]) return KEY_CODE[e.key];
+  if (/^Arrow(Up|Down|Left|Right)$/.test(e.key)) return e.key;
+  if (/^[a-z]$/i.test(e.key)) return 'Key' + e.key.toUpperCase();
+  if (/^[0-9]$/.test(e.key)) return 'Digit' + e.key;
+  return e.key;
+};
+function installKeyCodes() {
+  const fix = (e: KeyboardEvent) => {
+    if (!e.code) Object.defineProperty(e, 'code', { value: codeOf(e) });
+  };
+  for (const t of ['keydown', 'keyup', 'keypress'] as const) addEventListener(t, fix, true);
+}
+
+interface BackPlugin {
+  addListener(name: 'backButton', cb: () => void): unknown;
+  exitApp(): void;
+}
+
+/**
+ * The remote's Back key. In the TV app Capacitor reports it through its App plugin (without a listener
+ * it would simply close the app); in a browser it is the history going back, which is the fallback.
+ */
 function installBack() {
   let armed = 0;
-  const hold = () => history.pushState({ tv: 1 }, '');
-  hold();
-  addEventListener('popstate', () => {
+  const plugin = (window as unknown as { Capacitor?: { Plugins?: { App?: BackPlugin } } }).Capacitor?.Plugins?.App;
+  const onBack = (): boolean => {
     const ui = useUi.getState();
     if (ui.screen === 'match') {
       // In a race Back pauses; the pause menu is the confirmation before leaving.
-      if (!ui.paused) ui.setPaused(true);
-      else ui.setPaused(false);
-      hold();
-    } else if (ui.screen !== 'home') {
-      ui.back();
-      hold();
-    } else if (Date.now() - armed < 2500) {
-      // Second press at home: let it through, which closes the app.
-      history.back();
-    } else {
-      armed = Date.now();
-      ui.toast({ text: 'Press Back again to exit', kind: 'info', ttl: 2400 });
-      hold();
+      ui.setPaused(!ui.paused);
+      return true;
     }
+    if (ui.screen !== 'home') {
+      ui.back();
+      return true;
+    }
+    if (Date.now() - armed < 2500) return false; // second press at home: exit
+    armed = Date.now();
+    ui.toast({ text: 'Press Back again to exit', kind: 'info', ttl: 2400 });
+    return true;
+  };
+  if (plugin?.addListener) {
+    plugin.addListener('backButton', () => {
+      if (!onBack()) plugin.exitApp();
+    });
+    return;
+  }
+  // Fallback: the browser's back button, which only counts entries made after a user gesture.
+  const hold = () => history.pushState({ tv: 1 }, '');
+  addEventListener('keydown', () => history.state?.tv || hold(), { capture: true, once: true });
+  addEventListener('popstate', () => {
+    if (onBack()) hold();
+    else history.back();
   });
 }
 
@@ -141,6 +178,7 @@ export function startTv() {
   if (!isTv) return;
   document.documentElement.dataset.tv = '1';
   firstRun();
+  installKeyCodes();
   installNavigation();
   installBack();
   installTutorial();
