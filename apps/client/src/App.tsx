@@ -32,7 +32,7 @@ const Auth = lazy(() => import('./ui/screens/Auth'));
 const Results = lazy(() => import('./ui/screens/Results'));
 const Social = lazy(() => import('./ui/screens/Social'));
 const PlayerCard = lazy(() => import('./ui/PlayerCard'));
-const Garage = lazy(() => import('./ui/velocity/Garage'));
+const Garage = lazy(() => (isTv ? import('./ui/velocity/TvGarage') : import('./ui/velocity/Garage')));
 const RaceResults = lazy(() => import('./ui/velocity/RaceResults'));
 const StudioHub = lazy(() => import('./studio/StudioHub'));
 

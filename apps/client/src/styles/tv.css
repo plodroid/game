@@ -1,0 +1,196 @@
+/*
+ * The Android TV edition's own look: a sunny summer arcade instead of the paint-studio plum.
+ * Deep ocean blue boards, sun-yellow focus, coral, aqua and sand accents. Everything is driven by
+ * the same variables as the rest of the interface, so every screen follows it; the garage has its
+ * own layout (TvGarage.tsx) on top of this.
+ */
+html[data-tv] {
+  --bg: #04283a;
+  --s1: #073a52;
+  --s2: #0c4c68;
+  --s3: #135f7f;
+  --s4: #1c7596;
+  --s5: #2a8cb0;
+  --tx: #fffaf0;
+  --tx-2: #cfeaf2;
+  --tx-3: #8cc2d2;
+  --on-paint: #052433;
+
+  --magenta: #ff6a4d; /* coral */
+  --teal: #2de2d0; /* aqua */
+  --gold: #ffd23f; /* sun */
+  --cobalt: #5cc8ff; /* sky */
+  --forest: #b8f046; /* lime */
+  --graphite: #ecdcb2; /* sand */
+  --team-a: #ff6a4d;
+  --team-b: #2de2d0;
+}
+
+/* ---- The TV garage ---- */
+.tvg {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  pointer-events: none;
+  color: var(--tx);
+}
+.tvg > * {
+  pointer-events: auto;
+}
+.tvg__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 26px 40px 0;
+}
+.tvg__name {
+  display: grid;
+  gap: 2px;
+  text-shadow: 0 2px 14px rgba(2, 24, 34, 0.7);
+}
+.tvg__build {
+  font-size: 16px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+  font-weight: 800;
+}
+.tvg__car {
+  font-size: 46px;
+  line-height: 1;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: -0.01em;
+}
+.tvg__sub {
+  font-size: 18px;
+  color: var(--tx-2);
+}
+.tvg__coins {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 22px;
+  font-weight: 800;
+  background: rgba(4, 40, 58, 0.78);
+  padding: 8px 16px;
+  border-radius: 999px;
+}
+.tvg__dock {
+  padding: 0 28px 16px;
+  background: linear-gradient(180deg, rgba(4, 40, 58, 0) 0%, rgba(4, 40, 58, 0.92) 38%);
+  display: grid;
+  gap: 8px;
+}
+.tvg__tabs {
+  display: flex;
+  gap: 10px;
+  padding-top: 30px;
+  align-items: center;
+}
+.tvg__tab {
+  font: inherit;
+  font-size: 18px;
+  font-weight: 800;
+  padding: 8px 20px;
+  border-radius: 999px;
+  border: 0;
+  color: var(--tx);
+  background: rgba(255, 250, 240, 0.14);
+}
+.tvg__tab[aria-pressed='true'] {
+  background: var(--gold);
+  color: var(--on-paint);
+}
+.tvg__tab--go {
+  margin-left: auto;
+  background: var(--magenta);
+  color: #fff;
+}
+.tvg__strip {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding: 14px 8px 14px;
+  scrollbar-width: none;
+}
+.tvg__strip::-webkit-scrollbar {
+  display: none;
+}
+.tvg__card {
+  flex: 0 0 156px;
+  height: 138px;
+  font: inherit;
+  color: var(--tx);
+  border: 0;
+  border-radius: 22px;
+  background: var(--s2);
+  display: grid;
+  grid-template-rows: 1fr auto auto;
+  justify-items: center;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 8px 12px;
+  position: relative;
+  transition: transform 0.12s var(--ease-out);
+}
+.tvg__card:focus {
+  transform: scale(1.07);
+  background: var(--s4);
+}
+.tvg__card[data-equipped='true'] {
+  background: var(--s3);
+  box-shadow: inset 0 0 0 3px var(--forest);
+}
+.tvg__swatch {
+  display: grid;
+  place-items: center;
+  font-size: 40px;
+  min-height: 52px;
+}
+.tvg__swatch img {
+  width: 64px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 12px;
+}
+.tvg__dot {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  box-shadow: inset 0 -6px 10px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.tvg__cname {
+  font-size: 16px;
+  font-weight: 800;
+  text-align: center;
+  line-height: 1.1;
+}
+.tvg__cmeta {
+  font-size: 13px;
+  color: var(--tx-3);
+}
+.tvg__card[data-equipped='true'] .tvg__cmeta {
+  color: var(--forest);
+  font-weight: 800;
+}
+.tvg__card[data-locked='true'] .tvg__swatch {
+  opacity: 0.45;
+}
+.tvg__hint {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  font-size: 15px;
+  color: var(--tx-2);
+}
+.tvg__hint kbd {
+  font: inherit;
+  font-weight: 800;
+  background: rgba(255, 250, 240, 0.16);
+  border-radius: 8px;
+  padding: 1px 8px;
+  margin-right: 6px;
+  color: var(--tx);
+}

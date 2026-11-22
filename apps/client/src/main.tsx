@@ -5,6 +5,7 @@ import './styles/hud.css';
 import './styles/social.css';
 import './styles/velocity.css';
 import './styles/studio.css';
+import './styles/tv.css';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { webgl2Available } from './settings/hardware';

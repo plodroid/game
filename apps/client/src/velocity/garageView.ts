@@ -7,6 +7,7 @@ import { engine, type View } from '../game/engine';
 import { Post } from '../rendering/post';
 import { prefersReducedMotion, useSettings, type GraphicsSettings } from '../settings/settings';
 import { CarModel } from './carModel';
+import { isTv } from '../tvFlag';
 
 /*
  * The garage: a showroom built for the car. A dark polished floor, a turntable with a light ring,
@@ -51,9 +52,9 @@ export class GarageView implements View {
   private disposables: (THREE.BufferGeometry | THREE.Material | THREE.Texture)[] = [];
   private yaw = SHOTS.show.yaw;
   private pitch = SHOTS.show.pitch;
-  private dist = SHOTS.show.dist;
+  private dist = SHOTS.show.dist * (isTv ? 1.3 : 1);
   private target = new THREE.Vector3(...SHOTS.show.target);
-  private want = { ...SHOTS.show, target: new THREE.Vector3(...SHOTS.show.target) };
+  private want = { ...SHOTS.show, dist: SHOTS.show.dist * (isTv ? 1.3 : 1), target: new THREE.Vector3(...SHOTS.show.target) };
   private spin = 0;
   private idle = 0;
   private dragging: { x: number; y: number; id: number } | null = null;
@@ -72,20 +73,28 @@ export class GarageView implements View {
     pm.dispose();
     this.scene.environment = this.envMap;
     this.scene.environmentIntensity = 0.9;
-    this.scene.background = new THREE.Color(0x0e0c13);
-    this.scene.fog = new THREE.Fog(0x0e0c13, 16, 34);
+    // The TV edition's showroom is a sunny summer one (sky, sand, a teal wall); everywhere else it is the dark studio.
+    const sky = isTv ? 0x7ad3ee : 0x0e0c13;
+    this.scene.background = new THREE.Color(sky);
+    this.scene.fog = new THREE.Fog(sky, 16, 34);
     const keep = <T extends THREE.BufferGeometry | THREE.Material | THREE.Texture>(x: T) => (this.disposables.push(x), x);
     const lambert = g.paintQuality === 0;
     // Floor: dark, polished.
     const floor = new THREE.Mesh(
       keep(new THREE.CircleGeometry(30, 64)),
-      keep(lambert ? new THREE.MeshLambertMaterial({ color: 0x1b1822 }) : new THREE.MeshStandardMaterial({ color: 0x17141d, roughness: 0.18, metalness: 0.4 })),
+      keep(
+        isTv
+          ? new THREE.MeshLambertMaterial({ color: 0xf3e3b8 })
+          : lambert
+            ? new THREE.MeshLambertMaterial({ color: 0x1b1822 })
+            : new THREE.MeshStandardMaterial({ color: 0x17141d, roughness: 0.18, metalness: 0.4 }),
+      ),
     );
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     this.scene.add(floor);
     // Turntable with a glowing rim.
-    const plate = new THREE.Mesh(keep(new THREE.CylinderGeometry(3.4, 3.5, 0.16, 64)), keep(new THREE.MeshStandardMaterial({ color: 0x24202c, roughness: 0.3, metalness: 0.6 })));
+    const plate = new THREE.Mesh(keep(new THREE.CylinderGeometry(3.4, 3.5, 0.16, 64)), keep(new THREE.MeshStandardMaterial({ color: isTv ? 0xf7f7f2 : 0x24202c, roughness: 0.3, metalness: isTv ? 0.1 : 0.6 })));
     plate.position.y = 0.08;
     plate.receiveShadow = true;
     this.scene.add(plate);
@@ -95,7 +104,7 @@ export class GarageView implements View {
     this.scene.add(this.ring);
     this.scene.add(this.turntable);
     // Curved back wall with LED strips.
-    const wall = new THREE.Mesh(keep(new THREE.CylinderGeometry(14, 14, 8, 96, 1, true)), keep(new THREE.MeshStandardMaterial({ color: 0x1d1924, roughness: 0.85, side: THREE.BackSide })));
+    const wall = new THREE.Mesh(keep(new THREE.CylinderGeometry(14, 14, 8, 96, 1, true)), keep(new THREE.MeshStandardMaterial({ color: isTv ? 0x37b5d0 : 0x1d1924, roughness: 0.85, side: THREE.BackSide })));
     wall.position.y = 4;
     this.scene.add(wall);
     for (let i = 0; i < 3; i++) {
@@ -113,7 +122,7 @@ export class GarageView implements View {
       this.scene.add(p);
     }
     // Lights: soft key from above front, a cool fill, a warm rim from behind.
-    this.scene.add(new THREE.HemisphereLight(0xdcd4ff, 0x18141f, 0.6));
+    this.scene.add(isTv ? new THREE.HemisphereLight(0xffffff, 0xf3e3b8, 1.1) : new THREE.HemisphereLight(0xdcd4ff, 0x18141f, 0.6));
     const key = new THREE.SpotLight(0xffffff, 150, 30, 0.6, 0.6, 1.4);
     key.position.set(3.5, 8, 5);
     key.target.position.set(0, 0.5, 0);
@@ -171,7 +180,8 @@ export class GarageView implements View {
   /** Glides the camera to a part. */
   look(shot: GarageShot) {
     const s = SHOTS[shot];
-    this.want = { ...s, target: new THREE.Vector3(...s.target) };
+    // On a TV the car sits in less room (a shelf of cards below it), so the camera stands further back.
+    this.want = { ...s, dist: s.dist * (isTv ? 1.3 : 1), target: new THREE.Vector3(...s.target) };
     // Shots are relative to the car: unwind the turntable so the shot shows what it should.
     this.spin = 0;
     this.idle = 0;
@@ -279,7 +289,9 @@ export class GarageView implements View {
     this.camera.aspect = engine.aspect;
     // On wide screens the item panel covers the left: centre the car in the space beside it.
     const shift = innerWidth > 760 ? Math.min(190, innerWidth * 0.17) : 0;
-    if (shift) this.camera.setViewOffset(innerWidth, innerHeight, -shift, 0, innerWidth, innerHeight);
+    // The TV edition has no side panel: the car is centred and lifted into the space above its bottom shelf.
+    if (isTv) this.camera.setViewOffset(innerWidth, innerHeight, 0, innerHeight * 0.16, innerWidth, innerHeight);
+    else if (shift) this.camera.setViewOffset(innerWidth, innerHeight, -shift, 0, innerWidth, innerHeight);
     else this.camera.clearViewOffset();
     this.camera.updateProjectionMatrix();
     this.post.setSize();

@@ -38,17 +38,17 @@ const ICON: Partial<Record<CarSlot, string>> = {
   trail: '〰', boostfx: '🔥', driftfx: '💨', accessory: '🎈', victory: '🏆', badge: '⭐',
 };
 
-const hexCss = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+export const hexCss = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
 /** A picture for each kind of vehicle, for the body list. */
-const TYPE_ICON: Record<string, string> = {
+export const TYPE_ICON: Record<string, string> = {
   'Coupé': '🚗', Hatchback: '🚗', Sedan: '🚘', Estate: '🚙', Muscle: '🏁', Classic: '🚖', 'Hot rod': '🔥', 'Grand tourer': '🏎️', Supercar: '🏎️', Hypercar: '⚡',
   Rally: '🏔️', Buggy: '🏜️', SUV: '🚙', Pickup: '🛻', Van: '🚐', 'Kei car': '🚗', Roadster: '🌤️', 'Open-wheel': '🏆', Concept: '🛸',
 };
 
 /** Little pictures of finishes, drawn once with the player's colours. */
 const thumbs = new Map<string, string>();
-function finishThumb(id: string, l: CarLoadout) {
+export function finishThumb(id: string, l: CarLoadout) {
   const key = `${id}:${l.paint}:${l.accent}`;
   let url = thumbs.get(key);
   if (!url) {
@@ -60,7 +60,7 @@ function finishThumb(id: string, l: CarLoadout) {
   return url;
 }
 
-function WheelThumb({ id }: { id: string }) {
+export function WheelThumb({ id }: { id: string }) {
   const w = WHEELS[id];
   if (!w) return null;
   const n = Math.max(1, w.spokes);
