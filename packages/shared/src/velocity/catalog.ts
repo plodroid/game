@@ -553,6 +553,19 @@ export const CAR_ITEMS: CarItem[] = CAR_SLOTS.flatMap((slot) =>
 );
 export const CAR_ITEM: Record<string, CarItem> = Object.fromEntries(CAR_ITEMS.map((i) => [i.key, i]));
 export const carItemsFor = (slot: CarSlot) => CAR_ITEMS.filter((i) => i.slot === slot);
+
+/**
+ * Adds a body that is only known at run time: the supplied car models, which are loaded from files
+ * and so cannot be listed here. They are free (starter) while they are prototypes.
+ */
+export function registerBody(id: string, def: { name: string; type: VehicleType; desc: string }) {
+  if (BODIES[id]) return;
+  BODIES[id] = { ...def, rarity: 'starter' };
+  const item: CarItem = { key: `car:body:${id}`, slot: 'body', id, name: def.name, desc: def.desc, rarity: 'starter', price: 0 };
+  CAR_ITEMS.push(item);
+  CAR_ITEM[item.key] = item;
+  FREE_CAR_ITEMS.add(item.key);
+}
 /** Free for everyone. */
 export const FREE_CAR_ITEMS = new Set(CAR_ITEMS.filter((i) => i.rarity === 'starter').map((i) => i.key));
 

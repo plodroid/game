@@ -4,6 +4,7 @@ import {
   UNDERGLOWS, WHEEL_FX, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z, WHEELS, DEFAULT_HANDLING, type CarLoadout,
 } from '@chromashift/shared';
 import { bodyMaterial, hex, paintTexture, scratch, type Paint } from './finishes';
+import { importedCar, type ImportedCar } from './importedCars';
 import { Parts, slab, tube as tube3, turned } from '../modeling/kit';
 import { surfaceMaterial } from '../modeling/surfaces';
 import {
@@ -559,6 +560,10 @@ export class CarModel {
   readonly fx: { trail: string; boost: string; drift: string; driftColor: number; boostColor: number };
   private animated = false;
   private identityMarker: THREE.Object3D | null = null;
+  /** Set when this is one of the supplied models rather than a procedural body. */
+  private imp: ImportedCar | null = null;
+  /** How much each imported wheel's radius differs from the physics wheel (so tyres still touch the ground). */
+  private wheelLift: number[] = [0, 0, 0, 0];
 
   constructor(
     readonly loadout: CarLoadout,
@@ -586,6 +591,8 @@ export class CarModel {
   }
 
   private build() {
+    const imp = importedCar(this.loadout.body);
+    if (imp) return this.buildImported(imp);
     const l = this.loadout, sh = this.shape, o = this.o;
     const identColor = RACE_IDENTITIES[o.identity % 6].color;
     const finish = CAR_FINISHES[l.finish] ?? CAR_FINISHES.gloss;
@@ -935,13 +942,133 @@ export class CarModel {
     }
   }
 
+  /**
+   * One of the supplied models. Its parts are named by what they are (paint, glass, headlights,
+   * taillights, trim, tyre, rim_metal, rim_dark), so each gets its own copy of the material and is
+   * coloured from the loadout. The wheels were split out by the import script: each is a node at
+   * its own centre, which is exactly what steering and rolling need.
+   */
+  private buildImported(c: ImportedCar) {
+    const l = this.loadout, o = this.o;
+    this.imp = c;
+    const root = c.scene!.clone(true);
+    const finish = CAR_FINISHES[l.finish] ?? CAR_FINISHES.gloss;
+    const tint = TINTS[l.tint] ?? TINTS.light;
+    const rf = RIM_FINISHES[l.rim] ?? RIM_FINISHES.silver;
+    const rimColor = rf.color === 'paint' ? hex(l.paint) : rf.color === 'accent' ? hex(l.accent) : rf.color;
+    const surface: Record<string, [number, number]> = { gloss: [0.22, 0.25], matte: [0.88, 0], metallic: [0.32, 0.85], satin: [0.5, 0.2], pearl: [0.3, 0.45], candy: [0.2, 0.6] };
+    const [pr, pm] = surface[finish.model] ?? [0.35, 0.3];
+    const made = new Map<string, THREE.Material>();
+    const own = (src: THREE.Material): THREE.Material => {
+      const hit = made.get(src.name);
+      if (hit) return hit;
+      const base = src as THREE.MeshStandardMaterial;
+      let out: THREE.Material;
+      switch (src.name) {
+        case 'paint':
+          out = this.std(hex(l.paint), pr, pm);
+          break;
+        case 'rim_metal':
+          out = this.std(rimColor, rf.rough, rf.metal);
+          break;
+        case 'glass': {
+          const g = this.mat(new THREE.MeshPhysicalMaterial({ color: tint.color, roughness: 0.05, metalness: 0.5, transparent: true, opacity: Math.max(0.7, tint.opacity), side: THREE.DoubleSide, clearcoat: 1 }));
+          g.depthWrite = false;
+          out = g;
+          break;
+        }
+        case 'headlights': {
+          const h = this.std(0xfff4dc, 0.2, 0, 0.55) as THREE.MeshStandardMaterial;
+          this.headMats.push(h);
+          out = h;
+          break;
+        }
+        case 'taillights': {
+          const t = this.std(0xd9101a, 0.3, 0, 1) as THREE.MeshStandardMaterial;
+          this.tailMats.push(t);
+          out = t;
+          break;
+        }
+        default:
+          out = this.mat(o.lambert ? new THREE.MeshLambertMaterial({ color: base.color }) : base.clone());
+      }
+      out.name = src.name;
+      made.set(src.name, out);
+      return out;
+    };
+    root.traverse((n) => {
+      const mesh = n as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.material = own(mesh.material as THREE.Material);
+      mesh.castShadow = mesh.material.name !== 'glass';
+      if (mesh.material.name === 'glass') mesh.renderOrder = 2;
+    });
+    // Take the four wheels out of the body: each becomes a steering pivot holding a spinning wheel.
+    const keys = ['FL', 'FR', 'RL', 'RR'] as const;
+    const avgY = keys.reduce((a, k) => a + c.wheels[k].centre[1], 0) / 4;
+    const avgR = keys.reduce((a, k) => a + c.wheels[k].radius, 0) / 4;
+    keys.forEach((k, w) => {
+      const wheel = root.getObjectByName('wheel_' + k)!;
+      wheel.removeFromParent();
+      wheel.position.set(0, 0, 0);
+      const info = c.wheels[k];
+      const pivot = new THREE.Object3D();
+      // The tyre's real radius differs a little from the physics wheel's: lift it by the difference so it still touches the road.
+      this.wheelLift[w] = info.radius - WHEEL_R;
+      pivot.position.set(info.centre[0], WHEEL_Y - DEFAULT_HANDLING.rest * 0.7 + this.wheelLift[w], info.centre[2]);
+      pivot.add(wheel);
+      this.group.add(pivot);
+      this.pivots.push(pivot);
+      this.spinners.push(wheel);
+    });
+    // The body rides so that its axle height lines up with the physics wheel height.
+    root.position.y = WHEEL_Y - DEFAULT_HANDLING.rest * 0.7 + (avgR - WHEEL_R) - avgY;
+    this.group.add(root);
+    const box = new THREE.Box3().setFromObject(root);
+    const rear = box.min.z + 0.02, pipeY = box.min.y + 0.32;
+    this.exhausts.push(new THREE.Vector3(0.38, pipeY, rear), new THREE.Vector3(-0.38, pipeY, rear));
+    const ug = UNDERGLOWS[l.underglow];
+    if (ug?.color != null) {
+      const g = new THREE.PlaneGeometry(box.max.x - box.min.x + 0.5, box.max.z - box.min.z + 0.5);
+      this.disposables.push(g);
+      this.glow = new THREE.Mesh(g, this.mat(new THREE.MeshBasicMaterial({ map: glowTexture(), color: ug.color === -1 ? 0xffffff : ug.color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })));
+      this.glow.position.set(0, box.min.y + 0.05, 0);
+      this.glow.rotation.x = -Math.PI / 2;
+      this.group.add(this.glow);
+    }
+    if (o.showIdentity) {
+      const id = RACE_IDENTITIES[o.identity % 6];
+      const g = identityGeometry(id.shape);
+      this.disposables.push(g);
+      this.identityMarker = new THREE.Mesh(g, this.mat(new THREE.MeshBasicMaterial({ color: id.color })));
+      this.identityMarker.position.set(0, box.max.y + 0.12, 0);
+      this.identityMarker.rotation.x = -Math.PI / 2;
+      this.group.add(this.identityMarker);
+    }
+  }
+
+  /** Damage on a supplied model: leaning wheels and dimmed lamps (its body is not deformed). */
+  private setDamageImported(g: (p: keyof typeof PART_INDEX) => number) {
+    const lamp = (m: THREE.MeshStandardMaterial | undefined, v: number, on: number) => {
+      if (!m) return;
+      m.userData.broken = v > 0.8;
+      m.emissiveIntensity = v > 0.8 ? 0 : on * (1 - v * 0.8);
+    };
+    lamp(this.headMats[0], Math.max(g('headlightL'), g('headlightR')), 1);
+    lamp(this.tailMats[0], Math.max(g('taillightL'), g('taillightR')), 1);
+    (['wheelFL', 'wheelFR', 'wheelRL', 'wheelRR'] as const).forEach((p, w) => {
+      this.pivots[w].rotation.z = (w % 2 === 0 ? 1 : -1) * g(p) * 0.18;
+    });
+  }
+
   /** Wheels: steering angle, roll angle and suspension compression (0..1). */
   setWheels(steer: number, spin: number, comp: number[]) {
     for (let w = 0; w < 4; w++) {
       const p = this.pivots[w];
       p.rotation.y = w < 2 ? steer : 0;
-      p.position.y = WHEEL_Y - DEFAULT_HANDLING.rest * (1 - (comp[w] ?? 0.3));
-      const side = w % 2 === 0 ? 1 : -1;
+      p.position.y = WHEEL_Y - DEFAULT_HANDLING.rest * (1 - (comp[w] ?? 0.3)) + this.wheelLift[w];
+      // The procedural rims are turned round on the right side, so their spin is mirrored; the supplied wheels are not.
+      const side = this.imp ? 1 : w % 2 === 0 ? 1 : -1;
       this.spinners[w].rotation.x = spin * side;
     }
   }
@@ -958,6 +1085,7 @@ export class CarModel {
     if (key === this.lastDamage) return;
     this.lastDamage = key;
     const g = (p: keyof typeof PART_INDEX) => d[PART_INDEX[p]];
+    if (this.imp) return this.setDamageImported(g);
     const front = Math.max(g('frontBody'), g('frontBumper') * 0.8, g('hood') * 0.8);
     const rear = Math.max(g('rearBody'), g('rearBumper') * 0.8);
     const left = g('leftBody'), right = g('rightBody');

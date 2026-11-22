@@ -16,6 +16,9 @@ import { useUpdates } from './updates';
 if (new URLSearchParams(location.search).has('desktopAuth')) void import('./auth/desktopGoogle').then((m) => m.runDesktopAuthPage());
 else createRoot(document.getElementById('root')!).render(<App webgl2={webgl2Available()} />);
 
+// The supplied prototype car models, if their files are present (they are not part of the repository).
+void import('./velocity/importedCars').then((m) => m.loadImportedCars());
+
 // Dev-only handle for debugging in the console; stripped from production builds.
 if (import.meta.env.DEV)
   void Promise.all([import('./game/engine'), import('./settings/settings'), import('./multiplayer/net')]).then(([{ engine }, { useSettings }, net]) =>

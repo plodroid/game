@@ -9,3 +9,4 @@ export * from './race';
 export * from './bot';
 export * from './protocol';
 export * from './trackWorld';
+export * from './trackEdit';

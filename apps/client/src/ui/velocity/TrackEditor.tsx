@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPE } from 'react';
 import { createPortal } from 'react-dom';
-import { buildPath, registerTrack, sanitizeTrackDef, SURFACES, TRACK_THEMES, validateTrack, type ControlPoint, type RoadSurface, type TrackDef, type TrackTheme } from '@chromashift/shared';
+import { buildPath, clampSel, insertAfter, patchAt, registerTrack, removeAt, sanitizeTrackDef, SURFACES, TRACK_THEMES, validateTrack, type ControlPoint, type RoadSurface, type TrackDef, type TrackTheme } from '@chromashift/shared';
 import { isOwner } from '../../auth/admin';
 import { useUi } from '../../state/ui';
 import { deleteTrackPreset, MAX_TRACK_PRESETS, newTrackId, publishTrack, saveTrackPreset, unpublishTrack, useTracks } from '../../velocity/tracksState';
@@ -61,19 +61,20 @@ export function TrackEditor({ onClose, onPlay }: { onClose: () => void; onPlay: 
     setFuture((f) => f.slice(1));
   };
   const pts = def.points!;
-  const point = pts[Math.min(sel, pts.length - 1)];
-  const setPoint = (patch: Partial<ControlPoint>, record = true) => change({ ...def, points: pts.map((p, i) => (i === sel ? { ...p, ...patch } : p)) }, record);
+  // The selection can outlive the point it was on (undo, delete, import), so it is always clamped.
+  const si = clampSel(pts.length, sel);
+  const point = pts[si];
+  const setPoint = (patch: Partial<ControlPoint>, record = true) => change({ ...def, points: patchAt(pts, si, patch) }, record);
   const addPoint = () => {
-    const a = pts[sel], b = pts[(sel + 1) % pts.length];
-    const mid: ControlPoint = { ...a, x: (a.x + b.x) / 2, z: (a.z + b.z) / 2, y: (a.y + b.y) / 2, items: false, obstacles: false };
-    const next = [...pts.slice(0, sel + 1), mid, ...pts.slice(sel + 1)];
-    change({ ...def, points: next });
-    setSel(sel + 1);
+    const r = insertAfter(pts, si);
+    change({ ...def, points: r.points });
+    setSel(r.sel);
   };
   const removePoint = () => {
-    if (pts.length <= 4) return toast({ text: 'A track needs at least four points.', kind: 'warn' });
-    change({ ...def, points: pts.filter((_, i) => i !== sel) });
-    setSel(Math.max(0, sel - 1));
+    const r = removeAt(pts, si);
+    if (!r) return toast({ text: 'A track needs at least four points.', kind: 'warn' });
+    change({ ...def, points: r.points });
+    setSel(r.sel);
   };
 
   useEffect(() => {
@@ -185,7 +186,7 @@ export function TrackEditor({ onClose, onPlay }: { onClose: () => void; onPlay: 
                 setSel(i);
                 drag.current = { i, start: def };
               }} style={{ cursor: 'grab' }}>
-                <circle cx={p.x} cy={p.z} r={i === sel ? 6.5 : 5} fill={i === sel ? '#ff3f8e' : p.tunnel ? '#8b72ff' : p.y > 3 ? '#ffc532' : '#2fd3d0'} stroke="#120f17" strokeWidth={1.4} />
+                <circle cx={p.x} cy={p.z} r={i === si ? 6.5 : 5} fill={i === si ? '#ff3f8e' : p.tunnel ? '#8b72ff' : p.y > 3 ? '#ffc532' : '#2fd3d0'} stroke="#120f17" strokeWidth={1.4} />
                 <text x={p.x} y={p.z - 8} fontSize={7} fill="#c4bacb" textAnchor="middle">
                   {i + 1}
                   {p.y ? ` ↑${Math.round(p.y)}` : ''}
@@ -212,7 +213,7 @@ export function TrackEditor({ onClose, onPlay }: { onClose: () => void; onPlay: 
           )}
           <svg viewBox={`0 -2 ${Math.max(1, pts.length)} 44`} preserveAspectRatio="none" style={{ position: 'absolute', left: 12, right: 12, bottom: 12, height: 60, width: 'calc(100% - 24px)', background: 'rgba(18,15,23,0.7)', borderRadius: 12 }} aria-label="Height along the track">
             <polyline points={[...pts, pts[0]].map((p, i) => `${i},${40 - p.y}`).join(' ')} fill="none" stroke="#ffc532" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
-            <line x1={sel} x2={sel} y1={-2} y2={42} stroke="#ff3f8e" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+            <line x1={si} x2={si} y1={-2} y2={42} stroke="#ff3f8e" strokeWidth={1} vectorEffect="non-scaling-stroke" />
           </svg>
         </div>
         <aside className="panel" style={{ margin: 0, borderRadius: 0, overflow: 'auto' }}>
@@ -244,7 +245,7 @@ export function TrackEditor({ onClose, onPlay }: { onClose: () => void; onPlay: 
           <Setting name="Suggested laps">
             <Segmented value={def.laps} onChange={(laps) => change({ ...def, laps })} label="Laps" options={[1, 2, 3, 4, 5].map((n) => ({ value: n, label: String(n) }))} />
           </Setting>
-          <h3 className="panel__title">Point {Math.min(sel, pts.length - 1) + 1}</h3>
+          <h3 className="panel__title">Point {si + 1}</h3>
           <Setting name="Height" hint={`${Math.round(point.y)} m`}>
             <Slider label="Height" value={point.y} min={-10} max={40} step={1} onChange={(y) => setPoint({ y }, false)} />
           </Setting>

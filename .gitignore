@@ -20,3 +20,6 @@ Thumbs.db
 # design tooling output
 .taste-skill/
 apps/desktop/release/
+
+# Original supplied car files (large, source only). The processed runtime models are committed.
+assets-src/
