@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { isTv, TV_BLOCKED } from '../tvFlag';
 import type { Cosmetics, MatchResult, SpecialId, WeaponId } from '@chromashift/shared';
 
 export type Screen =
@@ -69,7 +70,7 @@ export const useUi = create<UiStore>()((set, get) => ({
   //  - a lobby with no room behind it is skipped.
   go: (s) =>
     set((st) => {
-      if (st.screen === s) return st;
+      if (st.screen === s || (isTv && TV_BLOCKED.has(s))) return st; // the TV edition has no paint-shooter screens
       const earlier = st.history.lastIndexOf(s);
       if (earlier >= 0) return { screen: s, history: st.history.slice(0, earlier) };
       const keep = TRANSIENT.has(st.screen) ? st.history : [...st.history, st.screen];

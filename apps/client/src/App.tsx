@@ -11,6 +11,7 @@ import { Button } from './ui/kit';
 import { Home } from './ui/screens/Home';
 import { Custom, Play } from './ui/screens/Play';
 import { useMenuGamepad } from './ui/useMenuGamepad';
+import { isTv } from './tvFlag';
 import { SocialBar } from './ui/SocialBar';
 import { checkRelease, TestVersionBar } from './release';
 import { CallUi } from './ui/CallUi';
@@ -81,7 +82,7 @@ export function App({ webgl2 }: { webgl2: boolean }) {
     void checkRelease();
     const params = new URLSearchParams(location.search);
     const join = params.get('join');
-    if (join) {
+    if (join && !isTv) {
       useNet.setState({ error: null });
       setInvite(join, params.get('server') ?? undefined);
       useUi.getState().go('online');

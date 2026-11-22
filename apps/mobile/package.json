@@ -7,7 +7,7 @@
   "scripts": {
     "sync": "cap sync android",
     "open": "cap open android",
-    "apk": "cap sync android && cd android && gradlew assembleDebug"
+    "apk": "cap sync android && cd android && gradlew assemblePhoneDebug assembleTvDebug"
   },
   "devDependencies": {
     "@capacitor/android": "^7.4.0",

@@ -16,6 +16,20 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Two editions of the same app: the phone/tablet app (both games) and the Android TV app (VELOCITY only).
+    // The TV one has its own id so both can be installed, a Leanback manifest and banner (src/tv),
+    // and its own capacitor.config.json that marks the browser as "ChromashiftTV".
+    flavorDimensions "edition"
+    productFlavors {
+        phone {
+            dimension "edition"
+        }
+        tv {
+            dimension "edition"
+            applicationIdSuffix ".tv"
+            versionNameSuffix "-tv"
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false

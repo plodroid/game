@@ -8,6 +8,7 @@ import { Ocean } from '../rendering/ocean';
 import { Post } from '../rendering/post';
 import { SummerSky, visualTier } from '../rendering/sky';
 import { prefersReducedMotion, useSettings, type GraphicsSettings } from '../settings/settings';
+import { isTv } from '../tvFlag';
 import { useProfile } from '../state/profile';
 import { useUi, type Screen } from '../state/ui';
 import { engine, type View } from './engine';
@@ -174,6 +175,7 @@ export class MenuView implements View {
     }
     this.rig = buildCharacter({ cosmetics, team: teamColors()[0], weapon, detail: Math.max(1, g.modelDetail), lambert: false });
     this.rig.root.rotation.y = Math.PI + 0.35;
+    this.rig.root.visible = !isTv; // the TV edition is VELOCITY only: no shooter character on its menu
     this.scene.add(this.rig.root);
     this.anim = new Animator(this.rig, WEAPONS[weapon].kind);
     this.anim.spawned();

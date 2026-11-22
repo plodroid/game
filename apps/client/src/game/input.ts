@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { BTN, WHEEL } from '@chromashift/shared';
 import { useSettings, type Action, type RaceAction } from '../settings/settings';
+import { isTv } from '../tvFlag';
 
 /** The emote wheel: open while the emote button is held; `pick` is the highlighted slot or -1. */
 export const useWheel = create<{ open: boolean; pick: number }>()(() => ({ open: false, pick: -1 }));
@@ -387,6 +388,8 @@ export class InputManager {
     let brake = this.raceHeld('brake') ? 1 : 0;
     let analog = false;
     const p = this.pad();
+    // Simple remote mode (TV with no controller): the car accelerates by itself; Down brakes.
+    if (isTv && !p) throttle = brake ? 0 : 1;
     if (p) {
       const sx = dz(p.axes[0] ?? 0);
       if (sx) {

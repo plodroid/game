@@ -1,0 +1,14 @@
+{
+	"appId": "com.chromashift.game.tv",
+	"appName": "VELOCITY",
+	"webDir": "www",
+	"backgroundColor": "#0e0f1a",
+	"server": {
+		"url": "https://plodroid.github.io/game/",
+		"cleartext": false
+	},
+	"android": {
+		"allowMixedContent": false,
+		"appendUserAgent": "ChromashiftTV/1"
+	}
+}

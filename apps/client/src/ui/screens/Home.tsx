@@ -10,6 +10,7 @@ import { publicName, useProfile } from '../../state/profile';
 import { useUi, type Screen } from '../../state/ui';
 import { Avatar } from '../Avatar';
 import { BrandMark } from '../icons';
+import { isTv } from '../../tvFlag';
 
 /** Each section of the game carries one of its paints, here and on its own screen. */
 const ITEMS: { label: string; desc: string; pig: string; to?: Screen; run?: () => void }[] = [
@@ -25,6 +26,13 @@ const ITEMS: { label: string; desc: string; pig: string; to?: Screen; run?: () =
   { label: 'Locker', desc: 'Weapons, outfits and 300+ items to collect', pig: 'cobalt', to: 'locker' },
   { label: 'Progress', desc: 'Level, coins, daily and weekly quests', pig: 'forest', to: 'progression' },
   { label: 'Settings', desc: 'Graphics, audio, controls, accessibility', pig: 'graphite', to: 'settings' },
+];
+
+/** The TV edition is VELOCITY only: racing, the garage and settings. */
+const TV_ITEMS: typeof ITEMS = [
+  { label: 'Race', desc: 'Race bots or friends, up to six cars', pig: 'magenta', to: 'play' },
+  { label: 'Garage', desc: 'Pick and paint your car', pig: 'gold', to: 'garage' },
+  { label: 'Settings', desc: 'Graphics, audio, controls', pig: 'graphite', to: 'settings' },
 ];
 
 /** The owner's content workshop: shown to the owner's signed-in account only. */
@@ -47,11 +55,11 @@ export function Home() {
     <main className="screen home">
       <h1 className="brand">
         <BrandMark />
-        <span className="brand__word">Chromashift</span>
+        <span className="brand__word">{isTv ? 'Velocity' : 'Chromashift'}</span>
       </h1>
 
       <nav className="menu stagger" aria-label="Main menu">
-        {(isOwner() ? [...ITEMS, STUDIO] : ITEMS).map((it, i) => (
+        {(isTv ? TV_ITEMS : isOwner() ? [...ITEMS, STUDIO] : ITEMS).map((it, i) => (
           <button
             key={it.label}
             ref={i === 0 ? first : undefined}
@@ -73,7 +81,7 @@ export function Home() {
       </nav>
 
       <div>
-        <button className="chip-profile" data-pig="gold" onClick={() => (audio.play('click'), go('profile'))} aria-label={`Profile: ${name}, level ${lvl.level}`}>
+        {!isTv && <button className="chip-profile" data-pig="gold" onClick={() => (audio.play('click'), go('profile'))} aria-label={`Profile: ${name}, level ${lvl.level}`}>
           <Avatar cosmetics={p.cosmetics} name={name} />
           <span style={{ minWidth: 0 }}>
             <span className="chip-profile__name">{name}</span>
@@ -84,8 +92,8 @@ export function Home() {
               <span className="xpbar__fill" style={{ display: 'block', transform: `scaleX(${lvl.progress})` }} />
             </span>
           </span>
-        </button>
-        <InstallApp />
+        </button>}
+        {!isTv && <InstallApp />}
         <footer className="home__foot">
           <span>
             <span className={`dot ${online ? 'dot--ok' : 'dot--warn'}`} />

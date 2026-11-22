@@ -18,6 +18,7 @@ import { useUi } from '../../state/ui';
 import { Icon } from '../icons';
 import { MyMaps } from '../MyMaps';
 import { useMaps } from '../../state/maps';
+import { isTv } from '../../tvFlag';
 import { Button, Header, LengthDial, Segmented, Setting } from '../kit';
 /** VELOCITY's setup screen loads with the racing code, only when the car icon is picked. */
 const VelocityPlay = lazy(() => import('../velocity/VelocityPlay').then((m) => ({ default: m.VelocityPlay })));
@@ -25,6 +26,7 @@ const VelocityPlay = lazy(() => import('../velocity/VelocityPlay').then((m) => (
 /** Which game Play shows: the paint shooter (default) or VELOCITY. Remembered on this device. */
 const MODE_KEY = 'chromashift.playMode';
 function readMode(): 'shooter' | 'velocity' {
+  if (isTv) return 'velocity';
   try {
     return localStorage.getItem(MODE_KEY) === 'velocity' ? 'velocity' : 'shooter';
   } catch {
@@ -106,7 +108,7 @@ export function Play() {
     <main className="screen" data-pig="magenta">
       <Header title="Play" sub={mode === 'velocity' ? 'VELOCITY: race against bots or friends, up to six cars.' : 'Every mode supports bots, so a full match never needs eight people.'} />
       <div className="col--wide">
-        <ModeSwitch mode={mode} onChange={setMode} />
+        {!isTv && <ModeSwitch mode={mode} onChange={setMode} />}
       </div>
       {mode === 'velocity' && (
         <Suspense fallback={<div className="loading"><div className="spinner" />Loading VELOCITY…</div>}>

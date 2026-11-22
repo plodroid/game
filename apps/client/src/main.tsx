@@ -16,7 +16,10 @@ import { useUpdates } from './updates';
 if (new URLSearchParams(location.search).has('desktopAuth')) void import('./auth/desktopGoogle').then((m) => m.runDesktopAuthPage());
 else createRoot(document.getElementById('root')!).render(<App webgl2={webgl2Available()} />);
 
-// The supplied prototype car models, if their files are present (they are not part of the repository).
+// The Android TV edition (a no-op everywhere else).
+void import('./tv').then((m) => m.startTv());
+
+// The supplied car models: added to the garage when their files are there.
 void import('./velocity/importedCars').then((m) => m.loadImportedCars());
 
 // Dev-only handle for debugging in the console; stripped from production builds.

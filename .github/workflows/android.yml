@@ -1,4 +1,5 @@
-# Builds the Android app (a Capacitor shell around the live site) and attaches the APK to a release.
+# Builds the Android apps (Capacitor shells around the live site) and attaches the APKs to a release:
+# CHROMASHIFT.apk (phones and tablets, both games) and VELOCITY-TV.apk (Android TV, VELOCITY only).
 # The app loads https://plodroid.github.io/game/, so site updates reach it without a new APK.
 name: Build Android APK
 
@@ -30,11 +31,12 @@ jobs:
           npx cap sync android
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
-      - name: Publish CHROMASHIFT.apk
+          ./gradlew assemblePhoneDebug assembleTvDebug
+      - name: Publish the APKs
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk CHROMASHIFT.apk
-          gh release view android >/dev/null 2>&1 || gh release create android --title "Android app" --notes "Install CHROMASHIFT.apk on an Android phone."
-          gh release upload android CHROMASHIFT.apk --clobber
+          cp apps/mobile/android/app/build/outputs/apk/phone/debug/app-phone-debug.apk CHROMASHIFT.apk
+          cp apps/mobile/android/app/build/outputs/apk/tv/debug/app-tv-debug.apk VELOCITY-TV.apk
+          gh release view android >/dev/null 2>&1 || gh release create android --title "Android app" --notes "CHROMASHIFT.apk: Android phones and tablets. VELOCITY-TV.apk: Android TV (VELOCITY only)."
+          gh release upload android CHROMASHIFT.apk VELOCITY-TV.apk --clobber

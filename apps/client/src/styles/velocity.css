@@ -1169,3 +1169,16 @@
   background: var(--pig);
   color: var(--on-paint);
 }
+
+/* Android TV edition: a big, unmistakable focus ring for the D-pad, and nothing that needs a hover. */
+html[data-tv] button:focus,
+html[data-tv] [tabindex]:focus,
+html[data-tv] a:focus,
+html[data-tv] select:focus,
+html[data-tv] input:focus {
+  outline: 4px solid var(--gold, #ffc233);
+  outline-offset: 3px;
+}
+html[data-tv] * {
+  cursor: none;
+}
