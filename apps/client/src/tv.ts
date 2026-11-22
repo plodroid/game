@@ -143,10 +143,14 @@ function firstRun() {
   } catch {
     /* no storage: apply every time */
   }
-  // A TCL G07-class TV: 2 GB, an older GPU, 1080p output. Render at 720p, 30 fps, simple shadows.
+  // The TV app itself runs on the TV's small GPU (2 GB, 1080p output): 720p, 30 fps, simple shadows. A browser opened with
+  // ?tv=1 (for example one that is streamed to the TV from a PC) keeps the PC's own graphics settings.
+  const onTvHardware = /ChromashiftTV/.test(navigator.userAgent);
   useSettings.setState({
     benchmarked: true,
-    graphics: { ...s.graphics, ...PRESETS.low, preset: 'custom', renderScale: 1, maxHeight: 720, shadowQuality: 1, shadowResolution: 1024, particles: 0.4, drawDistance: 120, fpsCap: 30, showFps: false },
+    graphics: onTvHardware
+      ? { ...s.graphics, ...PRESETS.low, preset: 'custom', renderScale: 1, maxHeight: 720, shadowQuality: 1, shadowResolution: 1024, particles: 0.4, drawDistance: 120, fpsCap: 30, showFps: false }
+      : s.graphics,
     controls: { ...s.controls, raceBindings: { ...s.controls.raceBindings, item: [...new Set([...(s.controls.raceBindings.item ?? []), 'Enter', 'NumpadEnter'])] } },
     accessibility: { ...s.accessibility, textScale: 1 },
   });
