@@ -105,3 +105,40 @@ a little. The simulation is unchanged.
 1. Release the 7 cars now (commit the runtime models and ship)?
 2. Keep the invented public names, or show the real ones?
 3. Next: Phase 2 (look) or Phase 8 (Android TV scaffold, which is the largest unknown)?
+
+## 7. Android TV edition (first cut, 2026-11-22)
+
+One codebase, two Android apps. The TV app is a build flavor of the same Capacitor shell: package
+`com.chromashift.game.tv`, label "VELOCITY", Leanback launcher with a banner, touch optional, landscape. It loads the
+same live site as the phone app and tags the browser as `ChromashiftTV`, which switches on `tv.ts`/`tvFlag.ts`
+(for testing on a computer, open the site with `?tv=1`; `?tv=0` turns it off). Nothing in the simulation, protocol
+or servers changed, so it joins the same rooms as PC and phones.
+
+CI (`android.yml`) builds `CHROMASHIFT.apk` (phone) and `VELOCITY-TV.apk` and attaches both to the `android` release.
+The debug APKs are debug-signed, which is fine for installing with `adb install`.
+
+| Requirement | State |
+| --- | --- |
+| VELOCITY only | Home shows Race, Garage, Settings; the Play screen has no game switch; the paint-shooter screens (`custom`, `online`, `locker`, `progression`, `profile`, `social`, `results`, `studio`) cannot be opened; invite links are ignored; the 3D menu is a plain backdrop. Limit: the shooter code is still inside the web bundle that the shell loads, it is just unreachable. A separate bundle would be a larger refactor. |
+| D-pad menus | Spatial focus movement (unit-tested), OK activates, large focus ring. Controllers keep using the existing gamepad menu code. |
+| Back key | In a race: pauses (the pause menu is the confirmation); in menus: goes back; at home: press twice to exit. |
+| Simple remote mode | With no controller connected: the car accelerates by itself, Left/Right steer, Down brakes, OK uses an item, Back pauses. One-time hint on the first race. |
+| TV graphics | First run: 720p, 30 fps cap, simple shadows, no bloom/AO/reflections/post. The viewport is already 960x540 CSS pixels at 2x, so text keeps its normal scale. |
+| Bluetooth controllers | Uses the browser Gamepad API and the existing VELOCITY pad bindings. Not tested: no controller was connected to the TV. |
+
+### Measured on the TCL TV (Android 11, `adb`)
+
+Android 11 (API 30), armeabi-v7a only, 2 GB RAM, 1920x1080 (CSS viewport 960x540 at 2x), Mali-G31 with OpenGL ES 3.2,
+System WebView 157. In the WebView: WebGL2 yes (max texture 4096, float render targets yes), WebRTC yes, WebAudio yes,
+service workers yes, Gamepad API present. The first launch showed the sign-in screen (the game requires an account),
+the app tag and TV mode were active, and the focus ring rendered. The old menu scene ran at about 20 fps there, which is why
+the TV menu is now a plain backdrop.
+
+### Not tested yet
+
+- A VELOCITY race on the TV (frame rate, memory, sound, input): it needs an account sign-in on the TV, which only the
+  owner can do. Frame rate in a race is the main open risk on this GPU and RAM.
+- Online rooms between the TV and a PC or phone.
+- Bluetooth controllers and the TV remote's real Back/OK keys (the code handles them; no one has pressed them).
+
+Do not treat the TV as supported until those three are checked.

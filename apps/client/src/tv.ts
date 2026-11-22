@@ -101,8 +101,8 @@ function installBack() {
 function firstRun() {
   const s = useSettings.getState();
   try {
-    if (localStorage.getItem('cs.tvInit')) return;
-    localStorage.setItem('cs.tvInit', '1');
+    if (localStorage.getItem('cs.tvInit2')) return;
+    localStorage.setItem('cs.tvInit2', '1');
   } catch {
     /* no storage: apply every time */
   }
@@ -111,7 +111,7 @@ function firstRun() {
     benchmarked: true,
     graphics: { ...s.graphics, ...PRESETS.low, preset: 'custom', renderScale: 1, maxHeight: 720, shadowQuality: 1, shadowResolution: 1024, particles: 0.4, drawDistance: 120, fpsCap: 30, showFps: false },
     controls: { ...s.controls, raceBindings: { ...s.controls.raceBindings, item: [...new Set([...(s.controls.raceBindings.item ?? []), 'Enter', 'NumpadEnter'])] } },
-    accessibility: { ...s.accessibility, textScale: 1.25 },
+    accessibility: { ...s.accessibility, textScale: 1 },
   });
 }
 
