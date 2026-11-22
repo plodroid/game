@@ -5,6 +5,7 @@ import { firebaseConfigured } from '../../env';
 import { useUi } from '../../state/ui';
 import { BrandMark, Icon } from '../icons';
 import { Button, Field, Toggle } from '../kit';
+import { isTv } from '../../tvFlag';
 
 type Mode = 'signIn' | 'register' | 'recover' | 'username';
 
@@ -81,7 +82,7 @@ export default function Auth() {
     <main className="screen gate" data-pig="magenta">
       <div className="gate__brand">
         <BrandMark size={40} />
-        <span className="brand__word">Chromashift</span>
+        <span className="brand__word">{isTv ? 'Velocity' : 'Chromashift'}</span>
       </div>
       {mode !== 'username' && (
         <div className="seg gate__switch" role="tablist">

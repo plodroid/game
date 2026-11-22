@@ -197,6 +197,7 @@ export class MenuView implements View {
   }
 
   update(dt: number) {
+    if (isTv) return; // the TV menu is a plain backdrop (see render)
     this.time += dt;
     const reduced = prefersReducedMotion();
     const rig = this.rig!;
@@ -226,6 +227,12 @@ export class MenuView implements View {
   }
 
   render(dt: number) {
+    if (isTv) {
+      // The TV edition is VELOCITY only and its GPU is modest: no shooter scene, just a plain backdrop.
+      engine.renderer.setClearColor(0x140f22, 1);
+      engine.renderer.clear();
+      return;
+    }
     this.sky.fitTo(this.camera, engine.renderer.getDrawingBufferSize(drawSize).y);
     this.post.render(dt);
   }
