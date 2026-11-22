@@ -134,11 +134,31 @@ service workers yes, Gamepad API present. The first launch showed the sign-in sc
 the app tag and TV mode were active, and the focus ring rendered. The old menu scene ran at about 20 fps there, which is why
 the TV menu is now a plain backdrop.
 
+### Tested on the TV with the real remote (via adb, 2026-11-22)
+
+| Check | Result |
+| --- | --- |
+| Install, launch, Leanback launcher entry | Installs with `adb install`; `com.chromashift.game.tv` resolves as a Leanback activity. |
+| Sign-in, home, Play, start a race with the remote | Works (D-pad moves focus, OK activates). |
+| Remote keys | Arrive with an **empty `KeyboardEvent.code`** (only `key`/`keyCode`). Fixed: the code is filled in before any game listener runs (`codeOf`, unit-tested); confirmed on the TV. |
+| The remote counts as a gamepad | The TCL remote (`BT_RC813_MA`) appears in the Gamepad API with a non-standard mapping. Treated as a controller, it switched simple remote mode off. Fixed: on TV only `standard`-mapped pads count as controllers (`isUsablePad`). After the fix the car accelerates by itself (92 km/h seen). |
+| Back key | Without a handler, Back closes the app (history entries added without a user gesture are skipped). Fixed with Capacitor's App plugin; confirmed: Back in a race opens the pause menu and the app stays alive. |
+| Steering | Key events reach the game with the right code; a held Right turned the car visibly. Not measured precisely. |
+| Frame rate in a race | About 22–28 fps at 1152x648 (very low settings, 5 bots), against the 30 fps cap. Cutting the pixel count to a quarter barely helped (28 fps), so the limit is the CPU (physics and scene updates), not the GPU. The first ~10 s run at 10–13 fps while the game warms up, and building the track takes over 12 s. |
+| Memory | JS heap 48 MB in a race. |
+
+### Signing
+
+CI debug builds used a new key every run, so an update could not be installed over the old app (the first
+update needed an uninstall, which erased the TV's sign-in). `apps/mobile/android/app/debug.keystore` (the standard,
+non-secret Android debug key) is now used for every build, so updates install over the old app and keep its data.
+
 ### Not tested yet
 
-- A VELOCITY race on the TV (frame rate, memory, sound, input): it needs an account sign-in on the TV, which only the
-  owner can do. Frame rate in a race is the main open risk on this GPU and RAM.
 - Online rooms between the TV and a PC or phone.
-- Bluetooth controllers and the TV remote's real Back/OK keys (the code handles them; no one has pressed them).
+- A Bluetooth game controller (Xbox/PlayStation): the code path exists and only `standard`-mapped pads are used, but none was connected.
+- Frame rate with fewer bots or a lower draw distance, and a TV-specific CPU budget (the current 22–28 fps is below the
+  30 fps target; further work is needed to claim 30 fps).
+- Sound on the TV and long sessions (memory over several races).
 
-Do not treat the TV as supported until those three are checked.
+Treat the TV as "working, slower than the target", not as fully supported, until those are done.

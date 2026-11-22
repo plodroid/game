@@ -198,9 +198,12 @@ function RaceTouch() {
 function PauseMenu({ offline }: { offline: boolean }) {
   const setPaused = useUi((s) => s.setPaused);
   const go = useUi((s) => s.go);
+  const card = useRef<HTMLDivElement>(null);
+  // Start on Resume, so a remote or controller can act at once (OK resumes).
+  useEffect(() => card.current?.querySelector('button')?.focus(), []);
   return (
     <div className="pause" role="dialog" aria-label="Paused">
-      <div className="pause__card">
+      <div className="pause__card" ref={card}>
         <h2 className="pause__title">Paused</h2>
         <Button variant="primary" block onClick={() => setPaused(false)}>
           Resume
