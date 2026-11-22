@@ -229,7 +229,7 @@ export class MenuView implements View {
   render(dt: number) {
     if (isTv) {
       // The TV edition is VELOCITY only and its GPU is modest: no shooter scene, just a plain backdrop.
-      engine.renderer.setClearColor(0x140f22, 1);
+      engine.renderer.setClearColor(0x0a5c7c, 1);
       engine.renderer.clear();
       return;
     }
