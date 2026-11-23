@@ -34,6 +34,14 @@ let raceSeq = 0;
 
 export const replayRace = () => last && void startRace(last);
 
+/** Split screen switched on in the middle of an offline race: cars are fixed at the start, so the race restarts with both players. */
+export function restartForSplit() {
+  if (online || !last || !(engine.view instanceof RaceView)) return false;
+  useUi.getState().toast({ text: 'Split screen on. Restarting the race with two players.', kind: 'success' });
+  void startRace(last);
+  return true;
+}
+
 export async function startRace(s: RaceSetup) {
   last = s;
   const ui = useUi.getState();

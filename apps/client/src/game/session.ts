@@ -214,6 +214,8 @@ export function inOnlineRoom() {
 function joinSplitMatch() {
   const v = engine.view;
   const sim = offline.sim;
+  // VELOCITY: restart the race with both players (the other module is loaded lazily).
+  if (v?.kind === 'match' && !(v instanceof MatchView)) return void import('../velocity/session').then((m) => m.restartForSplit() || useSplit.setState({ on: false }));
   if (!(v instanceof MatchView) || !sim || currentOnline || v.seats.length > 1) return;
   if (useWorld.getState().guests > 0) {
     useUi.getState().toast({ text: 'Split screen can start once your friends have left the world.', kind: 'warn' });
